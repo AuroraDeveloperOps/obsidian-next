@@ -331,6 +331,114 @@ export const ListTool: Tool = {
 };
 
 /**
+ * Grep Tool - Search file contents with regex
+ */
+export const GrepTool: Tool = {
+    name: 'grep',
+    description: 'Search for patterns in files using regex',
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const pattern = args.pattern as string;
+        const searchPath = args.path as string || '.';
+        const maxResults = args.limit as number || 50;
+
+        if (!pattern) {
+            return { success: false, error: 'No search pattern provided' };
+        }
+
+        // Path validation
+        const pathCheck = auditor.checkPath(searchPath);
+        if (!pathCheck.approved) {
+            return {
+                success: false,
+                error: pathCheck.reason
+            };
+        }
+
+        try {
+            const fullPath = path.resolve(process.cwd(), searchPath);
+            const results: string[] = [];
+
+            // Use recursive search
+            await searchDirectory(fullPath, pattern, results, maxResults);
+
+            if (results.length === 0) {
+                return {
+                    success: true,
+                    output: `No matches found for: ${pattern}`,
+                };
+            }
+
+            return {
+                success: true,
+                output: `Found ${results.length} matches for "${pattern}":\n${'='.repeat(60)}\n${results.join('\n')}`,
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Search failed: ${error.message}`,
+            };
+        }
+    },
+};
+
+/**
+ * Recursive directory search helper
+ */
+async function searchDirectory(
+    dir: string,
+    pattern: string,
+    results: string[],
+    maxResults: number,
+    depth: number = 0
+): Promise<void> {
+    if (results.length >= maxResults || depth > 10) return;
+
+    try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        const regex = new RegExp(pattern, 'gi');
+
+        for (const entry of entries) {
+            if (results.length >= maxResults) break;
+
+            const fullPath = path.join(dir, entry.name);
+            const relativePath = path.relative(process.cwd(), fullPath);
+
+            // Skip node_modules, .git, etc.
+            if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist') {
+                continue;
+            }
+
+            if (entry.isDirectory()) {
+                await searchDirectory(fullPath, pattern, results, maxResults, depth + 1);
+            } else if (entry.isFile()) {
+                // Only search text files
+                const ext = path.extname(entry.name).toLowerCase();
+                const textExtensions = ['.ts', '.tsx', '.js', '.jsx', '.json', '.md', '.txt', '.yaml', '.yml', '.css', '.html', '.sh'];
+
+                if (textExtensions.includes(ext) || ext === '') {
+                    try {
+                        const content = await fs.readFile(fullPath, 'utf-8');
+                        const lines = content.split('\n');
+
+                        for (let i = 0; i < lines.length && results.length < maxResults; i++) {
+                            if (regex.test(lines[i])) {
+                                results.push(`${relativePath}:${i + 1}: ${lines[i].trim().slice(0, 100)}`);
+                            }
+                            regex.lastIndex = 0; // Reset regex state
+                        }
+                    } catch {
+                        // Skip binary or unreadable files
+                    }
+                }
+            }
+        }
+    } catch {
+        // Skip directories we can't read
+    }
+}
+
+/**
  * Tool Registry - Manages available tools
  */
 export class ToolRegistry {
@@ -343,6 +451,7 @@ export class ToolRegistry {
         this.register(WriteTool);
         this.register(EditTool);
         this.register(ListTool);
+        this.register(GrepTool);
     }
 
     register(tool: Tool): void {
