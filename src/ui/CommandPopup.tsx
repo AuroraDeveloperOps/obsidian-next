@@ -22,16 +22,15 @@ export const CommandPopup = ({ input }: { input: string }) => {
     return (
         <Box
             flexDirection="column"
-            borderStyle="single"
-            borderColor="cyan"
-            position="absolute"
-            marginTop={-matches.length - 2} // Lift above input
+            borderStyle="round"
+            borderColor="gray"
             paddingX={1}
-            zIndex={1} // Use z-index if supported or just ensuring order
+            marginBottom={0}
+            width="100%"
         >
             {matches.map((cmd, i) => (
-                <Box key={cmd.name} justifyContent="space-between" width={40}>
-                    <Text color="yellow" bold>{cmd.name}</Text>
+                <Box key={cmd.name} justifyContent="space-between">
+                    <Text color="red" bold>{cmd.name}</Text>
                     <Text color="gray">{cmd.desc}</Text>
                 </Box>
             ))}

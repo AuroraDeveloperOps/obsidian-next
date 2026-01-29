@@ -8,15 +8,25 @@ import { supervisor } from './agents/supervisor.js';
  * Obsidian Next CLI Entry Point
  */
 async function main() {
+    // Enter Alternate Screen Buffer
+    process.stdout.write('\x1b[?1049h');
     process.stdout.write('\x1Bc'); // Clear screen
 
     // Render the React Ink UI
-    const { waitUntilExit } = render(React.createElement(Root));
+    const { waitUntilExit, cleanup } = render(React.createElement(Root), {
+        patchConsole: false,
+        exitOnCtrlC: true
+    });
 
-    // Supervisor is already initialized by the import (lines 3-4)
-    // The Root component in src/ui/Root.tsx subscribes to the Event Bus
-
-    await waitUntilExit();
+    try {
+        await waitUntilExit();
+    } catch (error) {
+        console.error("Runtime Error:", error);
+    } finally {
+        // Exit Alternate Screen Buffer
+        process.stdout.write('\x1b[?1049l');
+        process.exit(0);
+    }
 }
 
 main().catch((err) => {

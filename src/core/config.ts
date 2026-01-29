@@ -2,12 +2,16 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { z } from 'zod';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env if present
+dotenv.config();
 
 export const ConfigSchema = z.object({
-    model: z.enum(['claude-3-5-sonnet', 'claude-3-opus', 'ollama']),
+    model: z.enum(['claude-3-5-sonnet', 'claude-3-opus', 'ollama']).default('claude-3-5-sonnet'),
     maxTokens: z.number().default(4096),
     language: z.string().default('en'),
-    // Add more config options here
+    apiKey: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -20,19 +24,38 @@ const DEFAULT_CONFIG: Config = {
 
 export class ConfigManager {
     private configPath: string;
+    private cachedConfig: Config | null = null;
 
     constructor(customPath?: string) {
         this.configPath = customPath || path.join(os.homedir(), '.obsidian', 'config.json');
     }
 
     async load(): Promise<Config> {
+        // Return cached if available
+        if (this.cachedConfig) return this.cachedConfig;
+
+        let loadedConfig = DEFAULT_CONFIG;
+
         try {
             const data = await fs.readFile(this.configPath, 'utf-8');
-            return ConfigSchema.parse(JSON.parse(data));
+            const parsed = JSON.parse(data);
+            loadedConfig = { ...DEFAULT_CONFIG, ...parsed };
         } catch (error) {
-            // If file doesn't exist, return default
-            return DEFAULT_CONFIG;
+            // Use defaults if file missing
         }
+
+        // Validate and merge with Env Vars
+        // Env var takes precedence for API Key if not explicitly set in config, or overrides it? 
+        // Usually Env Var > Config File > Default
+        const envKey = process.env.ANTHROPIC_API_KEY;
+
+        const finalConfig = ConfigSchema.parse({
+            ...loadedConfig,
+            apiKey: envKey || loadedConfig.apiKey
+        });
+
+        this.cachedConfig = finalConfig;
+        return finalConfig;
     }
 
     async save(config: Config): Promise<void> {
