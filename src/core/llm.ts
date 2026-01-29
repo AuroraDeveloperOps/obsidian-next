@@ -103,6 +103,8 @@ Best practices:
 5. Be concise - avoid unnecessary explanations
 6. When editing, include enough context in search string to be unique
 
+IMPORTANT: Never search or read from node_modules, .git, dist, or other build directories. These are automatically excluded to prevent context overflow.
+
 Working directory: ${process.cwd()}`;
 
             const createMessage = async (model: string) => {
