@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import TextInput from 'ink-text-input';
 import { bus } from '../core/bus.js';
 import { AgentEvent, Option } from '../events/types.js';
@@ -7,7 +7,6 @@ import { AgentLine } from '../components/AgentLine.js';
 import { ToolOutput } from '../components/ToolOutput.js';
 import { ApprovalPrompt } from '../components/ApprovalPrompt.js';
 import { ChoicePrompt } from '../components/ChoicePrompt.js';
-import { Dashboard } from './Dashboard.js';
 import { CommandPopup, COMMANDS } from './CommandPopup.js';
 
 import { history } from '../core/history.js';
@@ -30,14 +29,35 @@ interface PendingChoice {
 
 type PendingPrompt = PendingApproval | PendingChoice;
 
+// Chat message type for better organization
+interface ChatMessage {
+    id: number;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    events: AgentEvent[];
+}
+
 export const Root = () => {
-    const [events, setEvents] = useState<AgentEvent[]>([]);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [currentEvents, setCurrentEvents] = useState<AgentEvent[]>([]);
     const [input, setInput] = useState('');
     const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
+    const [isThinking, setIsThinking] = useState(false);
     const { exit } = useApp();
+    const { stdout } = useStdout();
+
+    // Calculate available height for chat area
+    const terminalHeight = stdout?.rows || 24;
+    const chatHeight = Math.max(terminalHeight - 10, 8); // Reserve space for input/footer
+
+    // Scroll position
+    const [scrollOffset, setScrollOffset] = useState(0);
 
     // State for footer data
     const [stats, setStats] = useState({ cost: 0, model: 'Loading...' });
+
+    // Message ID counter
+    const messageIdRef = useRef(0);
 
     // Handle prompt resolution
     const handlePromptResolve = useCallback(() => {
@@ -50,14 +70,13 @@ export const Root = () => {
             const cfg = await config.load();
             setStats({
                 cost: usage.getSessionCost(),
-                model: cfg.model
+                model: cfg.model || 'claude-sonnet-4-5'
             });
         };
 
         updateStats();
 
         const statHandler = (event: AgentEvent) => {
-            // Update on relevant events
             if (event.type === 'done' || event.type === 'tool_result' || event.type === 'thought') {
                 updateStats();
             }
@@ -68,28 +87,15 @@ export const Root = () => {
         };
     }, []);
 
-    // Load history on mount
-    useEffect(() => {
-        history.load().then(loadedEvents => {
-            if (loadedEvents.length > 0) {
-                setEvents(loadedEvents);
-            }
-        });
-    }, []);
-
-    // Save history on change
-    useEffect(() => {
-        if (events.length > 0) {
-            history.save(events);
-        }
-    }, [events]);
-
+    // Handle agent events
     useEffect(() => {
         const handler = (event: AgentEvent) => {
             if (event.type === 'clear_history') {
-                setEvents([]);
+                setMessages([]);
+                setCurrentEvents([]);
                 history.clear();
                 setPendingPrompt(null);
+                setIsThinking(false);
                 return;
             }
 
@@ -113,38 +119,71 @@ export const Root = () => {
                 return;
             }
 
-            setEvents(prev => {
-                // If it's a thought and the last event was also a thought, UPDATE it for streaming effect
-                const last = prev[prev.length - 1];
-                if (event.type === 'thought' && last && last.type === 'thought') {
-                    const newEvents = [...prev];
-                    newEvents[newEvents.length - 1] = event;
-                    return newEvents;
+            // Track thinking state
+            if (event.type === 'thought') {
+                setIsThinking(true);
+            }
+
+            // Completion - finalize message
+            if (event.type === 'done') {
+                setIsThinking(false);
+                // Finalize current events into a message
+                setCurrentEvents(prev => {
+                    if (prev.length > 0) {
+                        const lastThought = prev.filter(e => e.type === 'thought').pop();
+                        const content = lastThought && 'content' in lastThought ? lastThought.content : '';
+
+                        setMessages(msgs => [...msgs, {
+                            id: messageIdRef.current++,
+                            role: 'assistant',
+                            content,
+                            events: prev,
+                        }]);
+                    }
+                    return [];
+                });
+                return;
+            }
+
+            // Accumulate events
+            setCurrentEvents(prev => {
+                // Update last thought for streaming
+                if (event.type === 'thought') {
+                    const lastIdx = prev.findLastIndex(e => e.type === 'thought');
+                    if (lastIdx >= 0) {
+                        const newEvents = [...prev];
+                        newEvents[lastIdx] = event;
+                        return newEvents;
+                    }
                 }
                 return [...prev, event];
             });
         };
 
         bus.on('agent', handler);
-
         return () => {
             bus.off('agent', handler);
         };
     }, []);
 
+    // Scroll handling
+    useInput((_, key) => {
+        if (key.upArrow && key.shift) {
+            setScrollOffset(prev => Math.min(prev + 3, Math.max(0, messages.length - 3)));
+        }
+        if (key.downArrow && key.shift) {
+            setScrollOffset(prev => Math.max(0, prev - 3));
+        }
+    });
+
     const [inputKey, setInputKey] = useState(0);
 
-    // --------------- POPUP LOGIC START ---------------
+    // Command popup logic
     const [selectedIndex, setSelectedIndex] = useState(0);
-
-    // Calculate matches based on current input
     const query = input.toLowerCase();
     const isCommand = input.startsWith('/');
-    const matches = isCommand
-        ? COMMANDS.filter(c => c.name.startsWith(query))
-        : [];
+    const matches = isCommand ? COMMANDS.filter(c => c.name.startsWith(query)) : [];
 
-    // Reset selection when input changes
     useEffect(() => {
         setSelectedIndex(0);
     }, [input]);
@@ -152,34 +191,28 @@ export const Root = () => {
     useInput((_, key) => {
         if (matches.length === 0) return;
 
-        if (key.upArrow) {
+        if (key.upArrow && !key.shift) {
             setSelectedIndex(prev => (prev > 0 ? prev - 1 : matches.length - 1));
         }
-
-        if (key.downArrow) {
+        if (key.downArrow && !key.shift) {
             setSelectedIndex(prev => (prev < matches.length - 1 ? prev + 1 : 0));
         }
-
-        if (key.return || key.tab) {
-            // Handle Selection
+        if (key.tab) {
             const selected = matches[selectedIndex];
-            // If we have a match, and the input isn't ALREADY the full command
             if (selected && input !== selected.name) {
                 setInput(selected.name);
-                setInputKey(prev => prev + 1); // Force remount to fix cursor position
+                setInputKey(prev => prev + 1);
             }
         }
     });
-    // --------------- POPUP LOGIC END ---------------
 
     const handleSubmit = (value: string) => {
         if (!value.trim()) return;
 
-        // RACE CONDITION FIX with Debugging
+        // Handle command completion
         if (matches.length > 0 && value !== matches[selectedIndex]?.name) {
             const selected = matches[selectedIndex];
             if (selected && selected.name.startsWith(value) && selected.name !== value) {
-                // Debugging why send fails - but blocking partial submission is intended.
                 return;
             }
         }
@@ -188,34 +221,136 @@ export const Root = () => {
             exit();
             return;
         }
+
+        // Add user message
+        setMessages(prev => [...prev, {
+            id: messageIdRef.current++,
+            role: 'user',
+            content: value,
+            events: [],
+        }]);
+
+        // Reset scroll to bottom
+        setScrollOffset(0);
+
         bus.emitUser({ type: 'user_input', content: value });
         setInput('');
-        // inputKey doesn't need reset, cursor at 0 is fine.
     };
 
-    return (
-        <Box flexDirection="column" height="100%">
-            {/* Header / Dashboard */}
-            <Dashboard />
+    // Calculate visible messages
+    const visibleMessages = messages.slice(-(chatHeight + scrollOffset), messages.length - scrollOffset || undefined);
 
-            {/* Event Stream (Scrollable area) */}
-            <Box flexDirection="column" flexGrow={1} marginY={1} overflowY="hidden">
-                {/* ... (event mapping) ... */}
-                {events.slice(-8).map((event, i) => {
-                    if (event.type === 'thought') return <AgentLine key={i} content={event.content} />;
-                    if (event.type === 'tool_start') return (
-                        <Box key={i}>
-                            <Text color="cyan">[TOOL] </Text>
-                            <Text color="white" bold>{event.tool}</Text>
-                            <Text color="gray"> {event.args.length > 50 ? event.args.slice(0, 50) + '...' : event.args}</Text>
-                        </Box>
-                    );
-                    if (event.type === 'tool_result') return <ToolOutput key={i} tool={event.tool} output={event.output} isError={event.isError} />;
-                    if (event.type === 'done') return <Text key={i} color="green">[OK] {event.summary}</Text>;
-                    if (event.type === 'error') return <Text key={i} color="red">[ERR] {event.message}</Text>;
-                    if (event.type === 'clear_history') return <Text key={i} color="gray">[SYS] History cleared</Text>;
-                    return null;
-                })}
+    return (
+        <Box flexDirection="column" height={terminalHeight}>
+            {/* Header */}
+            <Box
+                borderStyle="single"
+                borderColor="gray"
+                paddingX={1}
+                justifyContent="space-between"
+            >
+                <Text color="white" bold>Obsidian Next</Text>
+                <Text color="gray">{stats.model}</Text>
+                <Text color="green">${stats.cost.toFixed(4)}</Text>
+            </Box>
+
+            {/* Chat Area */}
+            <Box flexDirection="column" flexGrow={1} paddingX={1} overflowY="hidden">
+                {/* Messages */}
+                {visibleMessages.map((msg) => (
+                    <Box key={msg.id} flexDirection="column" marginBottom={1}>
+                        {msg.role === 'user' ? (
+                            <AgentLine content={msg.content} isUser={true} />
+                        ) : (
+                            <>
+                                {/* Show tool events first */}
+                                {msg.events
+                                    .filter(e => e.type === 'tool_start' || e.type === 'tool_result')
+                                    .map((event, i) => {
+                                        if (event.type === 'tool_start') {
+                                            return (
+                                                <Box key={`tool-${i}`}>
+                                                    <Text color="gray" dimColor>[TOOL] </Text>
+                                                    <Text color="magenta">{event.tool}</Text>
+                                                </Box>
+                                            );
+                                        }
+                                        if (event.type === 'tool_result') {
+                                            return (
+                                                <ToolOutput
+                                                    key={`result-${i}`}
+                                                    tool={event.tool}
+                                                    output={event.output}
+                                                    isError={event.isError}
+                                                />
+                                            );
+                                        }
+                                        return null;
+                                    })}
+                                {/* Then show assistant response */}
+                                {msg.content && <AgentLine content={msg.content} />}
+                            </>
+                        )}
+                        {msg.events.some(e => e.type === 'error') && (
+                            <Text color="red">
+                                [ERR] {(msg.events.find(e => e.type === 'error') as any)?.message}
+                            </Text>
+                        )}
+                    </Box>
+                ))}
+
+                {/* Current streaming response */}
+                {currentEvents.length > 0 && (
+                    <Box flexDirection="column" marginBottom={1}>
+                        {currentEvents
+                            .filter(e => e.type === 'tool_start' || e.type === 'tool_result')
+                            .map((event, i) => {
+                                if (event.type === 'tool_start') {
+                                    return (
+                                        <Box key={`cur-tool-${i}`}>
+                                            <Text color="gray" dimColor>[TOOL] </Text>
+                                            <Text color="magenta">{event.tool}</Text>
+                                        </Box>
+                                    );
+                                }
+                                if (event.type === 'tool_result') {
+                                    return (
+                                        <ToolOutput
+                                            key={`cur-result-${i}`}
+                                            tool={event.tool}
+                                            output={event.output}
+                                            isError={event.isError}
+                                        />
+                                    );
+                                }
+                                return null;
+                            })}
+                        {currentEvents.filter(e => e.type === 'thought').map((event, i) => (
+                            event.type === 'thought' && (
+                                <AgentLine key={`thought-${i}`} content={event.content} />
+                            )
+                        )).pop()}
+                        {currentEvents.filter(e => e.type === 'error').map((event, i) => (
+                            event.type === 'error' && (
+                                <Text key={`err-${i}`} color="red">[ERR] {event.message}</Text>
+                            )
+                        ))}
+                    </Box>
+                )}
+
+                {/* Thinking indicator */}
+                {isThinking && currentEvents.length === 0 && (
+                    <Box>
+                        <Text color="gray" dimColor>* Thinking...</Text>
+                    </Box>
+                )}
+
+                {/* Scroll indicator */}
+                {scrollOffset > 0 && (
+                    <Box justifyContent="center">
+                        <Text color="gray" dimColor>-- {scrollOffset} more below (Shift+Down to scroll) --</Text>
+                    </Box>
+                )}
             </Box>
 
             {/* Interactive Prompts */}
@@ -235,47 +370,26 @@ export const Root = () => {
                 />
             )}
 
-            {/* Input Area (disabled when prompt is active) */}
+            {/* Input Area */}
             <Box flexDirection="column">
-                <CommandPopup
-                    matches={matches}
-                    selectedIndex={selectedIndex}
-                />
-                <Box borderStyle="round" borderColor={pendingPrompt ? 'gray' : 'gray'} paddingX={1}>
-                    <Text color="red" bold>&gt; </Text>
+                <CommandPopup matches={matches} selectedIndex={selectedIndex} />
+                <Box borderStyle="round" borderColor={pendingPrompt ? 'gray' : 'cyan'} paddingX={1}>
+                    <Text color="cyan" bold>&gt; </Text>
                     <TextInput
                         key={inputKey}
                         value={input}
                         onChange={pendingPrompt ? () => {} : setInput}
                         onSubmit={pendingPrompt ? () => {} : handleSubmit}
-                        placeholder={pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...'}
+                        placeholder={pendingPrompt ? 'Respond to prompt above...' : 'Message...'}
                     />
                 </Box>
             </Box>
 
-            {/* Footer / Status Bar - Responsive Flexbox */}
-            <Box
-                borderStyle="single"
-                borderTop={false}
-                borderLeft={false}
-                borderRight={false}
-                borderColor="gray"
-                marginTop={0}
-                paddingX={1}
-                flexDirection="row"
-                justifyContent="space-between"
-            >
-                <Box minWidth={20}>
-                    <Text color="gray">[ Context: 0 files ]</Text>
-                </Box>
-
-                <Box minWidth={25} justifyContent="center">
-                    <Text color="gray">[ Model: <Text color="white">{stats.model}</Text> ]</Text>
-                </Box>
-
-                <Box minWidth={15} justifyContent="flex-end">
-                    <Text color="gray">[ Cost: <Text color="green">${stats.cost.toFixed(4)}</Text> ]</Text>
-                </Box>
+            {/* Footer hints */}
+            <Box paddingX={1}>
+                <Text color="gray" dimColor>
+                    /help for commands | Shift+Up/Down to scroll | /exit to quit
+                </Text>
             </Box>
         </Box>
     );
