@@ -8,20 +8,88 @@ import { ToolOutput } from '../components/ToolOutput.js';
 import { Dashboard } from './Dashboard.js';
 import { CommandPopup } from './CommandPopup.js';
 
+import { history } from '../core/history.js';
+import { usage } from '../core/usage.js';
+import { config } from '../core/config.js';
+
 export const Root = () => {
     const [events, setEvents] = useState<AgentEvent[]>([]);
     const [input, setInput] = useState('');
     const { exit } = useApp();
 
+    // State for footer data
+    const [stats, setStats] = useState({ cost: 0, model: 'Loading...' });
+
+    // Load initial footer data and subscribe to updates
     useEffect(() => {
-        // Subscribe to Agent Events
-        const unsubscribe = bus.on('agent', (event) => {
-            setEvents(prev => [...prev, event]);
+        const updateStats = async () => {
+            const cfg = await config.load();
+            const usageStats = usage.getStats();
+            setStats({
+                cost: usageStats.totalCost,
+                model: cfg.model
+            });
+        };
+
+        updateStats();
+
+        const statHandler = (event: AgentEvent) => {
+            // Update on relevant events
+            if (event.type === 'done' || event.type === 'tool_result' || event.type === 'thought') {
+                updateStats();
+            }
+        };
+        bus.on('agent', statHandler);
+        return () => {
+            bus.off('agent', statHandler);
+        };
+    }, []);
+
+    // Load history on mount
+    useEffect(() => {
+        history.load().then(loadedEvents => {
+            if (loadedEvents.length > 0) {
+                setEvents(loadedEvents);
+            }
         });
-        return () => { };
+    }, []);
+
+    // Save history on change
+    useEffect(() => {
+        if (events.length > 0) {
+            history.save(events);
+        }
+    }, [events]);
+
+    useEffect(() => {
+        const handler = (event: AgentEvent) => {
+            if (event.type === 'clear_history') {
+                setEvents([]);
+                history.clear();
+                return;
+            }
+
+            setEvents(prev => {
+                // If it's a thought and the last event was also a thought, UPDATE it for streaming effect
+                const last = prev[prev.length - 1];
+                if (event.type === 'thought' && last && last.type === 'thought') {
+                    const newEvents = [...prev];
+                    newEvents[newEvents.length - 1] = event;
+                    return newEvents;
+                }
+                return [...prev, event];
+            });
+        };
+
+        bus.on('agent', handler);
+
+        return () => {
+            bus.off('agent', handler);
+        };
     }, []);
 
     const handleSubmit = (value: string) => {
+        if (!value.trim()) return;
         if (value.trim() === '/exit') {
             exit();
             return;
@@ -31,17 +99,18 @@ export const Root = () => {
     };
 
     return (
-        <Box flexDirection="column" padding={1} height="100%">
-            {/* Header / Dashboard - ALWAYS SHOW FOR DEBUG */}
+        <Box flexDirection="column" height="100%">
+            {/* Header / Dashboard */}
             <Dashboard />
 
-            {/* Event Stream (Scrollable area simulation) */}
-            <Box flexDirection="column" marginBottom={1} marginTop={1}>
-                {events.map((event, i) => {
+            {/* Event Stream (Scrollable area) */}
+            <Box flexDirection="column" flexGrow={1} marginY={1} overflowY="hidden">
+                {events.slice(-5).map((event, i) => { // Tighter slice to leave room
                     if (event.type === 'thought') return <AgentLine key={i} content={event.content} />;
                     if (event.type === 'tool_result') return <ToolOutput key={i} tool={event.tool} output={event.output} isError={event.isError} />;
                     if (event.type === 'done') return <Text key={i} color="green">✔ {event.summary}</Text>;
                     if (event.type === 'error') return <Text key={i} color="red">✖ {event.message}</Text>;
+                    if (event.type === 'clear_history') return <Text key={i} color="gray">⟳ History cleared</Text>;
                     return null;
                 })}
             </Box>
@@ -50,7 +119,7 @@ export const Root = () => {
             <Box flexDirection="column">
                 <CommandPopup input={input} />
                 <Box borderStyle="round" borderColor="gray" paddingX={1}>
-                    <Text color="red">❯ </Text>
+                    <Text color="red" bold>❯ </Text>
                     <TextInput
                         value={input}
                         onChange={setInput}
@@ -60,9 +129,29 @@ export const Root = () => {
                 </Box>
             </Box>
 
-            {/* Footer / Status Bar */}
-            <Box borderStyle="single" borderTop={false} borderLeft={false} borderRight={false} borderColor="gray" marginTop={0} paddingX={1}>
-                <Text color="gray">[ Context: 0 files ] [ Model: Claude 3.5 Sonnet ] [ Cost: $0.00 ]</Text>
+            {/* Footer / Status Bar - Responsive Flexbox */}
+            <Box
+                borderStyle="single"
+                borderTop={false}
+                borderLeft={false}
+                borderRight={false}
+                borderColor="gray"
+                marginTop={0}
+                paddingX={1}
+                flexDirection="row"
+                justifyContent="space-between"
+            >
+                <Box minWidth={20}>
+                    <Text color="gray">[ Context: 0 files ]</Text>
+                </Box>
+
+                <Box minWidth={25} justifyContent="center">
+                    <Text color="gray">[ Model: <Text color="white">{stats.model}</Text> ]</Text>
+                </Box>
+
+                <Box minWidth={15} justifyContent="flex-end">
+                    <Text color="gray">[ Cost: <Text color="green">${stats.cost.toFixed(4)}</Text> ]</Text>
+                </Box>
             </Box>
         </Box>
     );

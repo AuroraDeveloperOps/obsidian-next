@@ -4,15 +4,9 @@ import { render } from 'ink';
 import { Root } from './ui/Root.js';
 import { supervisor } from './agents/supervisor.js';
 
-/**
- * Obsidian Next CLI Entry Point
- */
 async function main() {
-    // Enter Alternate Screen Buffer
     process.stdout.write('\x1b[?1049h');
-    process.stdout.write('\x1Bc'); // Clear screen
-
-    // Render the React Ink UI
+    process.stdout.write('\x1Bc');
     const { waitUntilExit, cleanup } = render(React.createElement(Root), {
         patchConsole: false,
         exitOnCtrlC: true
@@ -23,10 +17,15 @@ async function main() {
     } catch (error) {
         console.error("Runtime Error:", error);
     } finally {
-        // Exit Alternate Screen Buffer
         process.stdout.write('\x1b[?1049l');
         process.exit(0);
     }
+}
+
+// Ensure supervisor is initialized and included in build
+if (!supervisor) {
+    console.error("Fatal: Supervisor failed to initialize");
+    process.exit(1);
 }
 
 main().catch((err) => {

@@ -1,23 +1,33 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box } from 'ink';
 
 export const FullScreen: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [dimensions, setDimensions] = useState({
+        rows: process.stdout.rows || 24,
+        columns: process.stdout.columns || 80
+    });
+
     useEffect(() => {
-        // Enter Alternate Screen Buffer
         process.stdout.write('\x1b[?1049h');
-        // Clear Screen
-        process.stdout.write('\x1b[2J');
-        // Move cursor via ANSI to home to be safe (Ink handles this but good for init)
-        process.stdout.write('\x1b[H');
+        process.stdout.write('\x1bc');
+
+        const handleResize = () => {
+            setDimensions({
+                rows: process.stdout.rows || 24,
+                columns: process.stdout.columns || 80
+            });
+        };
+
+        process.stdout.on('resize', handleResize);
 
         return () => {
-            // Exit Alternate Screen Buffer
+            process.stdout.off('resize', handleResize);
             process.stdout.write('\x1b[?1049l');
         };
     }, []);
 
     return (
-        <Box width="100%" height="100%" flexDirection="column">
+        <Box width="100%" height={dimensions.rows} flexDirection="column">
             {children}
         </Box>
     );

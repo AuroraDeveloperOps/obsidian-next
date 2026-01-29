@@ -7,12 +7,6 @@ interface ToolOutputProps {
     isError?: boolean;
 }
 
-/**
- * ToolOutput Component
- * Renders the output of a tool call.
- * Visual:
- *   > Result of the command
- */
 export const ToolOutput: React.FC<ToolOutputProps> = ({ tool, output, isError }) => {
     return (
         <Box flexDirection="column" marginLeft={2}>

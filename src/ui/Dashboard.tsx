@@ -19,11 +19,11 @@ export const Dashboard = () => {
                 <Box justifyContent="center" marginBottom={1}>
                     <Text color="red">
                         {`
-▀▄   ▄▀
-▄█▀███▀█▄
-█▀███████▀█
-█ █▀▀▀▀▀█ █
-   ▀▀ ▀▀
+ ▄▄▄▄▄▄▄▄▄
+ █▀▄ ▄▀▄▀█
+ █ █▄█▄█ █
+ █  ███  █
+ ▀▀▀▀▀▀▀▀▀
 `}
                     </Text>
                 </Box>

@@ -23,7 +23,8 @@ export type AgentEvent =
 
     // 4. System/Status
     | { type: "error"; message: string; code?: string }
-    | { type: "done"; summary: string };
+    | { type: "done"; summary: string }
+    | { type: "clear_history" };
 
 export type UserEvent =
     | { type: "user_input"; content: string }
