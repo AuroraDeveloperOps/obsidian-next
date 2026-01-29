@@ -41,3 +41,7 @@ yarn-error.log*
 .agent/memory
 .agent/sessions
 
+# Internal Dev
+docs/RESEARCH.md
+
+
