@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { bus } from '../core/bus.js';
 
 interface ApprovalPromptProps {
+    requestId: string;
     context: string;
     diff?: string;
     onResolve: () => void;
@@ -17,6 +18,7 @@ interface ApprovalPromptProps {
  * - External API calls
  */
 export const ApprovalPrompt: React.FC<ApprovalPromptProps> = ({
+    requestId,
     context,
     diff,
     onResolve,
@@ -28,13 +30,13 @@ export const ApprovalPrompt: React.FC<ApprovalPromptProps> = ({
         setResolved(true);
 
         bus.emitUser({
-            type: 'user_choice',
-            selectionId: approved ? 'approve' : 'deny',
-            context: context,
+            type: 'approval_response',
+            approved,
+            requestId,
         });
 
         onResolve();
-    }, [resolved, context, onResolve]);
+    }, [resolved, requestId, onResolve]);
 
     useInput((input, key) => {
         if (resolved) return;
