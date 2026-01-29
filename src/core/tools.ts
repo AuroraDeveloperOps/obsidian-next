@@ -14,8 +14,23 @@ import { UserEvent } from '../events/types.js';
 
 const execAsync = promisify(exec);
 
+// Safety limits to prevent context explosion
+const MAX_OUTPUT_LENGTH = 10000;  // Max chars in tool output
+const MAX_FILE_READ_LINES = 500;  // Max lines when reading files
+const IGNORED_DIRS = ['node_modules', '.git', 'dist', '.next', '__pycache__', '.cache', 'coverage'];
+
 // Approval request timeout (30 seconds)
 const APPROVAL_TIMEOUT = 30000;
+
+/**
+ * Truncate output to prevent context explosion
+ */
+function truncateOutput(output: string, maxLength: number = MAX_OUTPUT_LENGTH): string {
+    if (output.length <= maxLength) return output;
+    const truncated = output.slice(0, maxLength);
+    const remaining = output.length - maxLength;
+    return `${truncated}\n\n... [TRUNCATED: ${remaining} more characters]`;
+}
 
 // Pending approval requests
 const pendingApprovals = new Map<string, {
@@ -118,12 +133,13 @@ export const BashTool: Tool = {
             const { stdout, stderr } = await execAsync(execCommand, {
                 cwd: process.cwd(),
                 timeout: 30000, // 30 second timeout
-                maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+                maxBuffer: 1024 * 1024, // 1MB buffer (reduced from 10MB)
             });
 
+            const output = stdout || stderr || 'Command executed successfully';
             return {
                 success: true,
-                output: stdout || stderr || 'Command executed successfully',
+                output: truncateOutput(output),
             };
         } catch (error: any) {
             return {
@@ -157,19 +173,34 @@ export const ReadTool: Tool = {
             };
         }
 
+        // Block reading from ignored directories (node_modules, etc.)
+        if (IGNORED_DIRS.some(dir => filePath.includes(`/${dir}/`) || filePath.startsWith(`${dir}/`))) {
+            return {
+                success: false,
+                error: `Cannot read from ignored directory. Paths containing ${IGNORED_DIRS.join(', ')} are blocked to prevent context explosion.`
+            };
+        }
+
         try {
             const fullPath = path.resolve(process.cwd(), filePath);
             const content = await fs.readFile(fullPath, 'utf-8');
 
             // Add line numbers for better readability
             const lines = content.split('\n');
-            const numbered = lines
+
+            // Limit lines to prevent context explosion
+            const limitedLines = lines.slice(0, MAX_FILE_READ_LINES);
+            const numbered = limitedLines
                 .map((line, i) => `${String(i + 1).padStart(4)} | ${line}`)
                 .join('\n');
 
+            const truncationNote = lines.length > MAX_FILE_READ_LINES
+                ? `\n\n... [TRUNCATED: ${lines.length - MAX_FILE_READ_LINES} more lines. Use offset parameter to read more.]`
+                : '';
+
             return {
                 success: true,
-                output: `File: ${filePath}\n${'='.repeat(60)}\n${numbered}`,
+                output: truncateOutput(`File: ${filePath} (${lines.length} lines)\n${'='.repeat(60)}\n${numbered}${truncationNote}`),
             };
         } catch (error: any) {
             return {
@@ -364,16 +395,26 @@ export const ListTool: Tool = {
             const fullPath = path.resolve(process.cwd(), dirPath);
             const entries = await fs.readdir(fullPath, { withFileTypes: true });
 
-            const formatted = entries
+            // Filter out ignored directories
+            const filtered = entries.filter(entry =>
+                !IGNORED_DIRS.includes(entry.name) && !entry.name.startsWith('.')
+            );
+
+            const formatted = filtered
                 .map(entry => {
                     const prefix = entry.isDirectory() ? '[DIR]' : '[FILE]';
                     return `${prefix} ${entry.name}`;
                 })
                 .join('\n');
 
+            const hiddenCount = entries.length - filtered.length;
+            const hiddenNote = hiddenCount > 0
+                ? `\n\n(${hiddenCount} hidden: node_modules, .git, etc.)`
+                : '';
+
             return {
                 success: true,
-                output: `Directory: ${dirPath}\n${'='.repeat(60)}\n${formatted}`,
+                output: `Directory: ${dirPath}\n${'='.repeat(60)}\n${formatted}${hiddenNote}`,
             };
         } catch (error: any) {
             return {
@@ -425,7 +466,7 @@ export const GrepTool: Tool = {
 
             return {
                 success: true,
-                output: `Found ${results.length} matches for "${pattern}":\n${'='.repeat(60)}\n${results.join('\n')}`,
+                output: truncateOutput(`Found ${results.length} matches for "${pattern}":\n${'='.repeat(60)}\n${results.join('\n')}`),
             };
         } catch (error: any) {
             return {
@@ -458,8 +499,8 @@ async function searchDirectory(
             const fullPath = path.join(dir, entry.name);
             const relativePath = path.relative(process.cwd(), fullPath);
 
-            // Skip node_modules, .git, etc.
-            if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist') {
+            // Skip ignored directories (node_modules, .git, etc.)
+            if (entry.name.startsWith('.') || IGNORED_DIRS.includes(entry.name)) {
                 continue;
             }
 
