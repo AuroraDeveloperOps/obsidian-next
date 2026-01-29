@@ -15,9 +15,15 @@ export type UsageStats = z.infer<typeof UsageSchema>;
 
 const MODEL_PRICES: Record<string, { input: number; output: number }> = {
     // Claude 4.5 Family (2025-2026)
-    'claude-sonnet-4-5-20250929': { input: 3.00, output: 15.00 }, // $3 / $15
-    'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00 },   // $1 / $5
-    'claude-opus-4-5-20251101': { input: 5.00, output: 25.00 },   // $5 / $25
+    'claude-sonnet-4-5-20250929': { input: 3.00, output: 15.00 },
+    'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00 },
+    'claude-opus-4-5-20251101': { input: 5.00, output: 25.00 },
+    // Claude 3.5 Family (backward compatibility)
+    'claude-3-5-sonnet': { input: 3.00, output: 15.00 },
+    'claude-3-5-haiku': { input: 0.25, output: 1.25 },
+    'claude-3-haiku': { input: 0.25, output: 1.25 },
+    'claude-3-opus': { input: 15.00, output: 75.00 },
+    'claude-3-sonnet': { input: 3.00, output: 15.00 },
 };
 
 export class UsageTracker {
