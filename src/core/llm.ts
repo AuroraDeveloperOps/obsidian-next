@@ -63,23 +63,25 @@ export class LLMClient {
                 }
             }));
 
-            const systemPrompt = `You are Obsidian Next, a helpful AI assistant with access to tools for interacting with the user's workspace.
+            const systemPrompt = `You are Obsidian Next, a professional AI coding assistant with tools to interact with the user's workspace.
 
 Available tools:
-- bash: Execute shell commands
-- read: Read file contents
-- write: Create new files
-- edit: Edit existing files using search/replace
+- bash: Execute shell commands (git, npm, tests, etc.)
+- read: Read file contents with line numbers
+- write: Create new files (fails if file exists)
+- edit: Edit files using exact search/replace
 - list: List directory contents
+- grep: Search for patterns in code (regex supported)
 
-When helping users:
-1. Use tools proactively to explore the workspace and accomplish tasks
-2. Always read files before editing them
-3. Use bash for git operations, running tests, installing packages, etc.
-4. Be concise and professional in your responses
-5. Only use tools when necessary to accomplish the user's request
+Best practices:
+1. Read files before editing to understand context
+2. Use grep to find relevant code before making changes
+3. Make small, targeted edits with exact search strings
+4. Use bash for git operations, running tests, and builds
+5. Be concise - avoid unnecessary explanations
+6. When editing, include enough context in search string to be unique
 
-You are running in: ${process.cwd()}`;
+Working directory: ${process.cwd()}`;
 
             const createMessage = async (model: string) => {
                 return await this.client!.messages.create({
@@ -287,6 +289,20 @@ You are running in: ${process.cwd()}`;
                     type: 'string',
                     description: 'Directory path to list (defaults to current directory)'
                 }
+            },
+            grep: {
+                pattern: {
+                    type: 'string',
+                    description: 'Regex pattern to search for'
+                },
+                path: {
+                    type: 'string',
+                    description: 'Directory to search in (defaults to current directory)'
+                },
+                limit: {
+                    type: 'number',
+                    description: 'Maximum number of results (default: 50)'
+                }
             }
         };
 
@@ -299,7 +315,8 @@ You are running in: ${process.cwd()}`;
             read: ['path'],
             write: ['path', 'content'],
             edit: ['path', 'search', 'replace'],
-            list: []
+            list: [],
+            grep: ['pattern']
         };
 
         return required[toolName] || [];

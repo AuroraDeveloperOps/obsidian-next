@@ -5,6 +5,7 @@ import { costCommand } from '../commands/cost.js';
 import { usageCommand } from '../commands/usage.js';
 import { modelsCommand } from '../commands/models.js';
 import { toolCommand } from '../commands/tool.js';
+import { statusCommand } from '../commands/status.js';
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -35,6 +36,7 @@ export class CommandRegistry {
         this.register('usage', 'Show historical usage', usageCommand);
         this.register('models', 'Select AI model', modelsCommand);
         this.register('tool', 'Execute tools manually', toolCommand);
+        this.register('status', 'Show system status', statusCommand);
     }
 
     register(name: string, description: string, handler: CommandHandler) {
