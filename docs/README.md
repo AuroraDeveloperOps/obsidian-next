@@ -1,6 +1,6 @@
 # Obsidian Next
 
-> The "Figma-grade" AI Agent CLI.
+> A professional AI Agent CLI.
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. It features a "Structure-First" architecture where agents emit typed events instead of raw streams, ensuring a rigorous and interactive user experience.
 
@@ -9,7 +9,6 @@
 - **[Design System](CLI_DESIGN_SYSTEM.md)**: Visual guidelines (No Emojis, Strict ASCII).
 - **[Architecture](ARCHITECTURE.md)**: EventBus, Supervisor, and Worker topology.
 - **[Tools](TOOLS.md)**: Available capabilities and safety checks.
-- **[Research](RESEARCH.md)**: Context preservation and "Zero Hallucination" strategies.
 
 ## Quick Start
 ```bash
