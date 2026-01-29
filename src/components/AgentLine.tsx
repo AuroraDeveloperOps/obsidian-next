@@ -8,7 +8,7 @@ interface AgentLineProps {
 export const AgentLine: React.FC<AgentLineProps> = ({ content }) => {
     return (
         <Box>
-            <Text color="gray">
+            <Text color="white">
                 <Text bold>*</Text> {content}
             </Text>
         </Box>
