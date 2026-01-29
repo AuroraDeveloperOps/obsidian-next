@@ -235,6 +235,9 @@ export const EditTool: Tool = {
             // Perform replacement
             const modified = original.replace(search, replace);
 
+            // Generate diff preview for output
+            const diffPreview = generateDiffPreview(search, replace);
+
             // Write back
             await fs.writeFile(fullPath, modified, 'utf-8');
 
@@ -245,7 +248,7 @@ export const EditTool: Tool = {
 
             return {
                 success: true,
-                output: `Edited ${filePath}: ${originalLines} → ${modifiedLines} lines (${delta >= 0 ? '+' : ''}${delta})`,
+                output: `Edited ${filePath}:\n${diffPreview}\nLines: ${originalLines} -> ${modifiedLines} (${delta >= 0 ? '+' : ''}${delta})`,
             };
         } catch (error: any) {
             return {
@@ -255,6 +258,34 @@ export const EditTool: Tool = {
         }
     },
 };
+
+/**
+ * Generate a simple diff preview showing what was changed
+ */
+function generateDiffPreview(search: string, replace: string): string {
+    const searchLines = search.split('\n').slice(0, 5);
+    const replaceLines = replace.split('\n').slice(0, 5);
+
+    let preview = '';
+
+    // Show removed lines
+    for (const line of searchLines) {
+        preview += `- ${line}\n`;
+    }
+    if (search.split('\n').length > 5) {
+        preview += `- ... (${search.split('\n').length - 5} more lines)\n`;
+    }
+
+    // Show added lines
+    for (const line of replaceLines) {
+        preview += `+ ${line}\n`;
+    }
+    if (replace.split('\n').length > 5) {
+        preview += `+ ... (${replace.split('\n').length - 5} more lines)\n`;
+    }
+
+    return preview.trim();
+}
 
 /**
  * List Tool - List files in a directory
