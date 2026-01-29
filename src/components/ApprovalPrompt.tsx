@@ -59,14 +59,15 @@ export const ApprovalPrompt: React.FC<ApprovalPromptProps> = ({
     return (
         <Box
             flexDirection="column"
-            borderStyle="single"
+            borderStyle="round"
             borderColor="yellow"
             paddingX={1}
+            paddingY={0}
             marginY={1}
         >
             {/* Header */}
             <Box marginBottom={1}>
-                <Text color="yellow" bold>[!] Approval Required</Text>
+                <Text bold color="yellow">[!] Approval Required</Text>
             </Box>
 
             {/* Context */}
@@ -102,7 +103,7 @@ export const ApprovalPrompt: React.FC<ApprovalPromptProps> = ({
                 </Box>
             )}
 
-            {/* Action hints */}
+            {/* Action Buttons */}
             <Box>
                 <Text color="green" bold>[Y]</Text>
                 <Text color="white"> Approve  </Text>

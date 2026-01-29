@@ -83,23 +83,22 @@ describe('Tool Usage Integration', () => {
         expect(response?.toLowerCase()).toMatch(/hello|test file|line/i);
     }, 30000);
 
-    it('should use list or bash tool when asked about directory contents', async () => {
+    it('should use list tool when asked about directory contents', async () => {
         const prompt = `What files are in the ${testDir} directory? Just list them briefly.`;
 
-        console.log('    > Testing directory listing...');
+        console.log('    > Testing list tool usage...');
         const response = await client.streamChat(prompt);
 
         if (skipIfBillingError()) return;
 
         const toolStarts = events.filter(e => e.type === 'tool_start');
 
-        // Model should have used the list tool OR bash with ls
+        // Model should have used the list tool
         const listToolUsed = toolStarts.some(e =>
-            'tool' in e && (e.tool === 'list' || (e.tool === 'bash' && e.args.includes('ls')))
+            'tool' in e && e.tool === 'list'
         );
 
-        console.log('    > Directory listing tool used:', listToolUsed);
-        console.log('    > Tools:', toolStarts.map(e => 'tool' in e ? e.tool : ''));
+        console.log('    > List tool used:', listToolUsed);
 
         expect(listToolUsed).toBe(true);
         expect(response).toBeTruthy();
