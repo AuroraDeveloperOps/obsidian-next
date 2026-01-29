@@ -46,11 +46,13 @@ export class LLMClient {
             const requestedModel = this.lastConfig?.model || 'claude-sonnet-4-5-20250929';
             let apiModel = modelMap[requestedModel] || requestedModel;
 
-            // Add user message to history
-            this.conversationHistory.push({
-                role: 'user',
-                content: userMessage
-            });
+            // Add user message to history (skip if empty - used for tool continuations)
+            if (userMessage.trim()) {
+                this.conversationHistory.push({
+                    role: 'user',
+                    content: userMessage
+                });
+            }
 
             // Define available tools for Claude
             const toolDefinitions = tools.list().map(tool => ({

@@ -11,6 +11,7 @@
         "test": "vitest"
     },
     "dependencies": {
+        "@anthropic-ai/sandbox-runtime": "^0.0.32",
         "@anthropic-ai/sdk": "^0.33.1",
         "@inkjs/ui": "^1.0.0",
         "@modelcontextprotocol/sdk": "^1.0.1",
