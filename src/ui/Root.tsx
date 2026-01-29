@@ -6,6 +6,7 @@ import { AgentEvent } from '../events/types.js';
 import { AgentLine } from '../components/AgentLine.js';
 import { ToolOutput } from '../components/ToolOutput.js';
 import { Dashboard } from './Dashboard.js';
+import { CommandPopup } from './CommandPopup.js';
 
 export const Root = () => {
     const [events, setEvents] = useState<AgentEvent[]>([]);
@@ -46,14 +47,17 @@ export const Root = () => {
             </Box>
 
             {/* Input Area */}
-            <Box borderStyle="round" borderColor="cyan" paddingX={1}>
-                <Text color="cyan">❯ </Text>
-                <TextInput
-                    value={input}
-                    onChange={setInput}
-                    onSubmit={handleSubmit}
-                    placeholder="Type a command..."
-                />
+            <Box flexDirection="column">
+                <CommandPopup input={input} />
+                <Box borderStyle="classic" borderColor="cyan" paddingX={1}>
+                    <Text color="cyan">❯ </Text>
+                    <TextInput
+                        value={input}
+                        onChange={setInput}
+                        onSubmit={handleSubmit}
+                        placeholder="Type a command..."
+                    />
+                </Box>
             </Box>
 
             {/* Footer / Status Bar */}

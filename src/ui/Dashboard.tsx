@@ -3,22 +3,29 @@ import { Box, Text } from 'ink';
 
 export const Dashboard = () => {
     return (
-        <Box borderStyle="round" borderColor="gray" flexDirection="column" paddingX={1}>
+        <Box borderStyle="classic" borderColor="cyan" flexDirection="column" paddingX={1}>
             <Box justifyContent="space-between">
-                <Text bold>Obsidian Next v0.1.0</Text>
-                <Text color="gray">~/obsidian-next</Text>
+                <Text bold>Obsidian CLI v0.1.0</Text>
+                <Text color="gray">~/obsidian-cli</Text>
             </Box>
 
             <Box borderStyle="single" borderTop={false} borderLeft={false} borderRight={false} borderColor="gray" />
 
             <Box flexDirection="row" paddingTop={1}>
-                {/* Left Column: Welcome & Info */}
+                {/* Left Column: Welcome & Info + ASCII Cube */}
                 <Box flexDirection="column" width="60%">
                     <Text bold color="cyan">Welcome back, User!</Text>
                     <Box height={1} />
-                    <Text>Obsidian Pro · Local Mode</Text>
+                    <Text color="blue">
+                        {`      +------+
+     /      /|
+    +------+ |
+    |      | +
+    |      |/
+    +------+`}
+                    </Text>
                     <Box height={1} />
-                    <Text color="gray">Waiting for command input...</Text>
+                    <Text>Obsidian CLI · Local Mode</Text>
                 </Box>
 
                 {/* Vertical Divider */}
