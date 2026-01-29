@@ -6,6 +6,7 @@ import { usageCommand } from '../commands/usage.js';
 import { modelsCommand } from '../commands/models.js';
 import { toolCommand } from '../commands/tool.js';
 import { statusCommand } from '../commands/status.js';
+import { sandboxCommand } from '../commands/sandbox.js';
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -37,6 +38,7 @@ export class CommandRegistry {
         this.register('models', 'Select AI model', modelsCommand);
         this.register('tool', 'Execute tools manually', toolCommand);
         this.register('status', 'Show system status', statusCommand);
+        this.register('sandbox', 'Toggle sandbox mode', sandboxCommand);
     }
 
     register(name: string, description: string, handler: CommandHandler) {

@@ -9,6 +9,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { bus } from './bus.js';
 import { auditor } from './auditor.js';
+import { sandbox } from './sandbox.js';
 
 const execAsync = promisify(exec);
 
@@ -61,7 +62,10 @@ export const BashTool: Tool = {
         }
 
         try {
-            const { stdout, stderr } = await execAsync(command, {
+            // Wrap command with sandbox if enabled
+            const execCommand = await sandbox.wrapCommand(command);
+
+            const { stdout, stderr } = await execAsync(execCommand, {
                 cwd: process.cwd(),
                 timeout: 30000, // 30 second timeout
                 maxBuffer: 1024 * 1024 * 10, // 10MB buffer
