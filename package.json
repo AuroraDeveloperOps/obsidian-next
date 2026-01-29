@@ -1,0 +1,40 @@
+{
+    "name": "obsidian-next",
+    "version": "0.1.0",
+    "description": "Next-gen AI Agent CLI",
+    "main": "dist/index.js",
+    "type": "module",
+    "scripts": {
+        "dev": "tsup src/index.ts --watch",
+        "build": "tsup",
+        "start": "node dist/index.js",
+        "test": "vitest"
+    },
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.33.1",
+        "@inkjs/ui": "^1.0.0",
+        "@modelcontextprotocol/sdk": "^1.0.1",
+        "@prisma/client": "^6.1.0",
+        "bullmq": "^5.34.0",
+        "chalk": "^5.3.0",
+        "dotenv": "^16.4.5",
+        "ink": "^5.0.1",
+        "ink-spinner": "^5.0.0",
+        "ink-text-input": "^6.0.0",
+        "ioredis": "^5.4.1",
+        "isolated-vm": "^4.7.2",
+        "pg": "^8.13.1",
+        "react": "^18.3.1",
+        "zod": "^3.23.8"
+    },
+    "devDependencies": {
+        "@types/node": "^20.14.9",
+        "@types/react": "^18.3.3",
+        "ink-testing-library": "^3.0.0",
+        "pkg": "^5.8.1",
+        "prisma": "^6.1.0",
+        "tsup": "^8.1.0",
+        "typescript": "^5.5.3",
+        "vitest": "^2.0.1"
+    }
+}
