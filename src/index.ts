@@ -1,21 +1,22 @@
 #!/usr/bin/env node
-import { bus } from './core/bus.js';
+import React from 'react';
+import { render } from 'ink';
+import { Root } from './ui/Root.js';
+import { supervisor } from './agents/supervisor.js';
 
 /**
  * Obsidian Next CLI Entry Point
  */
 async function main() {
-    // 1. Welcome Message
-    bus.emitAgent({
-        type: 'thought',
-        content: 'Initializing Obsidian Next v0.1.0...'
-    });
+    process.stdout.write('\x1Bc'); // Clear screen
 
-    // TODO: Initialize Ink UI here
-    console.log("Obsidian Next Initialized. (Ink UI implementation impending)");
+    // Render the React Ink UI
+    const { waitUntilExit } = render(React.createElement(Root));
 
-    // Keep process alive for now
-    process.stdin.resume();
+    // Supervisor is already initialized by the import (lines 3-4)
+    // The Root component in src/ui/Root.tsx subscribes to the Event Bus
+
+    await waitUntilExit();
 }
 
 main().catch((err) => {
