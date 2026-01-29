@@ -1,7 +1,10 @@
+/**
+ * Supervisor - Orchestrates user input to agent/commands
+ */
+
 import { bus } from '../core/bus.js';
 import { commands } from '../core/commands.js';
-import { auditor } from '../core/auditor.js';
-import { llm } from '../core/llm.js';
+import { agent } from '../core/agent.js';
 
 export class Supervisor {
     constructor() {
@@ -13,24 +16,17 @@ export class Supervisor {
             if (event.type === 'user_input') {
                 await this.handleInput(event.content);
             }
+
+            // Handle plan approval
+            if (event.type === 'approval_response') {
+                // Plan mode approval is handled by the agent
+                // This is for tool-level approvals
+            }
         });
     }
 
     private async handleInput(input: string) {
-        bus.emitAgent({
-            type: 'thought',
-            content: `Received: "${input}"`
-        });
-
-        const audit = await auditor.checkCommand(input);
-        if (!audit.approved) {
-            bus.emitAgent({
-                type: 'error',
-                message: `Safety violation: ${audit.reason}`
-            });
-            return;
-        }
-
+        // Command handling
         if (input.startsWith('/')) {
             const [cmdName, ...args] = input.slice(1).split(' ');
             if (commands.has(cmdName)) {
@@ -39,29 +35,13 @@ export class Supervisor {
             }
             bus.emitAgent({
                 type: 'error',
-                message: `Unknown command: ${input}`
+                message: `Unknown command: /${cmdName}. Try /help`
             });
             return;
         }
 
-        bus.emitAgent({
-            type: 'thought',
-            content: 'Thinking...'
-        });
-
-        const response = await llm.streamChat(input);
-
-        if (response) {
-            bus.emitAgent({
-                type: 'done',
-                summary: 'Response complete'
-            });
-        } else {
-            bus.emitAgent({
-                type: 'error',
-                message: 'Failed to get response from Claude'
-            });
-        }
+        // Pass to agent
+        await agent.run(input);
     }
 }
 

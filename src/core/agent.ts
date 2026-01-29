@@ -1,0 +1,185 @@
+/**
+ * Agent - Main execution loop
+ *
+ * Flow: INPUT -> ANALYZE -> PLAN -> APPROVE -> EXECUTE -> VERIFY -> REPORT
+ */
+
+import { bus } from './bus.js';
+import { llm } from './llm.js';
+import { context } from './context.js';
+import { tasks } from './tasks.js';
+import { tools } from './tools.js';
+
+export interface AgentPlan {
+    task: string;
+    steps: string[];
+    files_to_read: string[];
+    files_to_modify: string[];
+    requires_approval: boolean;
+}
+
+class Agent {
+    private initialized = false;
+
+    async init(): Promise<void> {
+        if (this.initialized) return;
+        await context.init();
+        await tasks.init();
+        this.initialized = true;
+    }
+
+    async run(input: string): Promise<void> {
+        await this.init();
+
+        const mode = context.getMode();
+
+        // Update task if this looks like a new task
+        if (this.isNewTask(input)) {
+            await tasks.create(this.extractTaskTitle(input));
+            await context.setTask(tasks.getProgress());
+        }
+
+        bus.emitAgent({ type: 'thought', content: `[${mode}] Processing...` });
+
+        if (mode === 'plan') {
+            await this.runPlanMode(input);
+        } else {
+            await this.runDirectMode(input);
+        }
+    }
+
+    private isNewTask(input: string): boolean {
+        // Heuristic: longer inputs with action verbs are likely new tasks
+        const actionWords = ['create', 'add', 'implement', 'fix', 'update', 'refactor', 'build', 'make', 'write'];
+        const lower = input.toLowerCase();
+        return input.length > 20 && actionWords.some(w => lower.includes(w));
+    }
+
+    private extractTaskTitle(input: string): string {
+        // Take first 50 chars or first sentence
+        const firstSentence = input.split(/[.!?\n]/)[0];
+        return firstSentence.slice(0, 50) + (firstSentence.length > 50 ? '...' : '');
+    }
+
+    private async runPlanMode(input: string): Promise<void> {
+        // Step 1: Generate plan
+        bus.emitAgent({ type: 'thought', content: 'Generating plan...' });
+
+        const planPrompt = `Analyze this request and create a plan. Output ONLY a structured plan:
+
+REQUEST: ${input}
+
+FORMAT:
+TASK: <one line summary>
+STEPS:
+1. <step>
+2. <step>
+FILES_READ: <comma separated paths or "none">
+FILES_MODIFY: <comma separated paths or "none">
+APPROVAL: <yes if destructive, no otherwise>`;
+
+        const planResponse = await llm.streamChat(planPrompt);
+
+        if (!planResponse) {
+            bus.emitAgent({ type: 'error', message: 'Failed to generate plan' });
+            return;
+        }
+
+        // Parse plan
+        const plan = this.parsePlan(planResponse);
+
+        // Show plan and wait for approval
+        bus.emitAgent({
+            type: 'thought',
+            content: this.formatPlan(plan)
+        });
+
+        bus.emitAgent({
+            type: 'approval_request',
+            requestId: `plan_${Date.now()}`,
+            context: `Execute this plan?\n\n${this.formatPlan(plan)}`,
+        });
+
+        // Note: Approval handling happens via the approval_response event
+        // The actual execution will continue when approved
+    }
+
+    private async runDirectMode(input: string): Promise<void> {
+        // Add context to prompt
+        const ctxSummary = context.getSummary();
+        const taskProgress = tasks.getProgress();
+
+        let enhancedInput = input;
+        if (ctxSummary || taskProgress !== 'No active task') {
+            enhancedInput = `${input}\n\n[Context: ${ctxSummary}]\n[${taskProgress}]`;
+        }
+
+        const response = await llm.streamChat(enhancedInput);
+
+        if (response) {
+            await context.setLastAction(input.slice(0, 50));
+            bus.emitAgent({ type: 'done', summary: 'Done' });
+        } else {
+            bus.emitAgent({ type: 'error', message: 'Failed to get response' });
+        }
+    }
+
+    private parsePlan(response: string): AgentPlan {
+        const lines = response.split('\n');
+        const plan: AgentPlan = {
+            task: '',
+            steps: [],
+            files_to_read: [],
+            files_to_modify: [],
+            requires_approval: false,
+        };
+
+        for (const line of lines) {
+            if (line.startsWith('TASK:')) {
+                plan.task = line.slice(5).trim();
+            } else if (line.match(/^\d+\./)) {
+                plan.steps.push(line.replace(/^\d+\.\s*/, '').trim());
+            } else if (line.startsWith('FILES_READ:')) {
+                const files = line.slice(11).trim();
+                if (files !== 'none') {
+                    plan.files_to_read = files.split(',').map(f => f.trim());
+                }
+            } else if (line.startsWith('FILES_MODIFY:')) {
+                const files = line.slice(13).trim();
+                if (files !== 'none') {
+                    plan.files_to_modify = files.split(',').map(f => f.trim());
+                }
+            } else if (line.startsWith('APPROVAL:')) {
+                plan.requires_approval = line.toLowerCase().includes('yes');
+            }
+        }
+
+        return plan;
+    }
+
+    private formatPlan(plan: AgentPlan): string {
+        const lines = [`Task: ${plan.task}`, '', 'Steps:'];
+        plan.steps.forEach((s, i) => lines.push(`  ${i + 1}. ${s}`));
+
+        if (plan.files_to_read.length > 0) {
+            lines.push('', `Read: ${plan.files_to_read.join(', ')}`);
+        }
+        if (plan.files_to_modify.length > 0) {
+            lines.push(`Modify: ${plan.files_to_modify.join(', ')}`);
+        }
+
+        return lines.join('\n');
+    }
+
+    // Mode control
+    async setMode(mode: 'auto' | 'plan' | 'safe'): Promise<void> {
+        await context.setMode(mode);
+        bus.emitAgent({ type: 'thought', content: `Mode: ${mode}` });
+    }
+
+    getMode(): string {
+        return context.getMode();
+    }
+}
+
+export const agent = new Agent();
