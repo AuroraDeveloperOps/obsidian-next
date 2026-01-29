@@ -17,6 +17,7 @@ import { config } from '../core/config.js';
 // Pending prompt types
 interface PendingApproval {
     type: 'approval';
+    requestId: string;
     context: string;
     diff?: string;
 }
@@ -96,6 +97,7 @@ export const Root = () => {
             if (event.type === 'approval_request') {
                 setPendingPrompt({
                     type: 'approval',
+                    requestId: event.requestId,
                     context: event.context,
                     diff: event.diff,
                 });
@@ -219,6 +221,7 @@ export const Root = () => {
             {/* Interactive Prompts */}
             {pendingPrompt?.type === 'approval' && (
                 <ApprovalPrompt
+                    requestId={pendingPrompt.requestId}
                     context={pendingPrompt.context}
                     diff={pendingPrompt.diff}
                     onResolve={handlePromptResolve}
