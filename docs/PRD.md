@@ -7,9 +7,9 @@
 ## 1. Core Philosophy
 1.  **Structure over Stream**: The Agent does NOT stream raw Markdown. It emits **Structured Events** (`Reasoning`, `ToolCall`, `ChoiceRequest`) which the CLI renders.
 2.  **Visual Hierarchy**:
-    - **Agent Thought**: `●` Bullet points.
-    - **Tool Output**: `⎿` Indented blocks.
-    - **User Input**: `❯` Cyan prompt.
+    - **Agent Thought**: `*` Bullet points.
+    - **Tool Output**: `>` Indented blocks.
+    - **User Input**: `>` Cyan prompt.
 3.  **Modes (Shift+Tab)**:
     - **[Default]**: Ask for permission on sensitive actions.
     - **[Plan]**: Only generate tasks/plans, no execution.

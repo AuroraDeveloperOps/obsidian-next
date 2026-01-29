@@ -5,24 +5,24 @@ Based on `cliexample.MD`.
 ## 1. The Grid Layout
 All output is strictly key-value or bullet-aligned.
 
-### 1.1. Agent Bullet (`●`)
+### 1.1. Agent Bullet (`*`)
 Primary indicator of Agent activity/thought.
 ```
-● Let me check the current task list...
+* Let me check the current task list...
 ```
 
-### 1.2. Tool Output (`⎿`)
+### 1.2. Tool Output (`>`)
 Indicates the result of a tool call.
 **Standard**:
 ```
-● Bash(ls -la)
-  ⎿ total 84
+* Bash(ls -la)
+  > total 84
      drwxr-x ...
 ```
 **Error**:
 ```
-● Bash(mkdir /root/test)
-  ⎿ Error: Exit code 1
+* Bash(mkdir /root/test)
+  > Error: Exit code 1
      mkdir: cannot create directory '/root/test': Permission denied
 ```
 
@@ -33,12 +33,12 @@ Cyan color.
 ```
 
 ## 2. The Spinner ("The Morph")
-**Animation**: `▖` -> `▘` -> `▝` -> `▗`
+**Animation**: `[=...]`, `[==..]`, `[===.]`, `[====]` (Classic Progress)
 **Status Text**:
-- `▖ Churning...` (Heavy processing)
-- `▖ Brewing...` (Planning)
-- `▖ Cogitating...` (Reasoning)
-- `▖ Traversing...` (File system/Search)
+- `[=..] Processing...`
+- `[==.] Planning...`
+- `[===] Reasoning...`
+- `[====] Traversing...`
 
 ## 3. Scenarios & Components
 
@@ -68,10 +68,10 @@ When the agent needs a decision.
   What's the priority?
 ```
 
-### 3.3. Permission / Confirmation (Numbered & Tab)
+### 3.3. Permission / Confirmation
 **Diff View (File Edit)**:
 ```
-● The agent wants to edit `src/index.ts`:
+* The agent wants to edit `src/index.ts`:
 
   364 -      test: ["CMD", "wget", "-q", "localhost"]
   364 +      test: ["CMD", "wget", "-q", "localhost/api"]
@@ -80,24 +80,22 @@ When the agent needs a decision.
   2. Reject (Press Tab to add reason)
   3. View Full Diff
 
-  ❯ 2 [TAB]
-  ❯ Reason: The path should be /api/v1 not /api_
+  > 2 [TAB]
+  > Reason: The path should be /api/v1 not /api_
 ```
-- **Interaction**:
-  - Selection `2` queues a "Rejection".
-  - Pressing `TAB` allows inserting a "System Message" into the Queue *before* the planner resumes.
-  - The Agent reads this reason immediately.
 
 **Dangerous Command**:
 ```
-● The agent wants to run:
+* The agent wants to run:
   > sudo rm -rf /tmp/test
+
+  [!] This command runs as ROOT.
 
   1. Execute
   2. Skip
   3. Edit Command
 
-  ❯ _
+  > _
 ```
 
 ### 3.4. Tables & Summaries
