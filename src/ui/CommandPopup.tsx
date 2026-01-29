@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 
-const COMMANDS = [
+export const COMMANDS = [
     { name: '/init', desc: 'Initialize configuration' },
     { name: '/help', desc: 'Show available commands' },
     { name: '/exit', desc: 'Exit the CLI' },
@@ -11,12 +11,12 @@ const COMMANDS = [
     { name: '/models', desc: 'Select AI model' },
 ];
 
-export const CommandPopup = ({ input }: { input: string }) => {
-    if (!input.startsWith('/')) return null;
+interface CommandPopupProps {
+    matches: typeof COMMANDS;
+    selectedIndex: number;
+}
 
-    const query = input.toLowerCase();
-    const matches = COMMANDS.filter(c => c.name.startsWith(query));
-
+export const CommandPopup = ({ matches, selectedIndex }: CommandPopupProps) => {
     if (matches.length === 0) return null;
 
     return (
@@ -28,12 +28,18 @@ export const CommandPopup = ({ input }: { input: string }) => {
             marginBottom={0}
             width="100%"
         >
-            {matches.map((cmd, i) => (
-                <Box key={cmd.name} justifyContent="space-between">
-                    <Text color="red" bold>{cmd.name}</Text>
-                    <Text color="gray">{cmd.desc}</Text>
-                </Box>
-            ))}
+            {matches.map((cmd, i) => {
+                const isSelected = i === selectedIndex;
+                return (
+                    <Box key={cmd.name} justifyContent="space-between">
+                        <Text color={isSelected ? 'cyan' : 'red'} bold={isSelected}>
+                            {isSelected ? '> ' : '  '}
+                            {cmd.name}
+                        </Text>
+                        <Text color={isSelected ? 'white' : 'gray'}>{cmd.desc}</Text>
+                    </Box>
+                );
+            })}
         </Box>
     );
 };

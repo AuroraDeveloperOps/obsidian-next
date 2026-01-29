@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text, useApp } from 'ink';
+import { Box, Text, useApp, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { bus } from '../core/bus.js';
 import { AgentEvent } from '../events/types.js';
 import { AgentLine } from '../components/AgentLine.js';
 import { ToolOutput } from '../components/ToolOutput.js';
 import { Dashboard } from './Dashboard.js';
-import { CommandPopup } from './CommandPopup.js';
+import { CommandPopup, COMMANDS } from './CommandPopup.js';
 
 import { history } from '../core/history.js';
 import { usage } from '../core/usage.js';
@@ -87,14 +87,65 @@ export const Root = () => {
         };
     }, []);
 
+    const [inputKey, setInputKey] = useState(0);
+
+    // --------------- POPUP LOGIC START ---------------
+    const [selectedIndex, setSelectedIndex] = useState(0);
+
+    // Calculate matches based on current input
+    const query = input.toLowerCase();
+    const isCommand = input.startsWith('/');
+    const matches = isCommand
+        ? COMMANDS.filter(c => c.name.startsWith(query))
+        : [];
+
+    // Reset selection when input changes
+    useEffect(() => {
+        setSelectedIndex(0);
+    }, [input]);
+
+    useInput((_, key) => {
+        if (matches.length === 0) return;
+
+        if (key.upArrow) {
+            setSelectedIndex(prev => (prev > 0 ? prev - 1 : matches.length - 1));
+        }
+
+        if (key.downArrow) {
+            setSelectedIndex(prev => (prev < matches.length - 1 ? prev + 1 : 0));
+        }
+
+        if (key.return || key.tab) {
+            // Handle Selection
+            const selected = matches[selectedIndex];
+            // If we have a match, and the input isn't ALREADY the full command
+            if (selected && input !== selected.name) {
+                setInput(selected.name);
+                setInputKey(prev => prev + 1); // Force remount to fix cursor position
+            }
+        }
+    });
+    // --------------- POPUP LOGIC END ---------------
+
     const handleSubmit = (value: string) => {
         if (!value.trim()) return;
+
+        // RACE CONDITION FIX with Debugging
+        if (matches.length > 0 && value !== matches[selectedIndex]?.name) {
+            const selected = matches[selectedIndex];
+            if (selected && selected.name.startsWith(value) && selected.name !== value) {
+                // Debugging why send fails - but blocking partial submission is intended.
+                return;
+            }
+        }
+
         if (value.trim() === '/exit') {
             exit();
             return;
         }
         bus.emitUser({ type: 'user_input', content: value });
         setInput('');
+        // inputKey doesn't need reset, cursor at 0 is fine.
     };
 
     return (
@@ -104,6 +155,7 @@ export const Root = () => {
 
             {/* Event Stream (Scrollable area) */}
             <Box flexDirection="column" flexGrow={1} marginY={1} overflowY="hidden">
+                {/* ... (event mapping) ... */}
                 {events.slice(-5).map((event, i) => { // Tighter slice to leave room
                     if (event.type === 'thought') return <AgentLine key={i} content={event.content} />;
                     if (event.type === 'tool_result') return <ToolOutput key={i} tool={event.tool} output={event.output} isError={event.isError} />;
@@ -116,10 +168,14 @@ export const Root = () => {
 
             {/* Input Area */}
             <Box flexDirection="column">
-                <CommandPopup input={input} />
+                <CommandPopup
+                    matches={matches}
+                    selectedIndex={selectedIndex}
+                />
                 <Box borderStyle="round" borderColor="gray" paddingX={1}>
                     <Text color="red" bold>❯ </Text>
                     <TextInput
+                        key={inputKey}
                         value={input}
                         onChange={setInput}
                         onSubmit={handleSubmit}
