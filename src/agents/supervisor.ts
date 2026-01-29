@@ -1,5 +1,6 @@
 import { bus } from '../core/bus.js';
 import { commands } from '../core/commands.js';
+import { auditor } from '../core/auditor.js';
 
 export class Supervisor {
     constructor() {
@@ -15,19 +16,41 @@ export class Supervisor {
     }
 
     private async handleInput(input: string) {
-        // 1. Check for Slash Commands
+        // 0. Acknowledge Input immediately
+        bus.emitAgent({
+            type: 'thought',
+            content: `Received input: "${input}"`
+        });
+
+        // 1. Audit the Input (Safety Check)
+        const audit = await auditor.checkCommand(input);
+        if (!audit.approved) {
+            bus.emitAgent({
+                type: 'error',
+                message: `Safety Violation: ${audit.reason}`
+            });
+            return;
+        }
+
+        // 2. Check for Slash Commands
         if (input.startsWith('/')) {
             const [cmdName, ...args] = input.slice(1).split(' ');
             if (commands.has(cmdName)) {
                 await commands.execute(cmdName, args);
                 return;
             }
+            // Unknown command fallback
+            bus.emitAgent({
+                type: 'error',
+                message: `Unknown command: ${input}`
+            });
+            return;
         }
 
-        // 2. Default Agent Loop (Placeholder)
+        // 3. Default Agent Loop (Placeholder)
         bus.emitAgent({
             type: 'thought',
-            content: 'Received input. Analyzing intent...'
+            content: 'Analyzing intent...'
         });
 
         // TODO: Connect to LLM (Claude) here
@@ -38,7 +61,7 @@ export class Supervisor {
 
         bus.emitAgent({
             type: 'done',
-            summary: 'Processed input (No-op).'
+            summary: 'Processing complete (No-op).'
         });
     }
 }

@@ -31,7 +31,7 @@ export const Root = () => {
     };
 
     return (
-        <Box flexDirection="column" padding={1}>
+        <Box flexDirection="column" padding={1} height="100%">
             {/* Header / Dashboard - ALWAYS SHOW FOR DEBUG */}
             <Dashboard />
 
@@ -49,8 +49,8 @@ export const Root = () => {
             {/* Input Area */}
             <Box flexDirection="column">
                 <CommandPopup input={input} />
-                <Box borderStyle="classic" borderColor="cyan" paddingX={1}>
-                    <Text color="cyan">❯ </Text>
+                <Box borderStyle="round" borderColor="gray" paddingX={1}>
+                    <Text color="red">❯ </Text>
                     <TextInput
                         value={input}
                         onChange={setInput}

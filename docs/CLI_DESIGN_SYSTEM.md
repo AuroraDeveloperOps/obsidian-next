@@ -27,15 +27,16 @@ Indicates the result of a tool call.
 ```
 
 ### 1.3. The Prompt (`❯`)
-Cyan color.
+Red color (`#FF0000`).
 ```
 ❯ check the api status
 ```
 
 ## 2. The Spinner ("The Morph")
 **Animation**: `[=...]`, `[==..]`, `[===.]`, `[====]` (Classic Progress)
+**Color**: Red / White
 **Status Text**:
-- `[=..] Processing...`
+- `[=..] Processing...` (White)
 - `[==.] Planning...`
 - `[===] Reasoning...`
 - `[====] Traversing...`
