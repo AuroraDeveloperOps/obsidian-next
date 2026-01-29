@@ -1,4 +1,4 @@
-# Obsidian CLI Research & Architecture Analysis
+# Obsidian Next Research & Architecture Analysis
 
 **Status**: Final
 **Author**: Aurora Labs
@@ -57,7 +57,7 @@ We will move beyond simple "Chain of Thought" to a **Supervisor-Worker** delegat
       - `{"type": "thought", "content": "..."}`
       - `{"type": "tool_start", "tool": "bash", "args": "ls -la"}`
       - `{"type": "choice", "options": [...]}`
-    - This allows the Ink UI to render precise grid layouts (`●`, `⎿`) instead of unstructured streams.
+    - This allows the Ink UI to render precise grid layouts (`*`, `>`) instead of unstructured streams.
 
 ## 4. Security & Safety (The "No Slop" Standard)
 
@@ -74,7 +74,7 @@ We will move beyond simple "Chain of Thought" to a **Supervisor-Worker** delegat
 
 ### 5.1. Philosophy
 ### 5.1. Philosophy
-- **Grid Alignment**: Output is strictly aligned to the "Agent Grid" (`●` for thoughts, `⎿` for data).
+- **Grid Alignment**: Output is strictly aligned to the "Agent Grid" (`*` for thoughts, `>` for data).
 - **Structure**: No "Wall of Text". Use tables, lists, and choices.
 - **Kinetic**: "Morphing" spinners (`⠶` -> `⠘`) that "breathe".
 
