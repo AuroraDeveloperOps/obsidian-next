@@ -1,15 +1,26 @@
-# Obsidian Next Documentation Index
+# Obsidian Next
 
-## 📚 Core Documentation
+> The "Figma-grade" AI Agent CLI.
 
-| Document | Description |
-|----------|-------------|
-| **[PRD](./PRD.md)** | **Product Requirements**. The "What". Features, User Stories, and Command specs. |
-| **[ARCHITECTURE](./ARCHITECTURE.md)** | **Technical Specs**. The "How". Event Bus, Supervisor Loop, and Directory Structure. |
-| **[CLI_DESIGN_SYSTEM](./CLI_DESIGN_SYSTEM.md)** | **Visual Language**. The "Look". Colors, Spinners, Tables, and Interaction patterns. |
-| **[TOOLS](./TOOLS.md)** | **Capabilities**. List of available Tools (`fs`, `search`) and Agents. |
-| **[TESTING](./TESTING.md)** | **Verification**. Strategy for E2E tests, Unit tests, and "Ghost" Agents. |
-| **[RESEARCH](./RESEARCH.md)** | **Background**. Competitive analysis and architectural decisions history. |
+**Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. It features a "Structure-First" architecture where agents emit typed events instead of raw streams, ensuring a rigorous and interactive user experience.
 
-## 🤖 Agent Rules
-- **[.agent/rules.md](../.agent/rules.md)**: Strict governance for AI Agents contributing to this codebase.
+## Documentation
+- **[Contributing Guide](../CONTRIBUTING.md)**: Git workflow, standards, and setup.
+- **[Design System](CLI_DESIGN_SYSTEM.md)**: Visual guidelines (No Emojis, Strict ASCII).
+- **[Architecture](ARCHITECTURE.md)**: EventBus, Supervisor, and Worker topology.
+- **[Tools](TOOLS.md)**: Available capabilities and safety checks.
+- **[Research](RESEARCH.md)**: Context preservation and "Zero Hallucination" strategies.
+
+## Quick Start
+```bash
+# Install dependencies
+npm install
+
+# Initialize configuration (Secrets via Env Vars)
+export ANTHROPIC_API_KEY=sk-...
+npm run build
+node dist/index.js
+```
+
+## License
+MIT License. See [LICENSE](../LICENSE) for details.
