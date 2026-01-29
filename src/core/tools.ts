@@ -10,6 +10,7 @@ import path from 'path';
 import { bus } from './bus.js';
 import { auditor } from './auditor.js';
 import { sandbox } from './sandbox.js';
+import { context } from './context.js';
 import { UserEvent } from '../events/types.js';
 
 const execAsync = promisify(exec);
@@ -198,6 +199,9 @@ export const ReadTool: Tool = {
                 ? `\n\n... [TRUNCATED: ${lines.length - MAX_FILE_READ_LINES} more lines. Use offset parameter to read more.]`
                 : '';
 
+            // Track in context
+            await context.trackRead(filePath);
+
             return {
                 success: true,
                 output: truncateOutput(`File: ${filePath} (${lines.length} lines)\n${'='.repeat(60)}\n${numbered}${truncationNote}`),
@@ -258,6 +262,9 @@ export const WriteTool: Tool = {
 
             // Write file
             await fs.writeFile(fullPath, content, 'utf-8');
+
+            // Track in context
+            await context.trackModified(filePath);
 
             return {
                 success: true,
@@ -330,6 +337,9 @@ export const EditTool: Tool = {
             const originalLines = original.split('\n').length;
             const modifiedLines = modified.split('\n').length;
             const delta = modifiedLines - originalLines;
+
+            // Track in context
+            await context.trackModified(filePath);
 
             return {
                 success: true,

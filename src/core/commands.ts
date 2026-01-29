@@ -7,6 +7,8 @@ import { modelsCommand } from '../commands/models.js';
 import { toolCommand } from '../commands/tool.js';
 import { statusCommand } from '../commands/status.js';
 import { sandboxCommand } from '../commands/sandbox.js';
+import { modeCommand } from '../commands/mode.js';
+import { taskCommand } from '../commands/task.js';
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -39,6 +41,8 @@ export class CommandRegistry {
         this.register('tool', 'Execute tools manually', toolCommand);
         this.register('status', 'Show system status', statusCommand);
         this.register('sandbox', 'Toggle sandbox mode', sandboxCommand);
+        this.register('mode', 'Set execution mode (auto/plan/safe)', modeCommand);
+        this.register('task', 'View/manage current task', taskCommand);
     }
 
     register(name: string, description: string, handler: CommandHandler) {
