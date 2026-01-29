@@ -19,7 +19,7 @@ export type AgentEvent =
 
     // 3. User Interaction
     | { type: "choice_request"; question: string; options: Option[] }
-    | { type: "approval_request"; context: string; diff?: string }
+    | { type: "approval_request"; requestId: string; context: string; diff?: string }
 
     // 4. System/Status
     | { type: "error"; message: string; code?: string }
@@ -28,4 +28,5 @@ export type AgentEvent =
 
 export type UserEvent =
     | { type: "user_input"; content: string }
-    | { type: "user_choice"; selectionId: string; context?: string };
+    | { type: "user_choice"; selectionId: string; context?: string }
+    | { type: "approval_response"; approved: boolean; requestId: string };

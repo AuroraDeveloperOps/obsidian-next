@@ -10,8 +10,57 @@ import path from 'path';
 import { bus } from './bus.js';
 import { auditor } from './auditor.js';
 import { sandbox } from './sandbox.js';
+import { UserEvent } from '../events/types.js';
 
 const execAsync = promisify(exec);
+
+// Approval request timeout (30 seconds)
+const APPROVAL_TIMEOUT = 30000;
+
+// Pending approval requests
+const pendingApprovals = new Map<string, {
+    resolve: (approved: boolean) => void;
+    timeout: NodeJS.Timeout;
+}>();
+
+// Listen for approval responses
+bus.on('user', (event: UserEvent) => {
+    if (event.type === 'approval_response') {
+        const pending = pendingApprovals.get(event.requestId);
+        if (pending) {
+            clearTimeout(pending.timeout);
+            pendingApprovals.delete(event.requestId);
+            pending.resolve(event.approved);
+        }
+    }
+});
+
+/**
+ * Request user approval for a command
+ */
+async function requestApproval(command: string, reason: string): Promise<boolean> {
+    const requestId = `approval_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve) => {
+        // Set timeout - auto-deny after timeout
+        const timeout = setTimeout(() => {
+            pendingApprovals.delete(requestId);
+            bus.emitAgent({
+                type: 'error',
+                message: 'Approval request timed out. Command denied.'
+            });
+            resolve(false);
+        }, APPROVAL_TIMEOUT);
+
+        pendingApprovals.set(requestId, { resolve, timeout });
+
+        bus.emitAgent({
+            type: 'approval_request',
+            requestId,
+            context: `Command: ${command}\nReason: ${reason}`,
+        });
+    });
+}
 
 export interface ToolResult {
     success: boolean;
@@ -50,15 +99,16 @@ export const BashTool: Tool = {
             };
         }
 
-        // Commands requiring approval emit an event and wait
+        // Commands requiring approval wait for user confirmation
         if (audit.requiresApproval) {
-            bus.emitAgent({
-                type: 'approval_request',
-                context: `Command requires approval: ${command}\nReason: ${audit.reason}`,
-            });
+            const approved = await requestApproval(command, audit.reason || 'Potentially dangerous operation');
 
-            // For now, proceed after emitting (future: wait for user response)
-            // TODO: Implement approval wait mechanism with Promise
+            if (!approved) {
+                return {
+                    success: false,
+                    error: 'Command rejected by user'
+                };
+            }
         }
 
         try {

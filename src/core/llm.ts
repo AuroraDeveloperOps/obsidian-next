@@ -4,10 +4,15 @@ import { bus } from './bus.js';
 import { usage } from './usage.js';
 import { tools } from './tools.js';
 
+const MAX_TOOL_ITERATIONS = 10;
+
 export class LLMClient {
     private client: Anthropic | null = null;
     private lastConfig: any = null;
     private conversationHistory: Anthropic.MessageParam[] = [];
+    private toolIterations = 0;
+    private accumulatedInputTokens = 0;
+    private accumulatedOutputTokens = 0;
 
     async initialize() {
         const cfg = await config.load();
@@ -48,10 +53,25 @@ export class LLMClient {
 
             // Add user message to history (skip if empty - used for tool continuations)
             if (userMessage.trim()) {
+                // New user message - reset iteration counter and token accumulators
+                this.toolIterations = 0;
+                this.accumulatedInputTokens = 0;
+                this.accumulatedOutputTokens = 0;
+
                 this.conversationHistory.push({
                     role: 'user',
                     content: userMessage
                 });
+            } else {
+                // Tool continuation - check iteration limit
+                this.toolIterations++;
+                if (this.toolIterations > MAX_TOOL_ITERATIONS) {
+                    bus.emitAgent({
+                        type: 'error',
+                        message: `Tool iteration limit (${MAX_TOOL_ITERATIONS}) exceeded. Stopping to prevent infinite loop.`
+                    });
+                    return null;
+                }
             }
 
             // Define available tools for Claude
@@ -65,15 +85,15 @@ export class LLMClient {
                 }
             }));
 
+            // Generate tool list dynamically from registry
+            const toolList = tools.list()
+                .map(t => `- ${t.name}: ${t.description}`)
+                .join('\n');
+
             const systemPrompt = `You are Obsidian Next, a professional AI coding assistant with tools to interact with the user's workspace.
 
 Available tools:
-- bash: Execute shell commands (git, npm, tests, etc.)
-- read: Read file contents with line numbers
-- write: Create new files (fails if file exists)
-- edit: Edit files using exact search/replace
-- list: List directory contents
-- grep: Search for patterns in code (regex supported)
+${toolList}
 
 Best practices:
 1. Read files before editing to understand context
@@ -128,10 +148,12 @@ Working directory: ${process.cwd()}`;
             for await (const chunk of stream) {
                 if (chunk.type === 'message_start' && chunk.message && chunk.message.usage) {
                     inputTokens += chunk.message.usage.input_tokens || 0;
+                    this.accumulatedInputTokens += chunk.message.usage.input_tokens || 0;
                 }
 
                 if (chunk.type === 'message_delta' && chunk.usage) {
                     outputTokens += chunk.usage.output_tokens || 0;
+                    this.accumulatedOutputTokens += chunk.usage.output_tokens || 0;
                 }
 
                 if (chunk.type === 'content_block_start' && chunk.content_block.type === 'tool_use') {
@@ -234,7 +256,8 @@ Working directory: ${process.cwd()}`;
                 });
             }
 
-            await usage.track(currentModel, inputTokens, outputTokens);
+            // Track accumulated tokens from all iterations (only at final response)
+            await usage.track(currentModel, this.accumulatedInputTokens, this.accumulatedOutputTokens);
 
             return fullResponse;
 
