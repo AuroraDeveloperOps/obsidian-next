@@ -4,14 +4,14 @@ import os from 'os';
 import { z } from 'zod';
 import dotenv from 'dotenv';
 
-// Load environment variables from .env if present
 dotenv.config();
 
 export const ConfigSchema = z.object({
-    model: z.enum(['claude-3-5-sonnet', 'claude-3-opus', 'ollama']).default('claude-3-5-sonnet'),
-    maxTokens: z.number().default(4096),
-    language: z.string().default('en'),
     apiKey: z.string().optional(),
+    model: z.string().default('claude-sonnet-4-5-20250929'),
+    workspaceRoot: z.string().default(process.cwd()),
+    maxTokens: z.number().default(8192),
+    language: z.string().default('en'),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -20,6 +20,7 @@ const DEFAULT_CONFIG: Config = {
     model: 'claude-3-5-sonnet',
     maxTokens: 4096,
     language: 'en',
+    workspaceRoot: process.cwd(),
 };
 
 export class ConfigManager {
@@ -34,19 +35,20 @@ export class ConfigManager {
         // Return cached if available
         if (this.cachedConfig) return this.cachedConfig;
 
+        return this.reload();
+    }
+
+    async reload(): Promise<Config> {
         let loadedConfig = DEFAULT_CONFIG;
 
         try {
             const data = await fs.readFile(this.configPath, 'utf-8');
             const parsed = JSON.parse(data);
             loadedConfig = { ...DEFAULT_CONFIG, ...parsed };
-        } catch (error) {
-            // Use defaults if file missing
+        } catch {
+            // File missing or invalid, use defaults
         }
 
-        // Validate and merge with Env Vars
-        // Env var takes precedence for API Key if not explicitly set in config, or overrides it? 
-        // Usually Env Var > Config File > Default
         const envKey = process.env.ANTHROPIC_API_KEY;
 
         const finalConfig = ConfigSchema.parse({
@@ -58,10 +60,15 @@ export class ConfigManager {
         return finalConfig;
     }
 
+    clearCache(): void {
+        this.cachedConfig = null;
+    }
+
     async save(config: Config): Promise<void> {
         const dir = path.dirname(this.configPath);
         await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(this.configPath, JSON.stringify(config, null, 2));
+        this.clearCache();
     }
 
     async exists(): Promise<boolean> {

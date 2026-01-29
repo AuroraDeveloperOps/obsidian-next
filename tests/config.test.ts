@@ -33,6 +33,6 @@ describe('ConfigManager', () => {
         await configManager.save(newConfig);
 
         const loaded = await configManager.load();
-        expect(loaded).toEqual(newConfig);
+        expect(loaded).toMatchObject(newConfig);
     });
 });

@@ -16,7 +16,6 @@ export const initCommand: CommandHandler = async (_args) => {
 
     bus.emitAgent({ type: 'thought', content: 'Creating default configuration...' });
 
-    // Save default config (the load() method returns default if check failed, but here we explicitly save defaults)
     await config.save({
         model: 'claude-3-5-sonnet',
         maxTokens: 8192,

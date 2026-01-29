@@ -1,5 +1,9 @@
 import { bus } from './bus.js';
 import { initCommand } from '../commands/init.js';
+import { clearCommand } from '../commands/clear.js';
+import { costCommand } from '../commands/cost.js';
+import { usageCommand } from '../commands/usage.js';
+import { modelsCommand } from '../commands/models.js';
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -9,15 +13,10 @@ interface CommandDef {
     handler: CommandHandler;
 }
 
-/**
- * CommandRegistry
- * Manages Slash Commands (e.g., /init, /usage)
- */
 export class CommandRegistry {
     private commands: Map<string, CommandDef> = new Map();
 
     constructor() {
-        // Register built-in help command
         this.register('help', 'Show available commands', async () => {
             const validCommands = Array.from(this.commands.values())
                 .map(c => `  /${c.name.padEnd(10)} - ${c.description}`)
@@ -29,8 +28,11 @@ export class CommandRegistry {
             });
         });
 
-        // Register init command
         this.register('init', 'Initialize configuration', initCommand);
+        this.register('clear', 'Clear conversation history', clearCommand);
+        this.register('cost', 'Show session cost', costCommand);
+        this.register('usage', 'Show historical usage', usageCommand);
+        this.register('models', 'Select AI model', modelsCommand);
     }
 
     register(name: string, description: string, handler: CommandHandler) {

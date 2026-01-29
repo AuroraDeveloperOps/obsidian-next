@@ -1,6 +1,7 @@
 import { bus } from '../core/bus.js';
 import { commands } from '../core/commands.js';
 import { auditor } from '../core/auditor.js';
+import { llm } from '../core/llm.js';
 
 export class Supervisor {
     constructor() {
@@ -16,30 +17,26 @@ export class Supervisor {
     }
 
     private async handleInput(input: string) {
-        // 0. Acknowledge Input immediately
         bus.emitAgent({
             type: 'thought',
-            content: `Received input: "${input}"`
+            content: `Received: "${input}"`
         });
 
-        // 1. Audit the Input (Safety Check)
         const audit = await auditor.checkCommand(input);
         if (!audit.approved) {
             bus.emitAgent({
                 type: 'error',
-                message: `Safety Violation: ${audit.reason}`
+                message: `Safety violation: ${audit.reason}`
             });
             return;
         }
 
-        // 2. Check for Slash Commands
         if (input.startsWith('/')) {
             const [cmdName, ...args] = input.slice(1).split(' ');
             if (commands.has(cmdName)) {
                 await commands.execute(cmdName, args);
                 return;
             }
-            // Unknown command fallback
             bus.emitAgent({
                 type: 'error',
                 message: `Unknown command: ${input}`
@@ -47,22 +44,24 @@ export class Supervisor {
             return;
         }
 
-        // 3. Default Agent Loop (Placeholder)
         bus.emitAgent({
             type: 'thought',
-            content: 'Analyzing intent...'
+            content: 'Thinking...'
         });
 
-        // TODO: Connect to LLM (Claude) here
-        bus.emitAgent({
-            type: 'thought',
-            content: 'LLM integration not yet connected.'
-        });
+        const response = await llm.streamChat(input);
 
-        bus.emitAgent({
-            type: 'done',
-            summary: 'Processing complete (No-op).'
-        });
+        if (response) {
+            bus.emitAgent({
+                type: 'done',
+                summary: 'Response complete'
+            });
+        } else {
+            bus.emitAgent({
+                type: 'error',
+                message: 'Failed to get response from Claude'
+            });
+        }
     }
 }
 
