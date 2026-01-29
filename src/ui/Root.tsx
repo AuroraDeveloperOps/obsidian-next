@@ -24,9 +24,8 @@ export const Root = () => {
     useEffect(() => {
         const updateStats = async () => {
             const cfg = await config.load();
-            const usageStats = usage.getStats();
             setStats({
-                cost: usageStats.totalCost,
+                cost: usage.getSessionCost(),
                 model: cfg.model
             });
         };

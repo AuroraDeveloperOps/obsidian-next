@@ -23,12 +23,12 @@ const MODEL_PRICES: Record<string, { input: number; output: number }> = {
 export class UsageTracker {
     private usagePath: string;
     private stats: UsageStats;
+    private sessionCost: number = 0;
 
     constructor(customPath?: string) {
         this.usagePath = customPath || path.join(os.homedir(), '.obsidian', 'usage.json');
         this.stats = UsageSchema.parse({});
     }
-
     async init() {
         try {
             const data = await fs.readFile(this.usagePath, 'utf-8');
@@ -54,8 +54,13 @@ export class UsageTracker {
         this.stats.totalInputTokens += input;
         this.stats.totalOutputTokens += output;
         this.stats.totalCost += cost;
+        this.sessionCost += cost;
 
         await this.save();
+    }
+
+    getSessionCost(): number {
+        return this.sessionCost;
     }
 
     async trackSession() {
