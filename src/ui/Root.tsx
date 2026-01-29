@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { bus } from '../core/bus.js';
-import { AgentEvent } from '../events/types.js';
+import { AgentEvent, Option } from '../events/types.js';
 import { AgentLine } from '../components/AgentLine.js';
 import { ToolOutput } from '../components/ToolOutput.js';
+import { ApprovalPrompt } from '../components/ApprovalPrompt.js';
+import { ChoicePrompt } from '../components/ChoicePrompt.js';
 import { Dashboard } from './Dashboard.js';
 import { CommandPopup, COMMANDS } from './CommandPopup.js';
 
@@ -12,13 +14,34 @@ import { history } from '../core/history.js';
 import { usage } from '../core/usage.js';
 import { config } from '../core/config.js';
 
+// Pending prompt types
+interface PendingApproval {
+    type: 'approval';
+    context: string;
+    diff?: string;
+}
+
+interface PendingChoice {
+    type: 'choice';
+    question: string;
+    options: Option[];
+}
+
+type PendingPrompt = PendingApproval | PendingChoice;
+
 export const Root = () => {
     const [events, setEvents] = useState<AgentEvent[]>([]);
     const [input, setInput] = useState('');
+    const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
     const { exit } = useApp();
 
     // State for footer data
     const [stats, setStats] = useState({ cost: 0, model: 'Loading...' });
+
+    // Handle prompt resolution
+    const handlePromptResolve = useCallback(() => {
+        setPendingPrompt(null);
+    }, []);
 
     // Load initial footer data and subscribe to updates
     useEffect(() => {
@@ -65,6 +88,26 @@ export const Root = () => {
             if (event.type === 'clear_history') {
                 setEvents([]);
                 history.clear();
+                setPendingPrompt(null);
+                return;
+            }
+
+            // Handle interactive prompts
+            if (event.type === 'approval_request') {
+                setPendingPrompt({
+                    type: 'approval',
+                    context: event.context,
+                    diff: event.diff,
+                });
+                return;
+            }
+
+            if (event.type === 'choice_request') {
+                setPendingPrompt({
+                    type: 'choice',
+                    question: event.question,
+                    options: event.options,
+                });
                 return;
             }
 
@@ -156,30 +199,53 @@ export const Root = () => {
             {/* Event Stream (Scrollable area) */}
             <Box flexDirection="column" flexGrow={1} marginY={1} overflowY="hidden">
                 {/* ... (event mapping) ... */}
-                {events.slice(-5).map((event, i) => { // Tighter slice to leave room
+                {events.slice(-8).map((event, i) => {
                     if (event.type === 'thought') return <AgentLine key={i} content={event.content} />;
+                    if (event.type === 'tool_start') return (
+                        <Box key={i}>
+                            <Text color="cyan">[TOOL] </Text>
+                            <Text color="white" bold>{event.tool}</Text>
+                            <Text color="gray"> {event.args.length > 50 ? event.args.slice(0, 50) + '...' : event.args}</Text>
+                        </Box>
+                    );
                     if (event.type === 'tool_result') return <ToolOutput key={i} tool={event.tool} output={event.output} isError={event.isError} />;
-                    if (event.type === 'done') return <Text key={i} color="green">✔ {event.summary}</Text>;
-                    if (event.type === 'error') return <Text key={i} color="red">✖ {event.message}</Text>;
-                    if (event.type === 'clear_history') return <Text key={i} color="gray">⟳ History cleared</Text>;
+                    if (event.type === 'done') return <Text key={i} color="green">[OK] {event.summary}</Text>;
+                    if (event.type === 'error') return <Text key={i} color="red">[ERR] {event.message}</Text>;
+                    if (event.type === 'clear_history') return <Text key={i} color="gray">[SYS] History cleared</Text>;
                     return null;
                 })}
             </Box>
 
-            {/* Input Area */}
+            {/* Interactive Prompts */}
+            {pendingPrompt?.type === 'approval' && (
+                <ApprovalPrompt
+                    context={pendingPrompt.context}
+                    diff={pendingPrompt.diff}
+                    onResolve={handlePromptResolve}
+                />
+            )}
+            {pendingPrompt?.type === 'choice' && (
+                <ChoicePrompt
+                    question={pendingPrompt.question}
+                    options={pendingPrompt.options}
+                    onResolve={handlePromptResolve}
+                />
+            )}
+
+            {/* Input Area (disabled when prompt is active) */}
             <Box flexDirection="column">
                 <CommandPopup
                     matches={matches}
                     selectedIndex={selectedIndex}
                 />
-                <Box borderStyle="round" borderColor="gray" paddingX={1}>
-                    <Text color="red" bold>❯ </Text>
+                <Box borderStyle="round" borderColor={pendingPrompt ? 'gray' : 'gray'} paddingX={1}>
+                    <Text color="red" bold>&gt; </Text>
                     <TextInput
                         key={inputKey}
                         value={input}
-                        onChange={setInput}
-                        onSubmit={handleSubmit}
-                        placeholder="Type a command..."
+                        onChange={pendingPrompt ? () => {} : setInput}
+                        onSubmit={pendingPrompt ? () => {} : handleSubmit}
+                        placeholder={pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...'}
                     />
                 </Box>
             </Box>

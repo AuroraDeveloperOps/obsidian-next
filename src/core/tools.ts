@@ -40,11 +40,24 @@ export const BashTool: Tool = {
 
         // Safety check
         const audit = await auditor.checkCommand(command);
+
+        // Blocked commands are never allowed
         if (!audit.approved) {
             return {
                 success: false,
                 error: `Security violation: ${audit.reason}`
             };
+        }
+
+        // Commands requiring approval emit an event and wait
+        if (audit.requiresApproval) {
+            bus.emitAgent({
+                type: 'approval_request',
+                context: `Command requires approval: ${command}\nReason: ${audit.reason}`,
+            });
+
+            // For now, proceed after emitting (future: wait for user response)
+            // TODO: Implement approval wait mechanism with Promise
         }
 
         try {
