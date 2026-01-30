@@ -9,6 +9,7 @@ import { statusCommand } from '../commands/status.js';
 import { sandboxCommand } from '../commands/sandbox.js';
 import { modeCommand } from '../commands/mode.js';
 import { taskCommand } from '../commands/task.js';
+import { undoCommand } from '../commands/undo.js';
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -43,6 +44,7 @@ export class CommandRegistry {
         this.register('sandbox', 'Toggle sandbox mode', sandboxCommand);
         this.register('mode', 'Set execution mode (auto/plan/safe)', modeCommand);
         this.register('task', 'View/manage current task', taskCommand);
+        this.register('undo', 'Undo recent file changes', undoCommand);
     }
 
     register(name: string, description: string, handler: CommandHandler) {
