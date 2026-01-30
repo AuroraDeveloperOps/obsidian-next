@@ -12,6 +12,7 @@ import { taskCommand } from '../commands/task.js';
 import { undoCommand } from '../commands/undo.js';
 import { configCommand } from '../commands/config.js';
 import { doctorCommand } from '../commands/doctor.js';
+import { settingsCommand } from '../commands/settings.js';
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -49,6 +50,7 @@ export class CommandRegistry {
         this.register('undo', 'Undo recent file changes', undoCommand);
         this.register('config', 'View/edit configuration', configCommand);
         this.register('doctor', 'Run system diagnostics', doctorCommand);
+        this.register('settings', 'View/edit settings (mode, permissions, ui)', settingsCommand);
     }
 
     register(name: string, description: string, handler: CommandHandler) {
