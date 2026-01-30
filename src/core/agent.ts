@@ -9,6 +9,9 @@ import { llm } from './llm.js';
 import { context } from './context.js';
 import { tasks } from './tasks.js';
 import { tools } from './tools.js';
+import { undo } from './undo.js';
+import { redactor } from './redactor.js';
+import { auditLog } from './auditLog.js';
 
 export interface AgentPlan {
     task: string;
@@ -21,11 +24,22 @@ export interface AgentPlan {
 class Agent {
     private initialized = false;
     private pendingPlan: { plan: AgentPlan; originalInput: string } | null = null;
+    private sessionId: string;
+
+    constructor() {
+        // Generate unique session ID for undo tracking
+        this.sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    }
 
     async init(): Promise<void> {
         if (this.initialized) return;
         await context.init();
         await tasks.init();
+        // Initialize undo system with session ID for change tracking
+        await undo.init(this.sessionId);
+        // Initialize audit logging with session ID
+        auditLog.setSessionId(this.sessionId);
+        await auditLog.init();
         this.initialized = true;
     }
 
@@ -122,6 +136,17 @@ APPROVAL: <yes if destructive, no otherwise>`;
         let enhancedInput = input;
         if (ctxSummary || taskProgress !== 'No active task') {
             enhancedInput = `${input}\n\n[Context: ${ctxSummary}]\n[${taskProgress}]`;
+        }
+
+        // Redact any PII from the enhanced input before sending to LLM
+        const redactionResult = redactor.redact(enhancedInput);
+        if (redactionResult.redactionCount > 0) {
+            enhancedInput = redactionResult.text;
+            bus.emitAgent({
+                type: 'thought',
+                content: `[Security] Redacted ${redactionResult.redactionCount} sensitive item(s) from context`,
+                hidden: true
+            });
         }
 
         const response = await llm.streamChat(enhancedInput);

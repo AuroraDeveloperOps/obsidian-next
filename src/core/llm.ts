@@ -3,6 +3,8 @@ import { config } from './config.js';
 import { bus } from './bus.js';
 import { usage } from './usage.js';
 import { tools } from './tools.js';
+import { redactor } from './redactor.js';
+import { keyManager } from './keyManager.js';
 
 const MAX_TOOL_ITERATIONS = 10;
 
@@ -17,19 +19,53 @@ export class LLMClient {
     async initialize() {
         const cfg = await config.load();
         await usage.init();
-        if (!cfg.apiKey) {
+
+        // Try to load API key via KeyManager (supports keychain, secret-tool, encrypted file)
+        let apiKey = await keyManager.loadKey();
+
+        // Fallback to config if KeyManager didn't find a key
+        if (!apiKey) {
+            apiKey = cfg.apiKey || null;
+        }
+
+        if (!apiKey) {
             bus.emitAgent({
                 type: 'error',
-                message: 'Missing ANTHROPIC_API_KEY. Please set it in .env or via /init.'
+                message: 'Missing ANTHROPIC_API_KEY. Set via environment, keychain, or /init command.'
             });
             return false;
         }
 
         this.client = new Anthropic({
-            apiKey: cfg.apiKey,
+            apiKey: apiKey,
         });
         this.lastConfig = cfg;
+
+        // Log which backend is being used (for debugging)
+        const backend = keyManager.getBackend();
+        if (backend && backend !== 'env') {
+            bus.emitAgent({
+                type: 'thought',
+                content: `API key loaded from: ${backend}`,
+                hidden: true
+            });
+        }
+
         return true;
+    }
+
+    /**
+     * Refresh the API client if key has rotated
+     */
+    async refreshIfNeeded(): Promise<boolean> {
+        if (keyManager.shouldRotate()) {
+            const newKey = await keyManager.refreshKey();
+            if (newKey) {
+                this.client = new Anthropic({ apiKey: newKey });
+                return true;
+            }
+        }
+        return false;
     }
 
     async streamChat(userMessage: string) {
@@ -216,10 +252,25 @@ cwd: ${process.cwd()}`;
 
                 for (const toolUse of toolUses) {
                     const result = await tools.execute(toolUse.name, toolUse.input);
+
+                    // Redact PII from tool output before sending to LLM
+                    let outputContent = result.success ? (result.output || 'Success') : (result.error || 'Failed');
+                    const redactionResult = redactor.redactToolOutput(toolUse.name, outputContent);
+
+                    if (redactionResult.redactionCount > 0) {
+                        outputContent = redactionResult.text;
+                        // Log redaction for transparency (hidden from user)
+                        bus.emitAgent({
+                            type: 'thought',
+                            content: `[Security] Redacted ${redactionResult.redactionCount} sensitive item(s): ${redactionResult.redactedTypes.join(', ')}`,
+                            hidden: true
+                        });
+                    }
+
                     toolResults.push({
                         type: 'tool_result',
                         tool_use_id: toolUse.id,
-                        content: result.success ? (result.output || 'Success') : (result.error || 'Failed'),
+                        content: outputContent,
                         is_error: !result.success
                     });
                 }

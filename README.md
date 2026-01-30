@@ -4,8 +4,8 @@
 
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-![Release](https://img.shields.io/badge/Release-Pre--Alpha_(Early_Dev)-critical)
-![Security](https://img.shields.io/badge/Security-Zero_Trust_Roadmap-orange)
+![Release](https://img.shields.io/badge/Release-v0.3.0--security-blue)
+![Security](https://img.shields.io/badge/Security-Production_Ready-green)
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
 
@@ -30,19 +30,47 @@ The `workspace/` directory is a dedicated environment where **Polyoxy** is curre
 - **Benchmarks**: Comprehensive safety and performance benchmarks are running. Results will be published soon.
 - **Evaluation Goal**: The current workspace is used to stress-test the Auditor's ability to catch malicious patterns in a controlled environment.
 
-## Security Roadmap
+## Security Features (v0.3.0)
 
-We are committed to **100% Zero Trust AI Automation**. Our roadmap focuses on eliminating implicit trust at every layer:
+Obsidian Next implements **Zero Trust AI Automation** with the following security layers:
 
-1.  **Apple Keychain-like Rotating Key System** (In Progress):
-    - A secure, encrypted vault for API keys that rotates secrets automatically during long-running sessions.
-    - Ensures that no static keys exist in memory or on disk for longer than the session duration.
-2.  **Hardware-Level Sandboxing**:
+### Implemented (v0.3.0-security)
+
+1.  **Rotating Key System** [NEW]
+    - Secure API key storage via macOS Keychain, Linux secret-tool, or encrypted file fallback
+    - Machine-specific key derivation (AES-256-GCM)
+    - Auto-rotation detection for long sessions
+    - Never stores plaintext keys in config files
+
+2.  **PII Redaction Engine** [NEW]
+    - Real-time redaction of sensitive data before sending to LLM
+    - 14 built-in patterns: email, phone, SSN, credit cards, AWS keys, API tokens, passwords, private keys, JWT
+    - Configurable per-pattern enable/disable
+    - Allowlist support for specific values
+
+3.  **Audit Logging** [NEW]
+    - Complete audit trail of all command executions
+    - File operation logging (read/write/edit/delete)
+    - Approval decision tracking
+    - JSON format for easy parsing, auto-rotation at 10MB
+
+4.  **Approval Enforcement** [FIXED]
+    - Commands requiring approval now properly block execution
+    - Safe mode enforces approval for all write operations
+    - No bypass possible through mode switching
+
+5.  **Sandbox Runtime**
+    - OS-level isolation via `@anthropic-ai/sandbox-runtime`
+    - Native fallbacks to `sandbox-exec` (macOS) and `firejail` (Linux)
+
+### Roadmap
+
+1.  **Hardware-Level Sandboxing**:
     - Integration with native OS hypervisors (Apple Virtualization Framework) for true VM isolation.
-3.  **Real-Time PII Redaction**:
-    - Pre-flight auditing to strip Personally Identifiable Information (PII) before it hits the LLM context.
-4.  **Signed Execution**:
+2.  **Signed Execution**:
     - Only allowing cryptographically signed tool definitions to run.
+3.  **Network Isolation**:
+    - Per-session network namespaces for complete network control.
 
 ## Documentation Directory
 
@@ -106,12 +134,58 @@ Obsidian Next can be run as a Model Context Protocol (MCP) server.
 ### Usage
 
 ```bash
-# Set your API Key
+# Set your API Key (or use /init to store securely)
 export ANTHROPIC_API_KEY="sk-ant-..."
 
 # Start the Agent
 npm start
 ```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/settings` | Interactive settings menu (arrow keys + Enter) |
+| `/mode` | Set execution mode (auto/plan/safe) |
+| `/models` | Select AI model |
+| `/status` | Show system status |
+| `/cost` | Show session cost |
+| `/undo` | Undo file changes |
+| `/sandbox` | Toggle sandbox mode |
+| `/clear` | Clear conversation |
+| `/doctor` | Run diagnostics |
+| `/exit` | Exit the CLI |
+
+### Settings Menu
+
+Access the interactive settings menu with `/settings`:
+
+```
+[*] Settings
+> [1] Execution Mode          Current: safe
+  [2] Security                PII redaction, audit logging
+  [3] UI Preferences          Syntax highlighting, colors
+  [4] Permissions             Allow/deny lists
+  [5] Close Settings
+
+Arrows: navigate | Enter: select/toggle | Esc: back
+```
+
+### Security Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `security.piiRedaction` | `true` | Redact PII before sending to LLM |
+| `security.auditLogging` | `true` | Log all commands to audit.log |
+| `security.keyBackend` | `auto` | Key storage: auto/keychain/secret-tool/encrypted-file |
+
+### Execution Modes
+
+| Mode | Description |
+|------|-------------|
+| `safe` | (Default) Require approval for all write operations |
+| `plan` | Read-only planning, approve plan before execution |
+| `auto` | Execute all commands without confirmation |
 
 ## References & Standards
 

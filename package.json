@@ -1,6 +1,6 @@
 {
     "name": "@aurora-foundation/obsidian-next",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Next-gen AI Agent CLI",
     "main": "dist/index.js",
     "type": "module",
@@ -28,7 +28,7 @@
     },
     "bin": {
         "obsidian": "dist/index.js",
-        "obsidian-mcp": "dist/mcp.js"
+        "obsidian-mcp": "dist/mcp/index.js"
     },
     "scripts": {
         "dev": "tsup src/index.ts --format esm --watch",
