@@ -7,6 +7,7 @@ import { AgentLine } from '../components/AgentLine.js';
 import { ToolOutput } from '../components/ToolOutput.js';
 import { ApprovalPrompt } from '../components/ApprovalPrompt.js';
 import { ChoicePrompt } from '../components/ChoicePrompt.js';
+import { SettingsMenu } from '../components/SettingsMenu.js';
 import { Dashboard } from './Dashboard.js';
 import { CommandPopup, COMMANDS } from './CommandPopup.js';
 
@@ -44,6 +45,9 @@ import { highlightJson } from '../utils/highlight.js';
 
         // State for footer data
         const [stats, setStats] = useState({ cost: 0, model: 'Loading...', mode: 'safe' as 'auto' | 'plan' | 'safe' });
+
+        // State for settings menu
+        const [showSettings, setShowSettings] = useState(false);
 
         // Handle prompt resolution
         const handlePromptResolve = useCallback(() => {
@@ -220,6 +224,14 @@ import { highlightJson } from '../utils/highlight.js';
                 exit();
                 return;
             }
+
+            // Show settings menu instead of command
+            if (value.trim() === '/settings') {
+                setShowSettings(true);
+                setInput('');
+                return;
+            }
+
             bus.emitUser({ type: 'user_input', content: value });
             setInput('');
         };
@@ -301,6 +313,11 @@ import { highlightJson } from '../utils/highlight.js';
                         options={pendingPrompt.options}
                         onResolve={handlePromptResolve}
                     />
+                )}
+
+                {/* Settings Menu */}
+                {showSettings && (
+                    <SettingsMenu onClose={() => setShowSettings(false)} />
                 )}
 
 

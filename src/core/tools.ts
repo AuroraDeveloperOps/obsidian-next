@@ -13,6 +13,7 @@ import { sandbox } from './sandbox.js';
 import { context } from './context.js';
 import { undo } from './undo.js';
 import { settings } from './settings.js';
+import { auditLog } from './auditLog.js';
 import { UserEvent } from '../events/types.js';
 
 const execAsync = promisify(exec);
@@ -109,30 +110,39 @@ export const BashTool: Tool = {
         // Safety check
         const audit = await auditor.checkCommand(command);
 
-        // Blocked commands are never allowed
-        if (!audit.approved) {
+        // Critical/blocked commands are NEVER allowed (cannot be approved)
+        if (!audit.approved && audit.isCritical) {
+            await auditLog.logSecurityViolation(command, audit.reason || 'Critical security violation');
             return {
                 success: false,
                 error: `Security violation: ${audit.reason}`
             };
         }
 
-        // Commands requiring approval wait for user confirmation
-        if (audit.requiresApproval && !audit.autoApproved) {
+        // Commands requiring approval MUST wait for user confirmation
+        // This includes: dangerous patterns AND all commands in safe mode
+        if (!audit.approved && audit.requiresApproval) {
+            await auditLog.logApproval('requested', command, audit.reason);
+
             const approved = await requestApproval(command, audit.reason || 'Potentially dangerous operation');
 
             if (!approved) {
-                // Save denial
+                // Save denial and log it
                 await settings.addDeniedPermission('bash', command);
+                await auditLog.logApproval('denied', command);
                 return {
                     success: false,
                     error: 'Command rejected by user'
                 };
             }
 
-            // Save approval for future (user said yes)
+            // Save approval for future (user said yes) and log it
             await settings.addAllowedPermission('bash', command);
+            await auditLog.logApproval('granted', command);
         }
+
+        // Auto-approved commands (in allow list) skip confirmation
+        // audit.approved && audit.autoApproved === true means pre-approved
 
         try {
             // Wrap command with sandbox if enabled
@@ -145,11 +155,18 @@ export const BashTool: Tool = {
             });
 
             const output = stdout || stderr || 'Command executed successfully';
+
+            // Log successful execution
+            await auditLog.logCommand(command, true);
+
             return {
                 success: true,
                 output: truncateOutput(output),
             };
         } catch (error: any) {
+            // Log failed execution
+            await auditLog.logCommand(command, false, error.message);
+
             return {
                 success: false,
                 error: error.message || 'Command execution failed',
@@ -206,14 +223,16 @@ export const ReadTool: Tool = {
                 ? `\n\n... [TRUNCATED: ${lines.length - MAX_FILE_READ_LINES} more lines. Use offset parameter to read more.]`
                 : '';
 
-            // Track in context
+            // Track in context and audit log
             await context.trackRead(filePath);
+            await auditLog.logFileOperation('read', filePath, true);
 
             return {
                 success: true,
                 output: truncateOutput(`File: ${filePath} (${lines.length} lines)\n${'='.repeat(60)}\n${numbered}${truncationNote}`),
             };
         } catch (error: any) {
+            await auditLog.logFileOperation('read', filePath, false, error.message);
             return {
                 success: false,
                 error: `Failed to read file: ${error.message}`,
@@ -270,15 +289,17 @@ export const WriteTool: Tool = {
             // Write file
             await fs.writeFile(fullPath, content, 'utf-8');
 
-            // Track in context and undo
+            // Track in context, undo, and audit log
             await context.trackModified(filePath);
             await undo.recordChange(filePath, 'create', null, content);
+            await auditLog.logFileOperation('write', filePath, true);
 
             return {
                 success: true,
                 output: `Created file: ${filePath} (${content.length} bytes)`,
             };
         } catch (error: any) {
+            await auditLog.logFileOperation('write', filePath, false, error.message);
             return {
                 success: false,
                 error: `Failed to write file: ${error.message}`,
@@ -332,8 +353,11 @@ export const EditTool: Tool = {
                 };
             }
 
-            // Perform replacement
-            const modified = original.replace(search, replace);
+            // Count occurrences for user feedback
+            const occurrences = original.split(search).length - 1;
+
+            // Perform replacement - use replaceAll to replace ALL occurrences
+            const modified = original.replaceAll(search, replace);
 
             // Generate diff preview for output
             const diffPreview = generateDiffPreview(search, replace);
@@ -346,15 +370,18 @@ export const EditTool: Tool = {
             const modifiedLines = modified.split('\n').length;
             const delta = modifiedLines - originalLines;
 
-            // Track in context and undo
+            // Track in context, undo, and audit log
             await context.trackModified(filePath);
             await undo.recordChange(filePath, 'edit', original, modified);
+            await auditLog.logFileOperation('edit', filePath, true);
 
+            const occurrenceText = occurrences > 1 ? ` (${occurrences} occurrences)` : '';
             return {
                 success: true,
-                output: `Edited ${filePath}:\n${diffPreview}\nLines: ${originalLines} -> ${modifiedLines} (${delta >= 0 ? '+' : ''}${delta})`,
+                output: `Edited ${filePath}${occurrenceText}:\n${diffPreview}\nLines: ${originalLines} -> ${modifiedLines} (${delta >= 0 ? '+' : ''}${delta})`,
             };
         } catch (error: any) {
+            await auditLog.logFileOperation('edit', filePath, false, error.message);
             return {
                 success: false,
                 error: `Failed to edit file: ${error.message}`,
