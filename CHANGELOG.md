@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-01-30
 
 ### Added
-- **Security**: "Keychain-like" variable rotation system integration for secure API key management (Reference Implementation).
+
 - **Workspace**: Dedicated `workspace/` environment for Polyoxy benchmarking and evaluation.
 - **Documentation**: Comprehensive directory index at `docs/README.md`.
 - **MCP**: Experimental MCP configuration (`mcp-config.example.json`).
