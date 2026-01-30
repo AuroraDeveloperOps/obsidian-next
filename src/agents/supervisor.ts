@@ -19,8 +19,7 @@ export class Supervisor {
 
             // Handle plan approval
             if (event.type === 'approval_response') {
-                // Plan mode approval is handled by the agent
-                // This is for tool-level approvals
+                await agent.handleApprovalResponse(event.approved, event.requestId);
             }
         });
     }

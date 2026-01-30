@@ -16,6 +16,7 @@ export const COMMANDS = [
     { name: '/sandbox', desc: 'Toggle sandbox mode' },
     { name: '/undo', desc: 'Undo file changes' },
     { name: '/doctor', desc: 'Run diagnostics' },
+    { name: '/settings', desc: 'View/edit settings' },
     { name: '/exit', desc: 'Exit the CLI' },
 ];
 

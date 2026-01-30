@@ -20,6 +20,7 @@ export interface AgentPlan {
 
 class Agent {
     private initialized = false;
+    private pendingPlan: { plan: AgentPlan; originalInput: string } | null = null;
 
     async init(): Promise<void> {
         if (this.initialized) return;
@@ -88,6 +89,9 @@ APPROVAL: <yes if destructive, no otherwise>`;
         // Parse plan
         const plan = this.parsePlan(planResponse);
 
+        // Store pending plan for execution after approval
+        this.pendingPlan = { plan, originalInput: input };
+
         // Show plan and wait for approval
         bus.emitAgent({
             type: 'thought',
@@ -100,8 +104,8 @@ APPROVAL: <yes if destructive, no otherwise>`;
             context: `Execute this plan?\n\n${this.formatPlan(plan)}`,
         });
 
-        // Note: Approval handling happens via the approval_response event
-        // The actual execution will continue when approved
+        // Approval handling happens via handleApprovalResponse
+        // Called by supervisor when user approves/denies
     }
 
     private async runDirectMode(input: string): Promise<void> {
@@ -124,6 +128,49 @@ APPROVAL: <yes if destructive, no otherwise>`;
             bus.emitAgent({ type: 'done', summary: `Completed in ${duration}s` });
         } else {
             bus.emitAgent({ type: 'error', message: 'Failed to get response' });
+        }
+    }
+
+    async handleApprovalResponse(approved: boolean, requestId: string): Promise<void> {
+        if (!this.pendingPlan) {
+            return;
+        }
+
+        if (!approved) {
+            bus.emitAgent({ type: 'thought', content: 'Plan rejected. Awaiting new instructions.' });
+            this.pendingPlan = null;
+            return;
+        }
+
+        const { plan, originalInput } = this.pendingPlan;
+        this.pendingPlan = null;
+
+        await this.executePlan(plan, originalInput);
+    }
+
+    private async executePlan(plan: AgentPlan, originalInput: string): Promise<void> {
+        const startTime = Date.now();
+
+        bus.emitAgent({ type: 'thought', content: 'Executing plan...' });
+
+        // Build execution prompt with plan context
+        const executionPrompt = `Execute this plan step by step:
+
+ORIGINAL REQUEST: ${originalInput}
+
+PLAN:
+${this.formatPlan(plan)}
+
+Execute each step carefully. Use available tools as needed.`;
+
+        const response = await llm.streamChat(executionPrompt);
+
+        if (response) {
+            await context.setLastAction(`Executed: ${plan.task.slice(0, 40)}`);
+            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+            bus.emitAgent({ type: 'done', summary: `Plan executed in ${duration}s` });
+        } else {
+            bus.emitAgent({ type: 'error', message: 'Failed to execute plan' });
         }
     }
 

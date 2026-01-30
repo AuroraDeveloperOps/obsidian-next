@@ -4,6 +4,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { settings } from './settings.js';
 
 const CONTEXT_DIR = '.obsidian';
 const CONTEXT_FILE = 'context.json';
@@ -78,7 +79,13 @@ class ContextManager {
     }
 
     getMode(): AgentContext['mode'] {
+        // Mode is now primarily stored in settings
         return this.ctx.mode;
+    }
+
+    async syncModeFromSettings(): Promise<void> {
+        const s = await settings.load();
+        this.ctx.mode = s.mode;
     }
 
     getCurrentTask(): string | null {
@@ -92,6 +99,8 @@ class ContextManager {
     // Setters
     async setMode(mode: AgentContext['mode']): Promise<void> {
         this.ctx.mode = mode;
+        // Also persist to settings
+        await settings.set('mode', mode);
         await this.save();
     }
 

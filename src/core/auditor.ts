@@ -1,11 +1,13 @@
 import path from 'path';
 import fs from 'fs/promises';
+import { settings } from './settings.js';
 
 export interface AuditResult {
     approved: boolean;
     reason?: string;
     isCritical?: boolean;
     requiresApproval?: boolean;
+    autoApproved?: boolean;
 }
 
 // Patterns that are ALWAYS blocked (critical security risks)
@@ -47,12 +49,29 @@ export class Auditor {
     async checkCommand(command: string): Promise<AuditResult> {
         const lowerCommand = command.toLowerCase();
 
-        // Check for blocked patterns (always denied)
+        // Check for blocked patterns (always denied - hardcoded safety)
         if (BLOCKED_PATTERNS.some(p => command.includes(p))) {
             return {
                 approved: false,
                 reason: 'Detected destructive command pattern',
                 isCritical: true
+            };
+        }
+
+        // Check settings deny list
+        if (await settings.isDenied('bash', command)) {
+            return {
+                approved: false,
+                reason: 'Command blocked by settings',
+                isCritical: false
+            };
+        }
+
+        // Check settings allow list - if allowed, skip approval
+        if (await settings.isAllowed('bash', command)) {
+            return {
+                approved: true,
+                autoApproved: true
             };
         }
 
@@ -65,6 +84,16 @@ export class Auditor {
                     reason: reason
                 };
             }
+        }
+
+        // Check mode - in safe mode, everything needs approval
+        const s = await settings.load();
+        if (s.mode === 'safe') {
+            return {
+                approved: true,
+                requiresApproval: true,
+                reason: 'Safe mode requires approval for all commands'
+            };
         }
 
         return { approved: true };
