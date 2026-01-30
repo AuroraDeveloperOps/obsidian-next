@@ -105,6 +105,8 @@ APPROVAL: <yes if destructive, no otherwise>`;
     }
 
     private async runDirectMode(input: string): Promise<void> {
+        const startTime = Date.now();
+
         // Add context to prompt
         const ctxSummary = context.getSummary();
         const taskProgress = tasks.getProgress();
@@ -118,7 +120,8 @@ APPROVAL: <yes if destructive, no otherwise>`;
 
         if (response) {
             await context.setLastAction(input.slice(0, 50));
-            bus.emitAgent({ type: 'done', summary: 'Done' });
+            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+            bus.emitAgent({ type: 'done', summary: `Completed in ${duration}s` });
         } else {
             bus.emitAgent({ type: 'error', message: 'Failed to get response' });
         }

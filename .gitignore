@@ -43,6 +43,9 @@ yarn-error.log*
 .claude/
 
 # Internal Dev
+CLAUDE.md
 docs/RESEARCH.md
 calculator.js
 calculator.test.js
+workspace/
+workspace/*
