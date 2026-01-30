@@ -63,10 +63,14 @@ class Agent {
     }
 
     private async runPlanMode(input: string): Promise<void> {
-        // Step 1: Generate plan
-        bus.emitAgent({ type: 'thought', content: 'Generating plan...' });
+        // Step 1: Generate plan (READ-ONLY mode - no writes during planning)
+        bus.emitAgent({ type: 'thought', content: 'Generating plan (read-only)...' });
 
-        const planPrompt = `Analyze this request and create a plan. Output ONLY a structured plan:
+        const planPrompt = `Analyze this request and create a plan.
+
+IMPORTANT: You are in PLANNING mode. You may ONLY use read operations (read, list, grep, glob) to understand the codebase. Do NOT execute any writes or modifications yet.
+
+OUTPUT a structured plan:
 
 REQUEST: ${input}
 
@@ -151,7 +155,10 @@ APPROVAL: <yes if destructive, no otherwise>`;
     private async executePlan(plan: AgentPlan, originalInput: string): Promise<void> {
         const startTime = Date.now();
 
-        bus.emitAgent({ type: 'thought', content: 'Executing plan...' });
+        // Switch to auto mode for plan execution (user already approved the plan)
+        const previousMode = context.getMode();
+        await context.setMode('auto');
+        bus.emitAgent({ type: 'thought', content: 'Executing approved plan (auto-accept enabled)...' });
 
         // Build execution prompt with plan context
         const executionPrompt = `Execute this plan step by step:
@@ -163,14 +170,20 @@ ${this.formatPlan(plan)}
 
 Execute each step carefully. Use available tools as needed.`;
 
-        const response = await llm.streamChat(executionPrompt);
+        try {
+            const response = await llm.streamChat(executionPrompt);
 
-        if (response) {
-            await context.setLastAction(`Executed: ${plan.task.slice(0, 40)}`);
-            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-            bus.emitAgent({ type: 'done', summary: `Plan executed in ${duration}s` });
-        } else {
-            bus.emitAgent({ type: 'error', message: 'Failed to execute plan' });
+            if (response) {
+                await context.setLastAction(`Executed: ${plan.task.slice(0, 40)}`);
+                const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+                bus.emitAgent({ type: 'done', summary: `Plan executed in ${duration}s` });
+            } else {
+                bus.emitAgent({ type: 'error', message: 'Failed to execute plan' });
+            }
+        } finally {
+            // Restore previous mode after execution
+            await context.setMode(previousMode);
+            bus.emitAgent({ type: 'thought', content: `Mode restored to: ${previousMode}` });
         }
     }
 

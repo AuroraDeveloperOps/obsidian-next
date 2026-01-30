@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
+import { renderMarkdown } from '../utils/syntax.js';
 
 interface AgentLineProps {
     content: string;
@@ -8,17 +9,22 @@ interface AgentLineProps {
 
 const flareAnim = ["·", "▪", "▚", "❖", "✦", "✹", "✦", "▪"];
 
-// Keywords that indicate active processing
-const PROCESSING_KEYWORDS = [
-    'processing', 'thinking', 'analyzing', 'generating', 'executing',
-    'loading', 'searching', 'reading', 'writing', '...'
-];
+// Only short messages with these exact patterns trigger animation
+const isProcessingMessage = (content: string): boolean => {
+    const lower = content.toLowerCase().trim();
+    // Only animate for short status messages, not full responses
+    if (content.length > 100) return false;
+    // Must end with ... or be a known short status
+    return lower.endsWith('...') ||
+        lower.startsWith('[safe]') ||
+        lower.startsWith('[plan]') ||
+        lower.startsWith('[auto]') ||
+        lower === 'generating plan...' ||
+        lower === 'executing plan...';
+};
 
 export const AgentLine: React.FC<AgentLineProps> = ({ content, isStreaming }) => {
-    const lower = content.toLowerCase();
-    const isProcessing = isStreaming ||
-        PROCESSING_KEYWORDS.some(k => lower.includes(k)) ||
-        content.endsWith('...');
+    const isProcessing = isStreaming || isProcessingMessage(content);
 
     const [frame, setFrame] = React.useState(0);
 
@@ -30,19 +36,34 @@ export const AgentLine: React.FC<AgentLineProps> = ({ content, isStreaming }) =>
         return () => clearInterval(interval);
     }, [isProcessing]);
 
+    // Check if content has markdown (code blocks, headers, lists)
+    const hasMarkdown = content.includes('```') ||
+        content.includes('# ') ||
+        content.match(/^\s*[-*]\s/m) ||
+        content.includes('`');
+
+    // Render with syntax highlighting if markdown present
+    const renderedContent = hasMarkdown && !isProcessing
+        ? renderMarkdown(content)
+        : content;
+
     return (
-        <Box flexDirection="row" paddingX={1}>
-            <Box marginRight={1}>
-                {isProcessing ? (
-                    <Text color="yellow">{flareAnim[frame]}</Text>
-                ) : (
-                    <Text color="cyan">*</Text>
-                )}
-            </Box>
-            <Box flexGrow={1}>
-                <Text color={isProcessing ? "gray" : "white"}>
-                    {content}
-                </Text>
+        <Box flexDirection="column" paddingX={1}>
+            <Box flexDirection="row">
+                <Box marginRight={1}>
+                    {isProcessing ? (
+                        <Text color="yellow">{flareAnim[frame]}</Text>
+                    ) : (
+                        <Text color="cyan">*</Text>
+                    )}
+                </Box>
+                <Box flexGrow={1} flexDirection="column">
+                    {renderedContent.split('\n').map((line, i) => (
+                        <Text key={i} color={isProcessing ? "gray" : undefined}>
+                            {line}
+                        </Text>
+                    ))}
+                </Box>
             </Box>
         </Box>
     );

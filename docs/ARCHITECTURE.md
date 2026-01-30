@@ -1,80 +1,58 @@
 # Obsidian Next Architecture
 
 ## 1. Directory Structure
+
 ```
 obsidian-next/
 ├── .agent/              # AI Rules & Skills
-├── .obsidian/           # Runtime data (config, context, history)
+├── .obsidian/           # Runtime data (config, context, history, tasks)
 ├── docs/                # PRD, Design, Research
 ├── src/
-│   ├── agents/          # Logic (Supervisor)
-│   ├── commands/        # Slash command handlers
-│   ├── components/      # Ink UI (Spinner, Prompts, DiffView)
-│   ├── core/
-│   │   ├── agent.ts     # Main agent loop
-│   │   ├── auditor.ts   # Security checks
-│   │   ├── bus.ts       # EventBus (TypedEventEmitter)
-│   │   ├── commands.ts  # Command registry
-│   │   ├── config.ts    # Config loader
-│   │   ├── context.ts   # Working memory
-│   │   ├── history.ts   # Conversation history
-│   │   ├── llm.ts       # Anthropic API client
-│   │   ├── sandbox.ts   # Sandbox execution
-│   │   ├── tasks.ts     # Task tracking
-│   │   ├── tools.ts     # Tool execution framework
-│   │   ├── undo.ts      # Undo system
-│   │   └── usage.ts     # Cost tracking
-│   ├── events/          # Event type definitions
-│   ├── ui/              # Main UI components (Root, Dashboard)
-│   └── index.ts         # CLI Entry Point
-├── tests/               # Vitest tests
+│   ├── agents/          # High-level orchestrators (Supervisor)
+│   ├── commands/        # Slash command handlers (/mode, /help, etc.)
+│   ├── components/      # Ink UI Components (AgentLine, ToolOutput)
+│   ├── core/            # Core System Logic
+│   │   ├── agent.ts     # Main LLM execution loop
+│   │   ├── auditor.ts   # Security & Permission checks
+│   │   ├── bus.ts       # Typed EventBus
+│   │   ├── commands.ts  # Command Registry
+│   │   ├── config.ts    # Enforced Configuration (zod)
+│   │   ├── context.ts   # Working Context Manager
+│   │   ├── llm.ts       # Anthropic SDK Wrapper
+│   │   ├── sandbox.ts   # Sandbox Executor (Runtime + Fallbacks)
+│   │   ├── tasks.ts     # Task Tracker (Markdown based)
+│   │   ├── tools.ts     # Tool Registry & Implementations
+│   │   └── undo.ts      # Change tracking & Revert logic
+│   ├── mcp/             # MCP Server Implementation
+│   ├── ui/              # Main UI Components (Root, Dashboard)
+│   └── index.ts         # Entry Point
+├── tests/               # Vitest Suite
 └── package.json
 ```
 
-## 2. The Event Bus (Core Nervous System)
-The entire app is driven by a `TypedEventEmitter`.
+## 2. Event Driven Core
+The system relies on a central `EventBus` (`src/core/bus.ts`) that decouples the UI from the logic.
+- **Agent** emits `thought`, `tool_start`, `tool_result`, `done`.
+- **UI** listens and renders reactive components (`Root.tsx`).
 
-```typescript
-// src/core/bus.ts
-import { EventEmitter } from 'events';
-import { AgentEvent } from './types';
+## 3. Tool System (8 Tools)
+Implemented in `src/core/tools.ts`:
+- `bash`: Shell execution (Audited & Sandboxed).
+- `read`: File reading with line numbers.
+- `write`: File creation (Undoable).
+- `edit`: Search & Replace (Undoable).
+- `list`: Directory listing.
+- `grep`: Regex content search.
+- `glob`: Pattern file search.
+- `web_fetch`: URL content fetching (Safe-guarded).
 
-export class EventBus extends EventEmitter {
-  emit(event: AgentEvent) { super.emit('event', event); }
-  on(cb: (e: AgentEvent) => void) { super.on('event', cb); }
-}
-```
+## 4. MCP Integration
+**Status**: Implemented (Experimental)
+- Location: `src/mcp/`
+- Exposes internal tools via Model Context Protocol.
+- Can be run as a standalone server: `npm run mcp`.
 
-## 3. The Supervisor Loop
-1.  **Input**: User types in `InputArea` (Ink).
-2.  **Dispatch**: `Supervisor` receives text.
-3.  **Think**: Supervisor emits `{ type: 'thought', content: 'Analyzing...' }`.
-4.  **Audit**: "The Auditor" checks intent against Safety Rules (e.g., "Deleting Root?").
-5.  **Delegate**: Supervisor pushes job to `Redis`.
-6.  **Worker**:
-    - Picks up job.
-    - Emits `{ type: 'tool_start', ... }`.
-    - Execs tool.
-    - Emits `{ type: 'tool_result', ... }`.
-7.  **Render**: `App.tsx` listens to Bus and updates state.
-
-## 4. Tools (8 Available)
-| Tool | Description |
-|------|-------------|
-| `bash` | Execute shell commands (auditor-protected) |
-| `read` | Read file contents with line numbers |
-| `write` | Create new files |
-| `edit` | Search/replace in existing files |
-| `list` | List directory contents |
-| `grep` | Search file contents with regex |
-| `glob` | Find files by pattern |
-| `web_fetch` | Fetch content from URLs |
-
-## 5. MCP Integration (Planned)
-- `@modelcontextprotocol/sdk` is installed but not yet wired up
-- Tools are currently custom implementations
-- Future: Expose tools as MCP server for LSP integration
-
-## 6. Automation & CI
-- **GitHub Actions**: Run `vitest` on Push
-- **Release**: `pkg` bundler to create binaries
+## 5. Security Architecture
+- **Auditor**: Pre-flight checks for all file/shell operations.
+- **Sandboxing**: OS-level isolation via `@anthropic-ai/sandbox-runtime` or native fallbacks (`sandbox-exec` on macOS, `firejail` on Linux).
+- **Permissions**: Granular Allow/Deny list stored in `.obsidian/settings.json`.

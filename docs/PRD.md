@@ -1,19 +1,19 @@
 # Product Requirements Document (PRD): Obsidian Next
 
 **Project**: Obsidian Next (formerly Aurora/Obsidian)
-**Status**: Final
+**Status**: Active Development
 **Reference**: `cliexample.MD` (Visual Baseline)
 
 ## 1. Core Philosophy
 1.  **Structure over Stream**: The Agent does NOT stream raw Markdown. It emits **Structured Events** (`Reasoning`, `ToolCall`, `ChoiceRequest`) which the CLI renders.
 2.  **Visual Hierarchy**:
     - **Agent Thought**: `*` Bullet points.
-    - **Tool Output**: `>` Indented blocks.
-    - **User Input**: `>` Cyan prompt.
+    - **Tool Output**: `⎿` Indented blocks (Success) / `✗` (Error).
+    - **User Input**: `>` Red prompt.
 3.  **Modes (Shift+Tab)**:
     - **[Default]**: Ask for permission on sensitive actions.
-    - **[Plan]**: Only generate tasks/plans, no execution.
-    - **[Auto Accept]**: Execute trusted tools without confirmation (High Agency).
+    - **[Plan Mode]**: Only generate tasks/plans, no execution.
+    - **[Auto-Accept]**: Execute trusted tools without confirmation (High Agency).
 
 ## 2. The "Morphing" Spinner
 - **Requirement**: "Morphing box or circle" (from `cliexample.MD`).
@@ -50,18 +50,16 @@ We must implement a `CommandRegistry` to handle these local-only ops.
 | Command | Description |
 |---------|-------------|
 | `/help` | Show available commands. |
-| `/init` | Initialize `.obsidian/config.json`. |
-| `/config`| View/edit configuration settings. |
-| `/models`| List/Select models (Claude, Ollama, OpenAI). |
-| `/clear` | Clear context window (start fresh). |
-| `/doctor`| Debug connectivity and tools. |
-| `/cost` | **Session** cost. Current tokens and price for *this* interaction. |
-| `/usage` | **Historical** usage. Yearly, Monthly, Daily breakdown of costs. |
-| `/status`| Show system status (mode, sandbox, context). |
+| `/init` | Initialize configuration. |
 | `/mode` | Set execution mode (auto/plan/safe). |
-| `/task` | View/manage current task progress. |
-| `/tool` | Execute tools manually (power users). |
-| `/sandbox`| Toggle sandbox mode for secure execution. |
+| `/status`| Show system status. |
+| `/cost` | Session cost check. |
+| `/usage` | Historical usage report. |
+| `/doctor`| Debug connectivity. |
+| `/clear` | Clear context window. |
+| `/task` | Manage tasks. |
+| `/tool` | Manual tool execution. |
+| `/sandbox`| Switch execution mode to/from sandbox. |
 | `/undo` | Undo recent file changes. |
 
 **Note**: Git operations (commit, push, etc.) are handled by the AI via the bash tool.

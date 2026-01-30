@@ -33,14 +33,12 @@ import { highlightJson } from '../utils/highlight.js';
 
     type PendingPrompt = PendingApproval | PendingChoice;
 
-    // How many events to show at once
-    const VISIBLE_EVENTS = 25;
+    // How many events to show
+    const MAX_EVENTS = 50;
 
     export const Root = () => {
         const [events, setEvents] = useState<AgentEvent[]>([]);
         const [input, setInput] = useState('');
-        // scrollOffset: 0 = at bottom (newest), positive = scrolled up into history
-        const [scrollOffset, setScrollOffset] = useState(0);
         const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
         const { exit } = useApp();
 
@@ -184,20 +182,6 @@ import { highlightJson } from '../utils/highlight.js';
                 return;
             }
 
-            // Scrolling - use functional updates to avoid stale state
-            if (key.pageUp) {
-                setScrollOffset(prev => {
-                    const maxOffset = Math.max(0, events.length - VISIBLE_EVENTS);
-                    return Math.min(prev + 3, maxOffset);
-                });
-            }
-            if (key.pageDown) {
-                setScrollOffset(prev => Math.max(0, prev - 3));
-            }
-            if (key.escape) {
-                setScrollOffset(0); // Jump to bottom
-            }
-
             if (matches.length === 0) return;
 
             if (key.upArrow) {
@@ -238,7 +222,6 @@ import { highlightJson } from '../utils/highlight.js';
             }
             bus.emitUser({ type: 'user_input', content: value });
             setInput('');
-            setScrollOffset(0); // Auto-scroll to bottom to see response
         };
 
         return (
@@ -246,22 +229,9 @@ import { highlightJson } from '../utils/highlight.js';
                 {/* Header / Dashboard */}
                 <Dashboard />
 
-                {/* Event Stream (Scrollable area) */}
+                {/* Event Stream - shows last MAX_EVENTS */}
                 <Box flexDirection="column" flexGrow={1} marginY={1} overflowY="hidden" justifyContent="flex-end">
-                    {/* Scroll Indicator - show when scrolled up */}
-                    {scrollOffset > 0 && (
-                        <Box justifyContent="center" marginBottom={0}>
-                            <Text color="yellow">-- Scrolled up {scrollOffset} (PageDown/ESC to return) --</Text>
-                        </Box>
-                    )}
-
-                    {/* Render events: slice from (end - visible - offset) to (end - offset) */}
-                    {(() => {
-                        const total = events.length;
-                        const endIdx = Math.max(0, total - scrollOffset);
-                        const startIdx = Math.max(0, endIdx - VISIBLE_EVENTS);
-                        return events.slice(startIdx, endIdx);
-                    })().map((event: any, i) => {
+                    {events.slice(-MAX_EVENTS).map((event: any, i) => {
                         let content = null;
 
                         if (event.type === 'user_input') {
@@ -277,28 +247,23 @@ import { highlightJson } from '../utils/highlight.js';
                         } else if (event.type === 'thought') {
                             content = <AgentLine key={i} content={event.content} />;
                         } else if (event.type === 'tool_start') {
-                            // Format: ⏺ ToolName(args summary)
+                            // Format: ⏺ ToolName(args summary) with background
                             let argsSummary = '';
                             try {
                                 const args = JSON.parse(event.args);
-                                // Show first arg value as summary
                                 const firstVal = Object.values(args)[0];
                                 if (typeof firstVal === 'string') {
-                                    argsSummary = firstVal.length > 50
-                                        ? firstVal.slice(0, 50) + '...'
+                                    argsSummary = firstVal.length > 60
+                                        ? firstVal.slice(0, 60) + '...'
                                         : firstVal;
                                 }
                             } catch {}
 
                             content = (
-                                <Box key={i} flexDirection="column">
-                                    <Box>
-                                        <Text color="cyan">⏺ </Text>
-                                        <Text color="white" bold>{event.tool}</Text>
-                                        {argsSummary && (
-                                            <Text color="gray">({argsSummary})</Text>
-                                        )}
-                                    </Box>
+                                <Box key={i}>
+                                    <Text backgroundColor="#1a1a2e" color="cyan"> ⏺ </Text>
+                                    <Text backgroundColor="#1a1a2e" color="white" bold> {event.tool}</Text>
+                                    <Text backgroundColor="#1a1a2e" color="gray">({argsSummary}) </Text>
                                 </Box>
                             );
                         } else if (event.type === 'tool_result') {
@@ -338,12 +303,6 @@ import { highlightJson } from '../utils/highlight.js';
                     />
                 )}
 
-                {/* New messages indicator when scrolled up */}
-                {scrollOffset > 0 && (
-                    <Box justifyContent="center">
-                        <Text color="cyan">-- {scrollOffset} newer below --</Text>
-                    </Box>
-                )}
 
                 {/* Input Area (disabled when prompt is active) */}
                 <Box flexDirection="column">
@@ -375,11 +334,15 @@ import { highlightJson } from '../utils/highlight.js';
                     flexDirection="row"
                     justifyContent="space-between"
                 >
-                    <Box minWidth={15}>
-                        <Text color="gray">[ Mode: <Text color={
+                    <Box minWidth={22}>
+                        <Text color="gray">[ <Text color={
                             stats.mode === 'plan' ? 'yellow' :
-                            stats.mode === 'auto' ? 'green' : 'gray'
-                        }>{stats.mode}</Text> ]</Text>
+                            stats.mode === 'auto' ? 'green' : 'white'
+                        }>{
+                            stats.mode === 'auto' ? 'auto-accept ON' :
+                            stats.mode === 'plan' ? 'plan mode' :
+                            'default'
+                        }</Text> ]</Text>
                     </Box>
 
                     <Box minWidth={20}>

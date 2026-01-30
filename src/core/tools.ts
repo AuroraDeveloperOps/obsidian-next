@@ -12,6 +12,7 @@ import { auditor } from './auditor.js';
 import { sandbox } from './sandbox.js';
 import { context } from './context.js';
 import { undo } from './undo.js';
+import { settings } from './settings.js';
 import { UserEvent } from '../events/types.js';
 
 const execAsync = promisify(exec);
@@ -117,15 +118,20 @@ export const BashTool: Tool = {
         }
 
         // Commands requiring approval wait for user confirmation
-        if (audit.requiresApproval) {
+        if (audit.requiresApproval && !audit.autoApproved) {
             const approved = await requestApproval(command, audit.reason || 'Potentially dangerous operation');
 
             if (!approved) {
+                // Save denial
+                await settings.addDeniedPermission('bash', command);
                 return {
                     success: false,
                     error: 'Command rejected by user'
                 };
             }
+
+            // Save approval for future (user said yes)
+            await settings.addAllowedPermission('bash', command);
         }
 
         try {
