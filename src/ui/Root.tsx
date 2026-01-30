@@ -126,10 +126,18 @@ export const Root = () => {
             });
         };
 
+        const userHandler = (event: any) => {
+            if (event.type === 'user_input') {
+                setEvents(prev => [...prev, { type: 'user_input', content: event.content } as any]);
+            }
+        };
+
         bus.on('agent', handler);
+        bus.on('user', userHandler);
 
         return () => {
             bus.off('agent', handler);
+            bus.off('user', userHandler);
         };
     }, []);
 
@@ -217,17 +225,36 @@ export const Root = () => {
                 )}
 
                 {/* Render events with scrolling window */}
-                {events.slice(Math.max(0, events.length - 50 - scrollOffset), events.length - scrollOffset).map((event, i) => {
+                {events.slice(Math.max(0, events.length - 50 - scrollOffset), events.length - scrollOffset).map((event: any, i) => {
                     let content = null;
 
-                    if (event.type === 'thought') {
+                    if (event.type === 'user_input') {
+                        content = (
+                            <Box key={i} flexDirection="row" paddingX={1} marginBottom={0}>
+                                <Text color="gray" dimColor>{'> '} {event.content}</Text>
+                            </Box>
+                        );
+                    } else if (event.type === 'thought') {
                         content = <AgentLine key={i} content={event.content} />;
                     } else if (event.type === 'tool_start') {
+                        let formattedArgs = event.args;
+                        try {
+                            const obj = JSON.parse(event.args);
+                            formattedArgs = JSON.stringify(obj, null, 2);
+                        } catch (e) { }
+
                         content = (
-                            <Box key={i}>
-                                <Text color="cyan">[TOOL] </Text>
-                                <Text color="white" bold>{event.tool}</Text>
-                                <Text color="gray"> {event.args.length > 50 ? event.args.slice(0, 50) + '...' : event.args}</Text>
+                            <Box key={i} flexDirection="column" paddingX={1}>
+                                <Box>
+                                    <Text backgroundColor="#333333">
+                                        <Text color="cyan">{' ●'} </Text>
+                                        <Text color="white" bold>{event.tool}</Text>
+                                        <Text> </Text>
+                                    </Text>
+                                </Box>
+                                <Box marginLeft={2} marginTop={0}>
+                                    <Text color="gray" dimColor>{formattedArgs}</Text>
+                                </Box>
                             </Box>
                         );
                     } else if (event.type === 'tool_result') {
