@@ -8,11 +8,20 @@ Thank you for your interest in Obsidian Next. This project adheres to strict pro
 - **Security**: Secrets (API Keys) must **NEVER** be committed. use `.env` or `~/.obsidian/config.json` (gitignored).
 
 ## 2. Git Lifecycle
-We follow a strict Feature Branch workflow:
+We follow a strict Feature Branch workflow.
 
-1.  **Branch**: Create a branch for your feature.
+### 2.1 Branch Naming Convention
+Branches must follow the pattern: `username-type/description`
+
+**Examples**:
+- `polyoxy-feat/event-bus`
+- `jdoe-fix/spinner-alignment`
+- `alice-chore/update-deps`
+
+### 2.2 Workflow
+1.  **Branch**:
     ```bash
-    git checkout -b feature/your-feature-name
+    git checkout -b polyoxy-feat/new-tool
     ```
 2.  **Atomic Commits**: Use [Conventional Commits](https://www.conventionalcommits.org/).
     ```bash
@@ -40,5 +49,5 @@ We follow a strict Feature Branch workflow:
 
 ## 5. Visual Standards
 - Use `*` for Agent thoughts.
-- Use `>` for Tool output.
+- Use `⎿` for Tool output.
 - Colors: Cyan (User), Gray (Thought), White (Output).

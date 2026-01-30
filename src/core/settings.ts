@@ -41,27 +41,16 @@ export const SettingsSchema = z.object({
 
 export type Settings = z.infer<typeof SettingsSchema>;
 
-// Default settings
+// Default settings - safe mode approves NOTHING by default
 const DEFAULT_SETTINGS: Settings = {
     mode: 'safe',
     autoAccept: {
         enabled: false,
-        readOperations: true,
-        safeCommands: true,
+        readOperations: false,
+        safeCommands: false,
     },
     permissions: {
-        allow: [
-            'read:*',
-            'list:*',
-            'glob:*',
-            'grep:*',
-            'bash:git status*',
-            'bash:git diff*',
-            'bash:git log*',
-            'bash:npm test*',
-            'bash:npm run build*',
-            'bash:npm run lint*',
-        ],
+        allow: [],  // Empty - user builds their own allow list
         deny: [],
     },
     ui: {
@@ -90,9 +79,38 @@ class SettingsManager {
             const parsed = JSON.parse(data);
             this.cached = SettingsSchema.parse({ ...DEFAULT_SETTINGS, ...parsed });
         } catch {
+            // File doesn't exist - create it with defaults
             this.cached = DEFAULT_SETTINGS;
+            await this.save(DEFAULT_SETTINGS);
         }
         return this.cached;
+    }
+
+    /**
+     * Add a permission to the allow list (called when user approves a command)
+     */
+    async addAllowedPermission(tool: string, command: string): Promise<void> {
+        const s = await this.load();
+        const pattern = `${tool}:${command}`;
+
+        // Don't add duplicates
+        if (!s.permissions.allow.includes(pattern)) {
+            s.permissions.allow.push(pattern);
+            await this.save({ permissions: s.permissions });
+        }
+    }
+
+    /**
+     * Add a permission to the deny list
+     */
+    async addDeniedPermission(tool: string, command: string): Promise<void> {
+        const s = await this.load();
+        const pattern = `${tool}:${command}`;
+
+        if (!s.permissions.deny.includes(pattern)) {
+            s.permissions.deny.push(pattern);
+            await this.save({ permissions: s.permissions });
+        }
     }
 
     async save(newSettings: Partial<Settings>): Promise<void> {

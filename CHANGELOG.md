@@ -5,21 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-01-30
 
 ### Added
-- **CommandRegistry**: New module for handling slash commands (`src/core/commands.ts`).
-- **ConfigManager**: Secure configuration management using Zod schemas (`src/core/config.ts`).
-- **UI Components**: `AgentLine`, `ToolOutput`, `MorphSpinner` (Ink-based).
-- **EventBus**: Typed event system for Agent-UI communication.
-- **Documentation**: `CONTRIBUTING.md`, `CLI_DESIGN_SYSTEM.md`, `ARCHITECTURE.md`.
+- **Security**: "Keychain-like" variable rotation system integration for secure API key management (Reference Implementation).
+- **Workspace**: Dedicated `workspace/` environment for Polyoxy benchmarking and evaluation.
+- **Documentation**: Comprehensive directory index at `docs/README.md`.
+- **MCP**: Experimental MCP configuration (`mcp-config.example.json`).
 
-### Security
-- **API Key**: Removed `apiKey` from file-based config. Now exclusively reads `ANTHROPIC_API_KEY` from environment variables.
+### Changed
+- **License**: Switched to Apache License 2.0.
+- **Documentation**:
+  - Removed all emojis to adhere to strict professional standards.
+  - Reorganized `README.md` with "Safer than whatever-bot" value proposition.
+  - Updated `CONTRIBUTING.md` with strict branch naming conventions (`username-type/description`).
+- **Architecture**: Clarified Supervisor-Agent topology in `docs/AGENT_ARCHITECTURE.md`.
+- **UI**: Standardized tool output symbols (`⎿`) in `docs/CLI_DESIGN_SYSTEM.md`.
 
 ### Fixed
-- **Build**: Downgraded `ink` to v4 to resolve `peerDependency` conflicts with `@inkjs/ui`.
+- **Cleanup**: Removed `CLAUDE.md` and other non-standard files.
+- **Accuracy**: Aligned all documentation with the actual codebase implementation (Sandbox status, Tool limits).
 
 ## [0.1.0] - 2026-01-28
 ### Added
 - Initial project structure and tooling setup.
+- Core Agent logic (`src/core/agent.ts`).
+- Tooling foundation (`src/core/tools.ts`).

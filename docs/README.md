@@ -1,43 +1,19 @@
-# Obsidian Next
+# Documentation Directory
 
-> Open-source AI Agent CLI - A Claude Code alternative.
+Welcome to the comprehensive documentation for **Obsidian Next**.
 
-**Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. It features a "Structure-First" architecture where agents emit typed events instead of raw streams, ensuring a rigorous and interactive user experience.
+## Core Guides
 
-## Features
-- **8 Tools**: bash, read, write, edit, list, grep, glob, web_fetch
-- **14 Commands**: /help, /init, /config, /models, /clear, /cost, /usage, /status, /mode, /task, /tool, /sandbox, /undo, /doctor
-- **3 Modes**: auto (yolo), plan (review first), safe (default)
-- **Security**: Auditor blocks dangerous commands, sandbox execution
-- **Tracking**: Context, usage, costs, undo history
+- **[Installation & Setup](../README.md#installation)**: Getting started guide (in root).
+- **[Architecture](ARCHITECTURE.md)**: Deep dive into the Supervisor-Agent topology, Event Bus, and Directory Structure.
+- **[Agent Logic](AGENT_ARCHITECTURE.md)**: Understanding Modes (Auto/Plan/Safe) and the Execution Loop.
+- **[CLI Design System](CLI_DESIGN_SYSTEM.md)**: Visual standards, symbols, and UI component reference.
 
-## Documentation
-- **[Architecture](ARCHITECTURE.md)**: EventBus, Supervisor, Tools
-- **[Agent Architecture](AGENT_ARCHITECTURE.md)**: Modes, execution flow
-- **[Tools](TOOLS.md)**: Available tools and safety checks
-- **[Design System](CLI_DESIGN_SYSTEM.md)**: Visual guidelines
+## Tooling & Safety
 
-## Quick Start
-```bash
-# Install dependencies
-npm install
+- **[Tools Reference](TOOLS.md)**: Detailed API reference for the 8 built-in tools (`bash`, `read`, `edit`, etc.) and their safety limits.
+- **[Sandboxing](SANDBOX.md)**: How to configure and verify OS-level isolation (`@anthropic-ai/sandbox-runtime`).
 
-# Set API key
-export ANTHROPIC_API_KEY=sk-...
+## Product Specs
 
-# Build and run
-npm run build
-node dist/index.js
-```
-
-## Commands
-```
-/help     - Show all commands
-/clear    - Reset conversation
-/mode     - Set mode (auto/plan/safe)
-/cost     - Show session cost
-/doctor   - Run diagnostics
-```
-
-## License
-MIT License. See [LICENSE](../LICENSE) for details.
+- **[Product Requirements (PRD)](PRD.md)**: The "Final" approved specification for Obsidian Next functionality.

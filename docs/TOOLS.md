@@ -1,95 +1,66 @@
 # Tool Execution System
 
-Obsidian Next now includes a Claude Code-like tool execution system that allows the AI to interact with your workspace.
+Obsidian Next includes a robust tool execution system (`src/core/tools.ts`) that allows the AI to interact with your workspace safely.
 
 ## Available Tools
 
 ### bash
 Execute shell commands in the workspace.
-
-**Parameters:**
-- `command` (string, required): The shell command to execute
-
-**Safety:** All commands are validated by the Auditor before execution.
+- **Parameters**: `command` (string)
+- **Safety**: Audited by `Auditor`. Dangerous patterns blocked.
+- **Limits**:
+  - Timeout: 30 seconds
+  - Output Buffer: 1MB (Truncated excess)
 
 ### read
-Read file contents from the workspace.
-
-**Parameters:**
-- `path` (string, required): Path to the file (relative to workspace)
-
-**Features:**
-- Automatic line numbering for readability
-- Path validation to prevent escaping workspace
+Read file contents.
+- **Parameters**: `path` (string)
+- **Features**: Automatic line numbering.
+- **Limits**: Max 500 lines per read (prevents context window explosion).
 
 ### write
-Create new files in the workspace.
-
-**Parameters:**
-- `path` (string, required): Where to create the file
-- `content` (string, required): Content to write
-
-**Safety:**
-- Will not overwrite existing files
-- Creates parent directories automatically
+Create new files.
+- **Parameters**: `path` (string), `content` (string)
+- **Safety**: Will not overwrite without `overwrite` flag (or use `edit`).
+- **Undo**: All writes are recorded in `UndoManager` and can be reverted.
 
 ### edit
-Modify existing files using search and replace.
-
-**Parameters:**
-- `path` (string, required): Path to the file to edit
-- `search` (string, required): Text to search for (must match exactly)
-- `replace` (string, required): Text to replace with
+Modify existing files using search & replace.
+- **Parameters**: `path` (string), `search` (string), `replace` (string)
+- **Validation**: Verifies `search` string uniqueness before applying.
 
 ### list
-List files and directories.
-
-**Parameters:**
-- `path` (string, optional): Directory to list (defaults to current)
+List directory contents.
+- **Parameters**: `path` (string, optional)
+- **Filtering**: Ignores `node_modules`, `.git`, etc.
 
 ### grep
-Search for patterns in files using regex.
-
-**Parameters:**
-- `pattern` (string, required): Regex pattern to search for
-- `path` (string, optional): Directory to search (defaults to current)
-- `limit` (number, optional): Maximum results (default: 50)
+Search for patterns in files.
+- **Parameters**: `pattern` (string - regex), `path` (string)
+- **Limits**: Max 50 matches.
 
 ### glob
-Find files matching a glob pattern.
-
-**Parameters:**
-- `pattern` (string, required): Glob pattern (e.g., **/*.ts)
-- `path` (string, optional): Base directory (defaults to current)
+Find files by pattern.
+- **Parameters**: `pattern` (string - glob), `path` (string)
+- **Limits**: Max 100 results.
 
 ### web_fetch
-Fetch content from URLs (documentation, APIs, etc.).
-
-**Parameters:**
-- `url` (string, required): URL to fetch
-
-**Safety:**
-- Cannot fetch from localhost/private addresses
-- 10 second timeout
-- Large responses are truncated
+Fetch content from URLs.
+- **Parameters**: `url` (string)
+- **Safety**: Blocks local/private IP ranges. 10s timeout. strip HTML tags.
 
 ## Usage
-
-### From the AI
-When you chat with Claude, it can automatically use these tools to help you.
 
 ### Manual Tool Execution
 Use the `/tool` command:
 
 ```bash
-# List available tools
-/tool
-
 # Execute a specific tool
 /tool read {"path": "package.json"}
-/tool bash {"command": "npm test"}
 ```
 
 ## Architecture
-
-Tools integrate with the Auditor for safety checks and emit structured events for UI rendering.
+Tools are registered in `ToolRegistry` and wrapped with:
+1. **Auditor**: Static analysis of intent.
+2. **Sandbox**: Runtime isolation (if enabled).
+3. **Context**: Usage tracking (files read/modified).

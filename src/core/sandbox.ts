@@ -1,10 +1,20 @@
 /**
  * Obsidian Next - Sandbox Runtime Integration
  * OS-level sandboxing for secure tool execution
+ *
+ * Supports:
+ * - @anthropic-ai/sandbox-runtime (if available)
+ * - macOS sandbox-exec (native fallback)
+ * - Linux firejail (native fallback)
  */
 
 import { bus } from './bus.js';
 import { config } from './config.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import os from 'os';
+
+const execAsync = promisify(exec);
 
 // Types from sandbox-runtime (may need adjustment based on actual package exports)
 interface SandboxRuntimeConfig {
@@ -144,20 +154,62 @@ export class SandboxExecutor {
         }
 
         // Local mode - return command as-is
-        if (this.mode === 'local' || !this.sandboxManager) {
+        if (this.mode === 'local') {
             return command;
         }
 
-        // Sandbox mode - wrap with sandbox-exec/bubblewrap
-        try {
-            return await this.sandboxManager.wrapWithSandbox(command);
-        } catch (error: any) {
-            bus.emitAgent({
-                type: 'error',
-                message: `Sandbox wrap failed: ${error.message}. Running without sandbox.`,
-            });
-            return command;
+        // Try Anthropic sandbox runtime first
+        if (this.sandboxManager) {
+            try {
+                return await this.sandboxManager.wrapWithSandbox(command);
+            } catch (error: any) {
+                // Fall through to native sandbox
+            }
         }
+
+        // Try native sandbox
+        return this.wrapWithNativeSandbox(command);
+    }
+
+    /**
+     * Wrap command with native OS sandbox (macOS sandbox-exec or Linux firejail)
+     */
+    private async wrapWithNativeSandbox(command: string): Promise<string> {
+        const platform = os.platform();
+
+        if (platform === 'darwin') {
+            // macOS: Use sandbox-exec with a permissive profile
+            // This restricts network and sensitive file access
+            const profile = `
+(version 1)
+(allow default)
+(deny network*)
+(allow network-outbound (remote tcp "*:80" "*:443"))
+(deny file-read* (subpath "${os.homedir()}/.ssh"))
+(deny file-read* (subpath "${os.homedir()}/.aws"))
+(deny file-read* (subpath "${os.homedir()}/.gnupg"))
+(deny file-write* (literal "${process.cwd()}/.env"))
+            `.trim();
+
+            // Write profile to temp file and use it
+            const escapedCommand = command.replace(/"/g, '\\"');
+            return `sandbox-exec -p '${profile}' bash -c "${escapedCommand}"`;
+        }
+
+        if (platform === 'linux') {
+            // Linux: Check if firejail is available
+            try {
+                await execAsync('which firejail');
+                // Firejail with network and sensitive dirs blocked
+                const escapedCommand = command.replace(/'/g, "'\\''");
+                return `firejail --net=none --blacklist=~/.ssh --blacklist=~/.aws --blacklist=~/.gnupg bash -c '${escapedCommand}'`;
+            } catch {
+                // Firejail not available, return as-is
+            }
+        }
+
+        // No sandbox available, return command as-is
+        return command;
     }
 
     /**

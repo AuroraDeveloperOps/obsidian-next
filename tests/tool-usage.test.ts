@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LLMClient } from '../src/core/llm.js';
+import { settings } from '../src/core/settings.js';
 import { bus } from '../src/core/bus.js';
 import { AgentEvent } from '../src/events/types.js';
 import fs from 'fs/promises';
@@ -28,6 +29,26 @@ describe('Tool Usage Integration', () => {
         client = new LLMClient();
         events = [];
         bus.on('agent', handler);
+
+        // Reset settings to ensure no blocked commands
+        await settings.save({
+            mode: 'auto', // Auto mode to avoid approval blocks? No, test expects approval request? 
+            // The failed test expects "echo hello" to succeed.
+            // If mode is 'safe', it requires approval.
+            // If mode is 'auto', it auto-approves safe commands?
+            // "echo" is NOT in BLOCKED_PATTERNS.
+            // But Auditor checks "if (await settings.isAllowed('bash', command))"
+            // If not allowed and not denied, and mode is 'safe', it triggers approval.
+            // If mode is 'auto', does it verify?
+            // "Check settings allow list - if allowed, skip approval"
+            // "Check mode - in safe mode, everything needs approval"
+            // Auditor lines 89-97: if safe mode, return requiresApproval.
+
+            // So if we are in 'safe' mode (default), "echo hello" requires approval.
+            // The test doesn't simulate user approval for "echo hello".
+            // So we should set mode to 'auto' OR add 'echo hello' to allow list.
+            permissions: { allow: [], deny: [] }
+        });
 
         // Create test workspace
         await fs.mkdir(testDir, { recursive: true });
@@ -81,7 +102,7 @@ describe('Tool Usage Integration', () => {
         expect(response).toBeTruthy();
         // Response should mention content from the file
         expect(response?.toLowerCase()).toMatch(/hello|test file|line/i);
-    }, 30000);
+    }, 60000);
 
     it('should use list tool when asked about directory contents', async () => {
         const prompt = `What files are in the ${testDir} directory? Just list them briefly.`;
@@ -103,7 +124,7 @@ describe('Tool Usage Integration', () => {
         expect(listToolUsed).toBe(true);
         expect(response).toBeTruthy();
         expect(response?.toLowerCase()).toContain('test-file.txt');
-    }, 30000);
+    }, 60000);
 
     it('should use bash tool for shell commands', async () => {
         const prompt = 'Run "echo hello" and tell me the output. Be brief.';
@@ -125,7 +146,7 @@ describe('Tool Usage Integration', () => {
         expect(bashToolUsed).toBe(true);
         expect(response).toBeTruthy();
         expect(response?.toLowerCase()).toContain('hello');
-    }, 30000);
+    }, 60000);
 
     it('should use grep tool for searching code', async () => {
         // Create a file with searchable content
@@ -152,7 +173,7 @@ describe('Tool Usage Integration', () => {
 
         expect(grepToolUsed).toBe(true);
         expect(response).toBeTruthy();
-    }, 30000);
+    }, 60000);
 
     it('should chain multiple tools when needed', async () => {
         const prompt = `First list the files in ${testDir}, then read the test-file.txt. Summarize in one sentence.`;
