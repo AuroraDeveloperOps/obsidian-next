@@ -33,9 +33,13 @@ import { highlightJson } from '../utils/highlight.js';
 
     type PendingPrompt = PendingApproval | PendingChoice;
 
+    // How many events to show at once
+    const VISIBLE_EVENTS = 25;
+
     export const Root = () => {
         const [events, setEvents] = useState<AgentEvent[]>([]);
         const [input, setInput] = useState('');
+        // scrollOffset: 0 = at bottom (newest), positive = scrolled up into history
         const [scrollOffset, setScrollOffset] = useState(0);
         const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
         const { exit } = useApp();
@@ -122,6 +126,8 @@ import { highlightJson } from '../utils/highlight.js';
                     // If it's a thought and the last event was also a thought, UPDATE it for streaming effect
                     const last = prev[prev.length - 1];
                     if (event.type === 'thought' && last && last.type === 'thought') {
+                        // Avoid unnecessary re-renders if content hasn't meaningfully changed
+                        if (last.content === event.content) return prev;
                         const newEvents = [...prev];
                         newEvents[newEvents.length - 1] = event;
                         return newEvents;
@@ -178,12 +184,18 @@ import { highlightJson } from '../utils/highlight.js';
                 return;
             }
 
-            // History Scrolling - Global
+            // Scrolling - use functional updates to avoid stale state
             if (key.pageUp) {
-                setScrollOffset(prev => Math.min(prev + 5, events.length - 1));
+                setScrollOffset(prev => {
+                    const maxOffset = Math.max(0, events.length - VISIBLE_EVENTS);
+                    return Math.min(prev + 3, maxOffset);
+                });
             }
             if (key.pageDown) {
-                setScrollOffset(prev => Math.max(0, prev - 5));
+                setScrollOffset(prev => Math.max(0, prev - 3));
+            }
+            if (key.escape) {
+                setScrollOffset(0); // Jump to bottom
             }
 
             if (matches.length === 0) return;
@@ -226,7 +238,7 @@ import { highlightJson } from '../utils/highlight.js';
             }
             bus.emitUser({ type: 'user_input', content: value });
             setInput('');
-            // inputKey doesn't need reset, cursor at 0 is fine.
+            setScrollOffset(0); // Auto-scroll to bottom to see response
         };
 
         return (
@@ -236,15 +248,20 @@ import { highlightJson } from '../utils/highlight.js';
 
                 {/* Event Stream (Scrollable area) */}
                 <Box flexDirection="column" flexGrow={1} marginY={1} overflowY="hidden" justifyContent="flex-end">
-                    {/* Scroll Indicator */}
+                    {/* Scroll Indicator - show when scrolled up */}
                     {scrollOffset > 0 && (
                         <Box justifyContent="center" marginBottom={0}>
-                            <Text color="gray">--- History ({scrollOffset} lines up) ---</Text>
+                            <Text color="yellow">-- Scrolled up {scrollOffset} (PageDown/ESC to return) --</Text>
                         </Box>
                     )}
 
-                    {/* Render events with scrolling window */}
-                    {events.slice(Math.max(0, events.length - 50 - scrollOffset), events.length - scrollOffset).map((event: any, i) => {
+                    {/* Render events: slice from (end - visible - offset) to (end - offset) */}
+                    {(() => {
+                        const total = events.length;
+                        const endIdx = Math.max(0, total - scrollOffset);
+                        const startIdx = Math.max(0, endIdx - VISIBLE_EVENTS);
+                        return events.slice(startIdx, endIdx);
+                    })().map((event: any, i) => {
                         let content = null;
 
                         if (event.type === 'user_input') {
@@ -260,17 +277,27 @@ import { highlightJson } from '../utils/highlight.js';
                         } else if (event.type === 'thought') {
                             content = <AgentLine key={i} content={event.content} />;
                         } else if (event.type === 'tool_start') {
-                            // Use syntax highlighting for JSON args
-                            const coloredArgs = highlightJson(event.args);
+                            // Format: ⏺ ToolName(args summary)
+                            let argsSummary = '';
+                            try {
+                                const args = JSON.parse(event.args);
+                                // Show first arg value as summary
+                                const firstVal = Object.values(args)[0];
+                                if (typeof firstVal === 'string') {
+                                    argsSummary = firstVal.length > 50
+                                        ? firstVal.slice(0, 50) + '...'
+                                        : firstVal;
+                                }
+                            } catch {}
 
                             content = (
-                                <Box key={i} flexDirection="column" paddingX={1}>
+                                <Box key={i} flexDirection="column">
                                     <Box>
-                                        <Text color="cyan">{' ●'} </Text>
+                                        <Text color="cyan">⏺ </Text>
                                         <Text color="white" bold>{event.tool}</Text>
-                                    </Box>
-                                    <Box marginLeft={3} marginTop={0}>
-                                        <Text>{coloredArgs}</Text>
+                                        {argsSummary && (
+                                            <Text color="gray">({argsSummary})</Text>
+                                        )}
                                     </Box>
                                 </Box>
                             );
@@ -309,6 +336,13 @@ import { highlightJson } from '../utils/highlight.js';
                         options={pendingPrompt.options}
                         onResolve={handlePromptResolve}
                     />
+                )}
+
+                {/* New messages indicator when scrolled up */}
+                {scrollOffset > 0 && (
+                    <Box justifyContent="center">
+                        <Text color="cyan">-- {scrollOffset} newer below --</Text>
+                    </Box>
                 )}
 
                 {/* Input Area (disabled when prompt is active) */}
