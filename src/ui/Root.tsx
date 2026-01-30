@@ -33,6 +33,7 @@ type PendingPrompt = PendingApproval | PendingChoice;
 export const Root = () => {
     const [events, setEvents] = useState<AgentEvent[]>([]);
     const [input, setInput] = useState('');
+    const [scrollOffset, setScrollOffset] = useState(0);
     const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
     const { exit } = useApp();
 
@@ -160,6 +161,14 @@ export const Root = () => {
             setSelectedIndex(prev => (prev < matches.length - 1 ? prev + 1 : 0));
         }
 
+        // History Scrolling
+        if (key.pageUp) {
+            setScrollOffset(prev => Math.min(prev + 5, events.length - 1));
+        }
+        if (key.pageDown) {
+            setScrollOffset(prev => Math.max(0, prev - 5));
+        }
+
         if (key.return || key.tab) {
             // Handle Selection
             const selected = matches[selectedIndex];
@@ -199,9 +208,16 @@ export const Root = () => {
             <Dashboard />
 
             {/* Event Stream (Scrollable area) */}
-            <Box flexDirection="column" flexGrow={1} marginY={1} overflowY="hidden">
-                {/* ... (event mapping) ... */}
-                {events.slice(-8).map((event, i) => {
+            <Box flexDirection="column" flexGrow={1} marginY={1} overflowY="hidden" justifyContent="flex-end">
+                {/* Scroll Indicator */}
+                {scrollOffset > 0 && (
+                    <Box justifyContent="center" marginBottom={0}>
+                        <Text color="gray">--- History ({scrollOffset} lines up) ---</Text>
+                    </Box>
+                )}
+
+                {/* Render events with scrolling window */}
+                {events.slice(Math.max(0, events.length - 50 - scrollOffset), events.length - scrollOffset).map((event, i) => {
                     let content = null;
 
                     if (event.type === 'thought') {
