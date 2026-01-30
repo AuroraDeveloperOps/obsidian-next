@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "obsidian-next": {
+      "command": "node",
+      "args": ["/path/to/obsidian-next/dist/mcp/index.js"],
+      "env": {}
+    }
+  }
+}

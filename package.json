@@ -4,10 +4,15 @@
     "description": "Next-gen AI Agent CLI",
     "main": "dist/index.js",
     "type": "module",
+    "bin": {
+        "obsidian": "dist/index.js",
+        "obsidian-mcp": "dist/mcp.js"
+    },
     "scripts": {
         "dev": "tsup src/index.ts --format esm --watch",
-        "build": "tsup src/index.ts --format esm",
+        "build": "tsup src/index.ts src/mcp/index.ts --format esm",
         "start": "node dist/index.js",
+        "mcp": "node dist/mcp/index.js",
         "test": "vitest"
     },
     "dependencies": {

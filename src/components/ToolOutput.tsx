@@ -1,5 +1,5 @@
-import React from 'react';
-import { Box, Text } from 'ink';
+import React, { useState } from 'react';
+import { Box, Text, useInput } from 'ink';
 
 interface ToolOutputProps {
     tool: string;
@@ -7,48 +7,100 @@ interface ToolOutputProps {
     isError?: boolean;
 }
 
+const MAX_VISIBLE_LINES = 6;
+
 /**
- * Render output with diff coloring for +/- lines
+ * Render output with diff coloring and line numbers for diffs
  */
-const renderColoredOutput = (output: string, isError: boolean) => {
+const renderColoredOutput = (lines: string[], isError: boolean, isDiff: boolean) => {
     if (isError) {
-        return <Text color="red">{output}</Text>;
+        return lines.map((line, i) => (
+            <Text key={i} color="red">{line}</Text>
+        ));
     }
 
-    const lines = output.split('\n');
-    return (
-        <Box flexDirection="column">
-            {lines.map((line, i) => {
-                // Diff coloring
-                if (line.startsWith('+') && !line.startsWith('+++')) {
-                    return <Text key={i} color="green">{line}</Text>;
-                }
-                if (line.startsWith('-') && !line.startsWith('---')) {
-                    return <Text key={i} color="red">{line}</Text>;
-                }
-                if (line.startsWith('@@')) {
-                    return <Text key={i} color="cyan">{line}</Text>;
-                }
-                // File path in diffs
-                if (line.startsWith('diff ') || line.startsWith('index ')) {
-                    return <Text key={i} color="yellow">{line}</Text>;
-                }
-                return <Text key={i}>{line}</Text>;
-            })}
-        </Box>
-    );
+    return lines.map((line, i) => {
+        // Diff with line numbers
+        if (isDiff) {
+            // Line number prefix (e.g., "  329 -" or "  329 +")
+            const lineNumMatch = line.match(/^(\s*\d+)\s*([+-])?(.*)$/);
+            if (lineNumMatch) {
+                const [, lineNum, sign, content] = lineNumMatch;
+                const color = sign === '+' ? 'green' : sign === '-' ? 'red' : 'white';
+                return (
+                    <Text key={i}>
+                        <Text color="gray">{lineNum} </Text>
+                        <Text color={color}>{sign || ' '}</Text>
+                        <Text color={color}>{content}</Text>
+                    </Text>
+                );
+            }
+            // Regular diff lines
+            if (line.startsWith('+') && !line.startsWith('+++')) {
+                return <Text key={i} color="green">{line}</Text>;
+            }
+            if (line.startsWith('-') && !line.startsWith('---')) {
+                return <Text key={i} color="red">{line}</Text>;
+            }
+            if (line.startsWith('@@')) {
+                return <Text key={i} color="cyan">{line}</Text>;
+            }
+        }
+        return <Text key={i}>{line}</Text>;
+    });
 };
 
 export const ToolOutput: React.FC<ToolOutputProps> = ({ tool, output, isError }) => {
+    const [expanded, setExpanded] = useState(false);
+
+    const lines = output.split('\n');
+    const isDiff = lines.some(l => l.startsWith('+') || l.startsWith('-') || l.match(/^\s*\d+\s*[+-]/));
+    const needsCollapse = lines.length > MAX_VISIBLE_LINES;
+    const visibleLines = expanded ? lines : lines.slice(0, MAX_VISIBLE_LINES);
+    const hiddenCount = lines.length - MAX_VISIBLE_LINES;
+
     return (
-        <Box flexDirection="column" marginLeft={2}>
+        <Box flexDirection="column">
+            {/* Result line with ⎿ prefix */}
             <Box>
-                <Text color={isError ? 'red' : 'green'}>{isError ? ' x' : ' ✓'} </Text>
-                <Text color="gray">{tool}</Text>
+                <Text color="gray">  ⎿  </Text>
+                <Text color={isError ? 'red' : 'white'}>
+                    {visibleLines[0]}
+                </Text>
             </Box>
-            <Box marginLeft={3} flexDirection="column">
-                {renderColoredOutput(output, isError || false)}
-            </Box>
+
+            {/* Additional lines with indentation */}
+            {visibleLines.slice(1).map((line, i) => (
+                <Box key={i}>
+                    <Text color="gray">     </Text>
+                    {isDiff ? (
+                        (() => {
+                            if (line.match(/^\s*\d+\s*\+/)) {
+                                return <Text color="green">{line}</Text>;
+                            }
+                            if (line.match(/^\s*\d+\s*-/)) {
+                                return <Text color="red">{line}</Text>;
+                            }
+                            if (line.startsWith('+')) {
+                                return <Text color="green">{line}</Text>;
+                            }
+                            if (line.startsWith('-')) {
+                                return <Text color="red">{line}</Text>;
+                            }
+                            return <Text>{line}</Text>;
+                        })()
+                    ) : (
+                        <Text color={isError ? 'red' : 'white'}>{line}</Text>
+                    )}
+                </Box>
+            ))}
+
+            {/* Collapse indicator */}
+            {needsCollapse && !expanded && (
+                <Box>
+                    <Text color="gray">     ... +{hiddenCount} lines</Text>
+                </Box>
+            )}
         </Box>
     );
 };

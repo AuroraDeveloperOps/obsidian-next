@@ -3,33 +3,44 @@ import { Box, Text } from 'ink';
 
 interface AgentLineProps {
     content: string;
+    isStreaming?: boolean;
 }
 
 const flareAnim = ["·", "▪", "▚", "❖", "✦", "✹", "✦", "▪"];
 
-export const AgentLine: React.FC<AgentLineProps> = ({ content }) => {
-    const isThinking = content.startsWith("Thinking");
+// Keywords that indicate active processing
+const PROCESSING_KEYWORDS = [
+    'processing', 'thinking', 'analyzing', 'generating', 'executing',
+    'loading', 'searching', 'reading', 'writing', '...'
+];
+
+export const AgentLine: React.FC<AgentLineProps> = ({ content, isStreaming }) => {
+    const lower = content.toLowerCase();
+    const isProcessing = isStreaming ||
+        PROCESSING_KEYWORDS.some(k => lower.includes(k)) ||
+        content.endsWith('...');
+
     const [frame, setFrame] = React.useState(0);
 
     React.useEffect(() => {
-        if (!isThinking) return;
+        if (!isProcessing) return;
         const interval = setInterval(() => {
             setFrame((prev) => (prev + 1) % flareAnim.length);
         }, 100);
         return () => clearInterval(interval);
-    }, [isThinking]);
+    }, [isProcessing]);
 
     return (
-        <Box flexDirection="row">
+        <Box flexDirection="row" paddingX={1}>
             <Box marginRight={1}>
-                {isThinking ? (
+                {isProcessing ? (
                     <Text color="yellow">{flareAnim[frame]}</Text>
                 ) : (
-                    <Text color="white" bold>*</Text>
+                    <Text color="cyan">*</Text>
                 )}
             </Box>
             <Box flexGrow={1}>
-                <Text color={isThinking ? "gray" : "white"}>
+                <Text color={isProcessing ? "gray" : "white"}>
                     {content}
                 </Text>
             </Box>
