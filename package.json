@@ -1,5 +1,5 @@
 {
-    "name": "obsidian-next",
+    "name": "@aurora-foundation/obsidian-next",
     "version": "0.2.0",
     "description": "Next-gen AI Agent CLI",
     "main": "dist/index.js",
