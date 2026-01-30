@@ -43,6 +43,5 @@ yarn-error.log*
 
 # Internal Dev
 docs/RESEARCH.md
-
-
-FIXES_SUMMARY.md
+calculator.js
+calculator.test.js
