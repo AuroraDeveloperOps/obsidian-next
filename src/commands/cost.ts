@@ -10,8 +10,8 @@ export const costCommand: CommandHandler = async (_args) => {
         type: 'tool_result',
         tool: 'Cost Tracker',
         output: `Session Cost Report:
-  Input tokens:  ${stats.totalInputTokens.toLocaleString()}
-  Output tokens: ${stats.totalOutputTokens.toLocaleString()}
-  Total cost:    $${stats.totalCost.toFixed(4)}`
+   Input tokens:  ${stats.totalInputTokens.toLocaleString()}
+   Output tokens: ${stats.totalOutputTokens.toLocaleString()}
+   Total cost:    $${stats.totalCost.toFixed(4)}`
     });
 };

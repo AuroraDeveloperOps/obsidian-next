@@ -202,19 +202,35 @@ export const Root = () => {
             <Box flexDirection="column" flexGrow={1} marginY={1} overflowY="hidden">
                 {/* ... (event mapping) ... */}
                 {events.slice(-8).map((event, i) => {
-                    if (event.type === 'thought') return <AgentLine key={i} content={event.content} />;
-                    if (event.type === 'tool_start') return (
-                        <Box key={i}>
-                            <Text color="cyan">[TOOL] </Text>
-                            <Text color="white" bold>{event.tool}</Text>
-                            <Text color="gray"> {event.args.length > 50 ? event.args.slice(0, 50) + '...' : event.args}</Text>
+                    let content = null;
+
+                    if (event.type === 'thought') {
+                        content = <AgentLine key={i} content={event.content} />;
+                    } else if (event.type === 'tool_start') {
+                        content = (
+                            <Box key={i}>
+                                <Text color="cyan">[TOOL] </Text>
+                                <Text color="white" bold>{event.tool}</Text>
+                                <Text color="gray"> {event.args.length > 50 ? event.args.slice(0, 50) + '...' : event.args}</Text>
+                            </Box>
+                        );
+                    } else if (event.type === 'tool_result') {
+                        content = <ToolOutput key={i} tool={event.tool} output={event.output} isError={event.isError} />;
+                    } else if (event.type === 'done') {
+                        content = <Text key={i} color="green">[OK] {event.summary}</Text>;
+                    } else if (event.type === 'error') {
+                        content = <Text key={i} color="red">[ERR] {event.message}</Text>;
+                    } else if (event.type === 'clear_history') {
+                        content = <Text key={i} color="gray">[SYS] History cleared</Text>;
+                    }
+
+                    if (!content) return null;
+
+                    return (
+                        <Box key={i} marginTop={1}>
+                            {content}
                         </Box>
                     );
-                    if (event.type === 'tool_result') return <ToolOutput key={i} tool={event.tool} output={event.output} isError={event.isError} />;
-                    if (event.type === 'done') return <Text key={i} color="green">[OK] {event.summary}</Text>;
-                    if (event.type === 'error') return <Text key={i} color="red">[ERR] {event.message}</Text>;
-                    if (event.type === 'clear_history') return <Text key={i} color="gray">[SYS] History cleared</Text>;
-                    return null;
                 })}
             </Box>
 
@@ -246,8 +262,8 @@ export const Root = () => {
                     <TextInput
                         key={inputKey}
                         value={input}
-                        onChange={pendingPrompt ? () => {} : setInput}
-                        onSubmit={pendingPrompt ? () => {} : handleSubmit}
+                        onChange={pendingPrompt ? () => { } : setInput}
+                        onSubmit={pendingPrompt ? () => { } : handleSubmit}
                         placeholder={pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...'}
                     />
                 </Box>

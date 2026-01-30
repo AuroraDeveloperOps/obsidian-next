@@ -10,10 +10,10 @@ export const modelsCommand: CommandHandler = async (args) => {
             type: 'tool_result',
             tool: 'Model Selector',
             output: `Available AI Models:
-  1. claude-sonnet-4-5    [Current/Default]
-  2. claude-opus-4-5      [Powerful]
-  3. claude-haiku-4-5     [Fast/Cheap]
-  4. ollama               [Local]
+   1. claude-sonnet-4-5    [Current/Default]
+   2. claude-opus-4-5      [Powerful]
+   3. claude-haiku-4-5     [Fast/Cheap]
+   4. ollama               [Local]
 
 Current model: ${currentConfig.model}
 
