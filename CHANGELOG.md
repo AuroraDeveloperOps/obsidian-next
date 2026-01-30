@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-01-31
+
+### Added
+
+- **Session Management**: Persistent sessions for long-running tasks
+  - `/exit` - Save session state (context, history, tasks) and exit gracefully
+  - `/resume` - List and restore saved sessions
+  - `/resume --last` - Quick restore of most recent session
+  - Sessions stored in `.obsidian/sessions/`
+
+- **Interactive Init**: `/init` command with guided setup
+  - Masked API key input
+  - Model selection menu
+  - .env file detection with migration warning
+  - `--reset` flag for reconfiguration
+
+- **Diff Viewer**: `/diff` command for file change tracking
+  - List recent file modifications
+  - View line-level diffs with additions/deletions
+  - Auto-stored when files are modified
+
+- **Enhanced Dashboard**: Improved UI components
+  - Text input prompts with masking support
+  - Choice selection menus
+  - Session status indicators
+
+### Changed
+
+- **LLM Client**: Integrated with KeyManager for secure key retrieval
+- **Config**: Deep merge now includes new session settings
+- **Commands**: Added 3 new commands (init, exit, resume, diff)
+
+### Fixed
+
+- **Agent Line**: Improved rendering for long content
+- **Settings Menu**: Better category organization
+
 ## [0.3.0-security] - 2026-01-30
 
 ### Added

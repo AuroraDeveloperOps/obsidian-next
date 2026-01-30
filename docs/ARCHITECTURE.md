@@ -9,8 +9,8 @@ obsidian-next/
 ├── docs/                # PRD, Design, Research
 ├── src/
 │   ├── agents/          # High-level orchestrators (Supervisor)
-│   ├── commands/        # Slash command handlers (/mode, /help, etc.)
-│   ├── components/      # Ink UI Components (AgentLine, ToolOutput)
+│   ├── commands/        # Slash command handlers (/mode, /init, /resume, etc.)
+│   ├── components/      # Ink UI Components (AgentLine, ToolOutput, SettingsMenu)
 │   ├── core/            # Core System Logic
 │   │   ├── agent.ts     # Main LLM execution loop
 │   │   ├── auditor.ts   # Security & Permission checks
@@ -18,8 +18,11 @@ obsidian-next/
 │   │   ├── commands.ts  # Command Registry
 │   │   ├── config.ts    # Enforced Configuration (zod)
 │   │   ├── context.ts   # Working Context Manager
+│   │   ├── diff.ts      # Diff tracking & storage
+│   │   ├── keyManager.ts # Secure API key storage
 │   │   ├── llm.ts       # Anthropic SDK Wrapper
 │   │   ├── sandbox.ts   # Sandbox Executor (Runtime + Fallbacks)
+│   │   ├── session.ts   # Session persistence & restore
 │   │   ├── tasks.ts     # Task Tracker (Markdown based)
 │   │   ├── tools.ts     # Tool Registry & Implementations
 │   │   └── undo.ts      # Change tracking & Revert logic
@@ -56,3 +59,12 @@ Implemented in `src/core/tools.ts`:
 - **Auditor**: Pre-flight checks for all file/shell operations.
 - **Sandboxing**: OS-level isolation via `@anthropic-ai/sandbox-runtime` or native fallbacks (`sandbox-exec` on macOS, `firejail` on Linux).
 - **Permissions**: Granular Allow/Deny list stored in `.obsidian/settings.json`.
+- **KeyManager**: Secure API key storage (Keychain/secret-tool/encrypted file).
+- **PII Redactor**: Real-time sensitive data protection before LLM calls.
+- **Audit Logging**: Complete trail of all operations in `.obsidian/audit.log`.
+
+## 6. Session Management
+Sessions enable persistent, resumable work:
+- **Save**: `/exit` saves context, history, tasks to `.obsidian/sessions/<id>.json`
+- **Restore**: `/resume <id>` restores full session state
+- **Diff Tracking**: File changes stored for review via `/diff`

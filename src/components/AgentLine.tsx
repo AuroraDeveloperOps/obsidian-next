@@ -7,12 +7,13 @@ interface AgentLineProps {
     isStreaming?: boolean;
 }
 
-const flareAnim = ["·", "▪", "▚", "❖", "✦", "✹", "✦", "▪"];
+// Static processing indicator - no animation to prevent flickering
+const PROCESSING_INDICATOR = "◆";
 
-// Only short messages with these exact patterns trigger animation
+// Only short messages with these exact patterns show processing state
 const isProcessingMessage = (content: string): boolean => {
     const lower = content.toLowerCase().trim();
-    // Only animate for short status messages, not full responses
+    // Only show processing for short status messages, not full responses
     if (content.length > 100) return false;
     // Must end with ... or be a known short status
     return lower.endsWith('...') ||
@@ -25,16 +26,6 @@ const isProcessingMessage = (content: string): boolean => {
 
 export const AgentLine: React.FC<AgentLineProps> = ({ content, isStreaming }) => {
     const isProcessing = isStreaming || isProcessingMessage(content);
-
-    const [frame, setFrame] = React.useState(0);
-
-    React.useEffect(() => {
-        if (!isProcessing) return;
-        const interval = setInterval(() => {
-            setFrame((prev) => (prev + 1) % flareAnim.length);
-        }, 100);
-        return () => clearInterval(interval);
-    }, [isProcessing]);
 
     // Check if content has markdown (code blocks, headers, lists)
     const hasMarkdown = content.includes('```') ||
@@ -52,7 +43,7 @@ export const AgentLine: React.FC<AgentLineProps> = ({ content, isStreaming }) =>
             <Box flexDirection="row">
                 <Box marginRight={1}>
                     {isProcessing ? (
-                        <Text color="yellow">{flareAnim[frame]}</Text>
+                        <Text color="yellow">{PROCESSING_INDICATOR}</Text>
                     ) : (
                         <Text color="cyan">*</Text>
                     )}

@@ -14,6 +14,19 @@ Welcome to the comprehensive documentation for **Obsidian Next**.
 - **[Tools Reference](TOOLS.md)**: Detailed API reference for the 8 built-in tools (`bash`, `read`, `edit`, etc.) and their safety limits.
 - **[Sandboxing](SANDBOX.md)**: How to configure and verify OS-level isolation (`@anthropic-ai/sandbox-runtime`).
 
+## Session Management
+
+Obsidian Next supports persistent sessions for long-running tasks:
+
+| Command | Description |
+|---------|-------------|
+| `/init` | Interactive setup (API key, model selection) |
+| `/exit` | Save session and exit gracefully |
+| `/resume` | List/restore saved sessions |
+| `/diff` | View file change history |
+
+Sessions are stored in `.obsidian/sessions/` and preserve context, history, tasks, and cost tracking.
+
 ## Product Specs
 
 - **[Product Requirements (PRD)](PRD.md)**: The "Final" approved specification for Obsidian Next functionality.

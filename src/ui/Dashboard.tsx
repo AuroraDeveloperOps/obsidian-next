@@ -7,7 +7,13 @@ import { keyManager } from '../core/keyManager.js';
 import { usage } from '../core/usage.js';
 import { AgentEvent } from '../events/types.js';
 
-const flareAnim = ["·", "▪", "▚", "❖", "✦", "✹", "✦", "▪"];
+// Character sprite for header
+const SPRITE = [
+    "▐▛█████████▜▌",
+    "▐██▄     ▄██▌",
+    "▐██   ▄   ██▌",
+    "▐▙▄▄▄▄▄▄▄▄▄▟▌",
+];
 
 interface DashboardState {
     model: string;
@@ -18,7 +24,6 @@ interface DashboardState {
 }
 
 export const Dashboard: React.FC = () => {
-    const [flareFrame, setFlareFrame] = useState(0);
     const [columns, setColumns] = useState(process.stdout.columns || 80);
     const [state, setState] = useState<DashboardState>({
         model: 'Loading...',
@@ -93,14 +98,6 @@ export const Dashboard: React.FC = () => {
         };
     }, []);
 
-    // Flare animation
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setFlareFrame((prev) => (prev + 1) % flareAnim.length);
-        }, 100);
-        return () => clearInterval(interval);
-    }, []);
-
     const showExtended = columns >= 80;
     const showFull = columns >= 100;
 
@@ -130,49 +127,50 @@ export const Dashboard: React.FC = () => {
             paddingX={1}
             paddingY={0}
         >
-            {/* Main Header Row */}
-            <Box justifyContent="space-between" flexDirection="row">
-                {/* Left: Title and Status */}
-                <Box>
-                    <Text bold color="red">OBSIDIAN</Text>
-                    <Text color="gray"> </Text>
-                    <Text color="yellow">{flareAnim[flareFrame]}</Text>
-                    <Text color="gray"> </Text>
-                    <Text color={modeColor}>[{state.mode.toUpperCase()}]</Text>
+            {/* Header with Sprite */}
+            <Box flexDirection="row">
+                {/* Left: Character Sprite */}
+                <Box flexDirection="column" marginRight={2}>
+                    {SPRITE.map((line, i) => (
+                        <Text key={i} color="red">{line}</Text>
+                    ))}
                 </Box>
 
-                {/* Center: Model */}
-                <Box>
-                    <Text color="gray">Model: </Text>
-                    <Text color="white" bold>{state.model}</Text>
-                </Box>
+                {/* Right: Info Panel */}
+                <Box flexDirection="column" justifyContent="center" flexGrow={1}>
+                    {/* Title Row */}
+                    <Box>
+                        <Text bold color="red">OBSIDIAN</Text>
+                        <Text color="gray"> </Text>
+                        <Text color={modeColor}>[{state.mode.toUpperCase()}]</Text>
+                    </Box>
 
-                {/* Right: Key Status and Cost */}
-                <Box>
-                    <Text color={keyColor}>{keyIcon}</Text>
-                    <Text color="gray"> Key </Text>
-                    {showExtended && (
-                        <>
-                            <Text color="gray">| </Text>
-                            <Text color="green">${state.sessionCost.toFixed(4)}</Text>
-                        </>
+                    {/* Model Row */}
+                    <Box>
+                        <Text color="gray">Model: </Text>
+                        <Text color="white" bold>{state.model}</Text>
+                    </Box>
+
+                    {/* Status Row */}
+                    <Box>
+                        <Text color={keyColor}>{keyIcon}</Text>
+                        <Text color="gray"> Key </Text>
+                        {showExtended && (
+                            <>
+                                <Text color="gray">| </Text>
+                                <Text color="green">${state.sessionCost.toFixed(4)}</Text>
+                            </>
+                        )}
+                    </Box>
+
+                    {/* Help Row */}
+                    {showFull && (
+                        <Text color="gray" dimColor>
+                            Shift+Tab: mode | /help: commands
+                        </Text>
                     )}
                 </Box>
             </Box>
-
-            {/* Extended Info Row (on wider terminals) */}
-            {showFull && (
-                <Box justifyContent="space-between" marginTop={0}>
-                    <Text color="gray" dimColor>
-                        {state.workspace.length > 50
-                            ? '...' + state.workspace.slice(-47)
-                            : state.workspace}
-                    </Text>
-                    <Text color="gray" dimColor>
-                        Shift+Tab: mode | /help: commands | /settings: menu
-                    </Text>
-                </Box>
-            )}
         </Box>
     );
 };
