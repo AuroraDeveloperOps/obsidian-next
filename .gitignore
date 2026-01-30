@@ -41,6 +41,9 @@ yarn-error.log*
 .agent/memory
 .agent/sessions
 
+# Obsidian CLI
+.obsidian/
+
 # Internal Dev
 docs/RESEARCH.md
 calculator.js

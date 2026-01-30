@@ -7,10 +7,15 @@ interface AgentLineProps {
 
 export const AgentLine: React.FC<AgentLineProps> = ({ content }) => {
     return (
-        <Box>
-            <Text color="white">
-                <Text bold>*</Text> {content}
-            </Text>
+        <Box flexDirection="row">
+            <Box marginRight={1}>
+                <Text color="white" bold>*</Text>
+            </Box>
+            <Box flexGrow={1}>
+                <Text color="white">
+                    {content}
+                </Text>
+            </Box>
         </Box>
     );
 };
