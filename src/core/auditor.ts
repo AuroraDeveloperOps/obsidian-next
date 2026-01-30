@@ -20,10 +20,14 @@ const BLOCKED_PATTERNS = [
     'dd if=',
     'chmod -R 777',
     ':(){ :|:& };:',
-    'curl | sh',        // Pipe to shell
-    'wget | sh',
-    'curl | bash',
-    'wget | bash',
+];
+
+// Regex patterns for more complex dangerous commands
+const BLOCKED_REGEX_PATTERNS = [
+    /curl\s+[^\|]+\|\s*(sh|bash)/i,     // curl URL | sh/bash
+    /wget\s+[^\|]+\|\s*(sh|bash)/i,     // wget URL | sh/bash
+    /curl\s*\|\s*(sh|bash)/i,           // curl | sh/bash (direct)
+    /wget\s*\|\s*(sh|bash)/i,           // wget | sh/bash (direct)
 ];
 
 // Patterns that require user approval (potentially destructive)
@@ -49,11 +53,20 @@ export class Auditor {
     async checkCommand(command: string): Promise<AuditResult> {
         const lowerCommand = command.toLowerCase();
 
-        // Check for blocked patterns (always denied - hardcoded safety)
+        // Check for blocked string patterns (always denied - hardcoded safety)
         if (BLOCKED_PATTERNS.some(p => command.includes(p))) {
             return {
                 approved: false,
                 reason: 'Detected destructive command pattern',
+                isCritical: true
+            };
+        }
+
+        // Check for blocked regex patterns (e.g., curl URL | sh)
+        if (BLOCKED_REGEX_PATTERNS.some(p => p.test(command))) {
+            return {
+                approved: false,
+                reason: 'Detected dangerous pipe-to-shell pattern',
                 isCritical: true
             };
         }
@@ -78,8 +91,10 @@ export class Auditor {
         // Check for patterns that require approval
         for (const { pattern, reason } of APPROVAL_PATTERNS) {
             if (lowerCommand.includes(pattern.toLowerCase())) {
+                // Return approved: false to signal that approval is REQUIRED
+                // The tools layer will request user approval before execution
                 return {
-                    approved: true,
+                    approved: false,
                     requiresApproval: true,
                     reason: reason
                 };
@@ -89,8 +104,9 @@ export class Auditor {
         // Check mode - in safe mode, everything needs approval
         const s = await settings.load();
         if (s.mode === 'safe') {
+            // Return approved: false to enforce approval in safe mode
             return {
-                approved: true,
+                approved: false,
                 requiresApproval: true,
                 reason: 'Safe mode requires approval for all commands'
             };

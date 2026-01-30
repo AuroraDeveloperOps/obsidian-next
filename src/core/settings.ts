@@ -31,6 +31,16 @@ export const SettingsSchema = z.object({
         deny: z.array(z.string()).default([]),
     }).default({}),
 
+    // Security settings
+    security: z.object({
+        // PII redaction before sending to LLM
+        piiRedaction: z.boolean().default(true),
+        // Audit logging of all commands
+        auditLogging: z.boolean().default(true),
+        // Key storage backend preference
+        keyBackend: z.enum(['auto', 'keychain', 'secret-tool', 'encrypted-file', 'env']).default('auto'),
+    }).default({}),
+
     // UI preferences
     ui: z.object({
         syntaxHighlight: z.boolean().default(true),
@@ -52,6 +62,11 @@ const DEFAULT_SETTINGS: Settings = {
     permissions: {
         allow: [],  // Empty - user builds their own allow list
         deny: [],
+    },
+    security: {
+        piiRedaction: true,      // Enabled by default - protects user privacy
+        auditLogging: true,      // Enabled by default - for accountability
+        keyBackend: 'auto',      // Auto-detect best available backend
     },
     ui: {
         syntaxHighlight: true,
@@ -123,6 +138,9 @@ class SettingsManager {
         }
         if (newSettings.permissions) {
             merged.permissions = { ...current.permissions, ...newSettings.permissions };
+        }
+        if (newSettings.security) {
+            merged.security = { ...current.security, ...newSettings.security };
         }
         if (newSettings.ui) {
             merged.ui = { ...current.ui, ...newSettings.ui };
