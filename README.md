@@ -7,7 +7,7 @@
 ![Release](https://img.shields.io/badge/Release-Pre--Alpha_(Early_Dev)-critical)
 ![Security](https://img.shields.io/badge/Security-Zero_Trust_Roadmap-orange)
 
-**Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
+**Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
 
 ---
 
@@ -56,12 +56,25 @@ Fully detailed documentation is available in the **[docs/](docs/README.md)** dir
 
 ---
 
-## Quick Start
+## Installation
 
-### Prerequisites
-- Node.js v20+
+### Primary Method (NPM)
 
-### Installation
+Install the CLI globally to run it from anywhere:
+
+```bash
+npm install -g obsidian-next
+```
+
+Or run it instantly without installation using `npx`:
+
+```bash
+npx obsidian-next
+```
+
+### Development Setup (From Source)
+
+For contributors or those who want to run the latest development build:
 
 ```bash
 # 1. Clone the repository
@@ -108,6 +121,12 @@ This project adheres to strict industry standards:
 
 We strictly enforce **Conventional Commits** and professional standards (no emojis in code).
 See **[CONTRIBUTING.md](CONTRIBUTING.md)** for branch naming conventions (`username-feature/description`).
+
+## Team
+
+**Obsidian Next** is maintained by **Aurora Labs**, the applied research division of the **Aurora Foundation**. We focus on building the next generation of zero-trust AI infrastructure, including strictly typed agent topologies and secure cognitive architectures.
+
+---
 
 ## License
 
