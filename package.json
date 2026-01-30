@@ -4,6 +4,28 @@
     "description": "Next-gen AI Agent CLI",
     "main": "dist/index.js",
     "type": "module",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/auroradeveloperops/obsidian-next.git"
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "keywords": [
+        "ai",
+        "agent",
+        "cli",
+        "mcp",
+        "anthropic",
+        "terminal",
+        "automation"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
     "bin": {
         "obsidian": "dist/index.js",
         "obsidian-mcp": "dist/mcp.js"
