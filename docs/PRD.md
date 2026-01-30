@@ -49,13 +49,22 @@ We must implement a `CommandRegistry` to handle these local-only ops.
 
 | Command | Description |
 |---------|-------------|
+| `/help` | Show available commands. |
 | `/init` | Initialize `.obsidian/config.json`. |
-| `/config`| Open interactive config editor (in-CLI). |
+| `/config`| View/edit configuration settings. |
 | `/models`| List/Select models (Claude, Ollama, OpenAI). |
 | `/clear` | Clear context window (start fresh). |
 | `/doctor`| Debug connectivity and tools. |
 | `/cost` | **Session** cost. Current tokens and price for *this* interaction. |
 | `/usage` | **Historical** usage. Yearly, Monthly, Daily breakdown of costs. |
+| `/status`| Show system status (mode, sandbox, context). |
+| `/mode` | Set execution mode (auto/plan/safe). |
+| `/task` | View/manage current task progress. |
+| `/tool` | Execute tools manually (power users). |
+| `/sandbox`| Toggle sandbox mode for secure execution. |
+| `/undo` | Undo recent file changes. |
+
+**Note**: Git operations (commit, push, etc.) are handled by the AI via the bash tool.
 
 
 ## 5. Strict Event Protocol (JSON Schema)

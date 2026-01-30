@@ -2,13 +2,21 @@ import React from 'react';
 import { Box, Text } from 'ink';
 
 export const COMMANDS = [
-    { name: '/init', desc: 'Initialize configuration' },
     { name: '/help', desc: 'Show available commands' },
-    { name: '/exit', desc: 'Exit the CLI' },
-    { name: '/clear', desc: 'Clear history' },
+    { name: '/init', desc: 'Initialize configuration' },
+    { name: '/config', desc: 'View/edit configuration' },
+    { name: '/models', desc: 'Select AI model' },
+    { name: '/mode', desc: 'Set mode (auto/plan/safe)' },
+    { name: '/clear', desc: 'Clear conversation' },
     { name: '/cost', desc: 'Show session cost' },
     { name: '/usage', desc: 'Show historical usage' },
-    { name: '/models', desc: 'Select AI model' },
+    { name: '/status', desc: 'Show system status' },
+    { name: '/task', desc: 'View current task' },
+    { name: '/tool', desc: 'Execute tools manually' },
+    { name: '/sandbox', desc: 'Toggle sandbox mode' },
+    { name: '/undo', desc: 'Undo file changes' },
+    { name: '/doctor', desc: 'Run diagnostics' },
+    { name: '/exit', desc: 'Exit the CLI' },
 ];
 
 interface CommandPopupProps {
