@@ -12,7 +12,6 @@ import { taskCommand } from '../commands/task.js';
 import { undoCommand } from '../commands/undo.js';
 import { configCommand } from '../commands/config.js';
 import { doctorCommand } from '../commands/doctor.js';
-import { commitCommand, branchCommand, diffCommand, pushCommand, pullCommand, logCommand } from '../commands/git.js';
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -50,14 +49,6 @@ export class CommandRegistry {
         this.register('undo', 'Undo recent file changes', undoCommand);
         this.register('config', 'View/edit configuration', configCommand);
         this.register('doctor', 'Run system diagnostics', doctorCommand);
-
-        // Git commands
-        this.register('commit', 'Commit staged changes', commitCommand);
-        this.register('branch', 'List/create/switch branches', branchCommand);
-        this.register('diff', 'Show uncommitted changes', diffCommand);
-        this.register('push', 'Push to remote', pushCommand);
-        this.register('pull', 'Pull from remote', pullCommand);
-        this.register('log', 'Show recent commits', logCommand);
     }
 
     register(name: string, description: string, handler: CommandHandler) {

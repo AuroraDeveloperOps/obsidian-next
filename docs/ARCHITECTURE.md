@@ -4,17 +4,30 @@
 ```
 obsidian-next/
 ├── .agent/              # AI Rules & Skills
+├── .obsidian/           # Runtime data (config, context, history)
 ├── docs/                # PRD, Design, Research
 ├── src/
-│   ├── agents/          # Logic (Supervisor, Planner)
-│   ├── components/      # Ink UI (Spinner, Tables)
+│   ├── agents/          # Logic (Supervisor)
+│   ├── commands/        # Slash command handlers
+│   ├── components/      # Ink UI (Spinner, Prompts, DiffView)
 │   ├── core/
-│   │   ├── bus.ts       # EventBus (RxJS/EventEmitter)
-│   │   ├── config.ts    # Config Loader
-│   │   └── queue.ts     # Redis Queue Wrapper
-│   ├── app.tsx          # Ink Entry Point
+│   │   ├── agent.ts     # Main agent loop
+│   │   ├── auditor.ts   # Security checks
+│   │   ├── bus.ts       # EventBus (TypedEventEmitter)
+│   │   ├── commands.ts  # Command registry
+│   │   ├── config.ts    # Config loader
+│   │   ├── context.ts   # Working memory
+│   │   ├── history.ts   # Conversation history
+│   │   ├── llm.ts       # Anthropic API client
+│   │   ├── sandbox.ts   # Sandbox execution
+│   │   ├── tasks.ts     # Task tracking
+│   │   ├── tools.ts     # Tool execution framework
+│   │   ├── undo.ts      # Undo system
+│   │   └── usage.ts     # Cost tracking
+│   ├── events/          # Event type definitions
+│   ├── ui/              # Main UI components (Root, Dashboard)
 │   └── index.ts         # CLI Entry Point
-├── tests/               # Playwright/Vitest
+├── tests/               # Vitest tests
 └── package.json
 ```
 
@@ -45,13 +58,23 @@ export class EventBus extends EventEmitter {
     - Emits `{ type: 'tool_result', ... }`.
 7.  **Render**: `App.tsx` listens to Bus and updates state.
 
-## 5. Memory Architecture (Zero Context Loss)
-- **Context Slices**: Dynamic subsets of files.
-  - `SliceManager` class maintains `Map<string, FileContent>`.
-  - **Auto-Slicing**: If user asks about "Login", `pgvector` finds relevant files and auto-mounts the `@Auth` slice.
-- **Knowledge Chunks**: Code blocks are hashed and stored in Postgres.
+## 4. Tools (8 Available)
+| Tool | Description |
+|------|-------------|
+| `bash` | Execute shell commands (auditor-protected) |
+| `read` | Read file contents with line numbers |
+| `write` | Create new files |
+| `edit` | Search/replace in existing files |
+| `list` | List directory contents |
+| `grep` | Search file contents with regex |
+| `glob` | Find files by pattern |
+| `web_fetch` | Fetch content from URLs |
 
+## 5. MCP Integration (Planned)
+- `@modelcontextprotocol/sdk` is installed but not yet wired up
+- Tools are currently custom implementations
+- Future: Expose tools as MCP server for LSP integration
 
-## 4. Automation & CI
-- **GitHub Actions**: Run `vitest` on Push.
-- **Release**: `pkg` bundler to create binaries.
+## 6. Automation & CI
+- **GitHub Actions**: Run `vitest` on Push
+- **Release**: `pkg` bundler to create binaries
