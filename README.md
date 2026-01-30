@@ -64,13 +64,13 @@ Fully detailed documentation is available in the **[docs/](docs/README.md)** dir
 Recommended for quick evaluation only.
 
 ```bash
-npm install -g obsidian-next
+npm install -g @aurora-foundation/obsidian-next
 ```
 
 Or run it instantly without installation using `npx`:
 
 ```bash
-npx obsidian-next
+npx @aurora-foundation/obsidian-next
 ```
 
 > [!IMPORTANT]
