@@ -37,12 +37,10 @@ yarn-error.log*
 *.sln
 *.sw?
 
-# Agent
-.agent/memory
-.agent/sessions
-
 # Obsidian CLI
 .obsidian/
+.agent/
+.claude/
 
 # Internal Dev
 docs/RESEARCH.md
