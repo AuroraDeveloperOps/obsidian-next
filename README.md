@@ -60,7 +60,8 @@ Fully detailed documentation is available in the **[docs/](docs/README.md)** dir
 
 ### Primary Method (NPM)
 
-Install the CLI globally to run it from anywhere:
+**Latest development build direct from Aurora Labs.**
+Recommended for quick evaluation only.
 
 ```bash
 npm install -g obsidian-next
@@ -72,13 +73,17 @@ Or run it instantly without installation using `npx`:
 npx obsidian-next
 ```
 
+> [!IMPORTANT]
+> **Privacy & Open Source Priority**
+> We prioritize private, local execution and open-source security. For high-security environments, we strongly recommend the **Development Setup** (cloning and building locally) to ensure a 100% private, audited solution. The NPM installation is provided as an "easy setup" but is not the recommended path for production or sensitive deployments.
+
 ### Development Setup (From Source)
 
 For contributors or those who want to run the latest development build:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/obsidian-next.git
+git clone https://github.com/auroradeveloperops/obsidian-next.git
 cd obsidian-next
 
 # 2. Install dependencies
