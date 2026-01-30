@@ -328,6 +328,16 @@ cwd: ${process.cwd()}`;
                     type: 'number',
                     description: 'Maximum number of results (default: 50)'
                 }
+            },
+            glob: {
+                pattern: {
+                    type: 'string',
+                    description: 'Glob pattern like **/*.ts or src/**/*.tsx'
+                },
+                path: {
+                    type: 'string',
+                    description: 'Base directory (defaults to current directory)'
+                }
             }
         };
 
@@ -341,7 +351,8 @@ cwd: ${process.cwd()}`;
             write: ['path', 'content'],
             edit: ['path', 'search', 'replace'],
             list: [],
-            grep: ['pattern']
+            grep: ['pattern'],
+            glob: ['pattern']
         };
 
         return required[toolName] || [];

@@ -11,6 +11,7 @@ import { bus } from './bus.js';
 import { auditor } from './auditor.js';
 import { sandbox } from './sandbox.js';
 import { context } from './context.js';
+import { undo } from './undo.js';
 import { UserEvent } from '../events/types.js';
 
 const execAsync = promisify(exec);
@@ -263,8 +264,9 @@ export const WriteTool: Tool = {
             // Write file
             await fs.writeFile(fullPath, content, 'utf-8');
 
-            // Track in context
+            // Track in context and undo
             await context.trackModified(filePath);
+            await undo.recordChange(filePath, 'create', null, content);
 
             return {
                 success: true,
@@ -338,8 +340,9 @@ export const EditTool: Tool = {
             const modifiedLines = modified.split('\n').length;
             const delta = modifiedLines - originalLines;
 
-            // Track in context
+            // Track in context and undo
             await context.trackModified(filePath);
+            await undo.recordChange(filePath, 'edit', original, modified);
 
             return {
                 success: true,
@@ -544,6 +547,98 @@ async function searchDirectory(
 }
 
 /**
+ * Glob Tool - Fast file pattern matching
+ */
+export const GlobTool: Tool = {
+    name: 'glob',
+    description: 'Find files matching a glob pattern (e.g., **/*.ts, src/**/*.tsx)',
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const pattern = args.pattern as string;
+        const basePath = args.path as string || '.';
+
+        if (!pattern) {
+            return { success: false, error: 'No pattern provided' };
+        }
+
+        try {
+            const results: string[] = [];
+            const fullBase = path.resolve(process.cwd(), basePath);
+
+            await globSearch(fullBase, pattern, results, 100);
+
+            if (results.length === 0) {
+                return {
+                    success: true,
+                    output: `No files matching: ${pattern}`,
+                };
+            }
+
+            return {
+                success: true,
+                output: truncateOutput(`Found ${results.length} files:\n${results.join('\n')}`),
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Glob failed: ${error.message}`,
+            };
+        }
+    },
+};
+
+/**
+ * Glob search helper - matches files against patterns
+ */
+async function globSearch(
+    dir: string,
+    pattern: string,
+    results: string[],
+    maxResults: number,
+    depth: number = 0
+): Promise<void> {
+    if (results.length >= maxResults || depth > 15) return;
+
+    try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+
+        // Convert glob to regex
+        const regexPattern = pattern
+            .replace(/\*\*/g, '{{GLOBSTAR}}')
+            .replace(/\*/g, '[^/]*')
+            .replace(/\?/g, '.')
+            .replace(/{{GLOBSTAR}}/g, '.*');
+        const regex = new RegExp(`^${regexPattern}$`);
+
+        for (const entry of entries) {
+            if (results.length >= maxResults) break;
+
+            // Skip ignored directories
+            if (entry.name.startsWith('.') || IGNORED_DIRS.includes(entry.name)) {
+                continue;
+            }
+
+            const fullPath = path.join(dir, entry.name);
+            const relativePath = path.relative(process.cwd(), fullPath);
+
+            if (entry.isDirectory()) {
+                // If pattern starts with **, search subdirs
+                if (pattern.includes('**') || pattern.includes('/')) {
+                    await globSearch(fullPath, pattern, results, maxResults, depth + 1);
+                }
+            } else if (entry.isFile()) {
+                // Test against pattern
+                if (regex.test(relativePath) || regex.test(entry.name)) {
+                    results.push(relativePath);
+                }
+            }
+        }
+    } catch {
+        // Skip directories we can't read
+    }
+}
+
+/**
  * Tool Registry - Manages available tools
  */
 export class ToolRegistry {
@@ -557,6 +652,7 @@ export class ToolRegistry {
         this.register(EditTool);
         this.register(ListTool);
         this.register(GrepTool);
+        this.register(GlobTool);
     }
 
     register(tool: Tool): void {
