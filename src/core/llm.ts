@@ -4,7 +4,7 @@ import { bus } from './bus.js';
 import { usage } from './usage.js';
 import { tools } from './tools.js';
 import { redactor } from './redactor.js';
-import { keyManager } from './keyManager.js';
+import { keyManager, detectEnvFile } from './keyManager.js';
 
 const MAX_TOOL_ITERATIONS = 10;
 
@@ -20,18 +20,47 @@ export class LLMClient {
         const cfg = await config.load();
         await usage.init();
 
-        // Try to load API key via KeyManager (supports keychain, secret-tool, encrypted file)
-        let apiKey = await keyManager.loadKey();
-
-        // Fallback to config if KeyManager didn't find a key
-        if (!apiKey) {
-            apiKey = cfg.apiKey || null;
+        // Check for .env file and warn user (we no longer auto-load .env)
+        const envFileCheck = await detectEnvFile(process.cwd());
+        if (envFileCheck.found) {
+            bus.emitAgent({
+                type: 'thought',
+                content: `[WARN] Found .env file with API key at ${envFileCheck.path}. For security, run /init to migrate to secure storage.`,
+                hidden: false
+            });
         }
+
+        // Check for deprecated apiKey in config and offer migration
+        if (config.hasDeprecatedKey()) {
+            const deprecatedKey = config.getDeprecatedApiKey();
+            if (deprecatedKey) {
+                bus.emitAgent({
+                    type: 'thought',
+                    content: '[WARN] Found API key in config file. Migrating to secure storage...',
+                    hidden: false
+                });
+
+                // Migrate to KeyManager
+                const result = await keyManager.storeKey(deprecatedKey);
+                if (result.success) {
+                    await config.removeApiKeyFromConfig();
+                    bus.emitAgent({
+                        type: 'thought',
+                        content: `[INFO] API key migrated to ${result.backend}. Config file cleaned.`,
+                        hidden: false
+                    });
+                }
+            }
+        }
+
+        // Load API key exclusively via KeyManager
+        // Supports: environment variable, macOS keychain, Linux secret-tool, encrypted file
+        const apiKey = await keyManager.loadKey();
 
         if (!apiKey) {
             bus.emitAgent({
                 type: 'error',
-                message: 'Missing ANTHROPIC_API_KEY. Set via environment, keychain, or /init command.'
+                message: 'Missing API key. Run /init to set up secure key storage, or set ANTHROPIC_API_KEY environment variable.'
             });
             return false;
         }
@@ -46,7 +75,7 @@ export class LLMClient {
         if (backend && backend !== 'env') {
             bus.emitAgent({
                 type: 'thought',
-                content: `API key loaded from: ${backend}`,
+                content: `[INFO] API key loaded from: ${backend}`,
                 hidden: true
             });
         }

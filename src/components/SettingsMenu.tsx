@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { settings, Settings } from '../core/settings.js';
+import { bus } from '../core/bus.js';
 
-type MenuView = 'categories' | 'mode' | 'security' | 'ui' | 'permissions';
+type MenuView = 'categories' | 'mode' | 'security' | 'ui' | 'permissions' | 'commands' | 'plan-confirm';
 
 interface SettingsMenuProps {
     onClose: () => void;
@@ -53,10 +54,11 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose }) => {
         switch (view) {
             case 'categories':
                 return [
-                    { key: 'mode', label: 'Execution Mode', type: 'category', description: `Current: ${currentSettings.mode}` },
+                    { key: 'mode', label: 'Execution Mode', type: 'category', description: `Current: ${currentSettings.mode} (Shift+Tab to cycle)` },
                     { key: 'security', label: 'Security', type: 'category', description: 'PII redaction, audit logging' },
                     { key: 'ui', label: 'UI Preferences', type: 'category', description: 'Syntax highlighting, colors' },
                     { key: 'permissions', label: 'Permissions', type: 'category', description: 'Allow/deny lists' },
+                    { key: 'commands', label: 'Commands', type: 'category', description: 'Quick access to slash commands' },
                     { key: 'close', label: 'Close Settings', type: 'action' },
                 ];
 
@@ -95,6 +97,25 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose }) => {
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
 
+            case 'commands':
+                return [
+                    { key: 'cmd:init', label: '/init', type: 'action', description: 'Initialize configuration' },
+                    { key: 'cmd:config', label: '/config', type: 'action', description: 'Edit configuration' },
+                    { key: 'cmd:status', label: '/status', type: 'action', description: 'Show system status' },
+                    { key: 'cmd:cost', label: '/cost', type: 'action', description: 'Show session cost' },
+                    { key: 'cmd:clear', label: '/clear', type: 'action', description: 'Clear conversation' },
+                    { key: 'cmd:exit', label: '/exit', type: 'action', description: 'Save and exit' },
+                    { key: 'back', label: 'Back', type: 'action' },
+                ];
+
+            case 'plan-confirm':
+                return [
+                    { key: 'plan-execute', label: 'Execute Plan', type: 'action', description: 'Approve and execute the planned actions' },
+                    { key: 'plan-modify', label: 'Modify Plan', type: 'action', description: 'Request changes to the plan' },
+                    { key: 'plan-cancel', label: 'Cancel', type: 'action', description: 'Discard the plan' },
+                    { key: 'plan-details', label: 'View Details', type: 'action', description: 'Show full plan details' },
+                ];
+
             default:
                 return [];
         }
@@ -115,10 +136,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose }) => {
                     const nextBackend = backends[(currentIdx + 1) % backends.length];
                     await saveAndUpdate({ security: { ...currentSettings.security, keyBackend: nextBackend } });
                 } else if (item.key === 'viewAllow') {
-                    // Show allow list (just display for now)
+                    // Already shown in permissions view
                 } else if (item.key === 'viewDeny') {
-                    // Show deny list
-                } else {
+                    // Already shown in permissions view
+                } else if (['mode', 'security', 'ui', 'permissions', 'commands'].includes(item.key)) {
                     setView(item.key as MenuView);
                 }
                 break;
@@ -156,6 +177,23 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose }) => {
                     await saveAndUpdate({ permissions: { ...currentSettings.permissions, allow: [] } });
                 } else if (item.key === 'clearDeny') {
                     await saveAndUpdate({ permissions: { ...currentSettings.permissions, deny: [] } });
+                } else if (item.key.startsWith('cmd:')) {
+                    // Execute command
+                    const cmd = item.key.replace('cmd:', '/');
+                    onClose();
+                    // Emit user input to trigger the command
+                    bus.emitUser({ type: 'user_input', content: cmd });
+                } else if (item.key === 'plan-execute') {
+                    // Approve plan execution
+                    bus.emitUser({ type: 'approval_response', approved: true, requestId: 'plan' });
+                    onClose();
+                } else if (item.key === 'plan-cancel') {
+                    bus.emitUser({ type: 'approval_response', approved: false, requestId: 'plan' });
+                    onClose();
+                } else if (item.key === 'plan-modify') {
+                    // Request modifications - emit a user message
+                    bus.emitUser({ type: 'user_input', content: 'Please modify the plan' });
+                    onClose();
                 }
                 break;
         }
@@ -206,6 +244,8 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose }) => {
             case 'security': return 'Security Settings';
             case 'ui': return 'UI Preferences';
             case 'permissions': return 'Permission Lists';
+            case 'commands': return 'Quick Commands';
+            case 'plan-confirm': return 'Plan Review';
             default: return 'Settings';
         }
     };
@@ -219,10 +259,22 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose }) => {
             paddingY={0}
             marginY={1}
         >
-            {/* Header */}
+            {/* Header with Mode Indicator */}
             <Box marginBottom={1} justifyContent="space-between">
                 <Text bold color="cyan">[*] {getViewTitle()}</Text>
-                {saving && <Text color="yellow">Saving...</Text>}
+                <Box>
+                    {saving && <Text color="yellow">Saving... </Text>}
+                    <Text color="gray">Mode: </Text>
+                    <Text
+                        color={
+                            currentSettings.mode === 'auto' ? 'green' :
+                            currentSettings.mode === 'plan' ? 'yellow' : 'white'
+                        }
+                        bold
+                    >
+                        {currentSettings.mode.toUpperCase()}
+                    </Text>
+                </Box>
             </Box>
 
             {/* Menu Items */}
@@ -299,7 +351,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose }) => {
             {/* Instructions */}
             <Box borderStyle="single" borderColor="gray" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} paddingTop={0}>
                 <Text color="gray" dimColor>
-                    Arrows: navigate | Enter: select/toggle | Esc: back | 1-9: quick select
+                    Arrows: navigate | Enter: select | Esc: back | Shift+Tab: cycle mode
                 </Text>
             </Box>
         </Box>

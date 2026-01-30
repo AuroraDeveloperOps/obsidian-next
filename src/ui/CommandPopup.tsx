@@ -17,7 +17,9 @@ export const COMMANDS = [
     { name: '/undo', desc: 'Undo file changes' },
     { name: '/doctor', desc: 'Run diagnostics' },
     { name: '/settings', desc: 'View/edit settings' },
-    { name: '/exit', desc: 'Exit the CLI' },
+    { name: '/exit', desc: 'Save session and exit' },
+    { name: '/resume', desc: 'Restore saved session' },
+    { name: '/diff', desc: 'View file changes' },
 ];
 
 interface CommandPopupProps {

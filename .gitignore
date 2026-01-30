@@ -50,3 +50,5 @@ calculator.test.js
 CONTINUE.md
 PLAN.md
 test-workspace/
+workspace/
+workspace/*

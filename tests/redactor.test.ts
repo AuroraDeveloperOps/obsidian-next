@@ -96,8 +96,8 @@ describe('Redactor', () => {
         });
 
         it('should redact Stripe keys', () => {
-            // Using FAKE_KEY_ prefix to avoid GitHub secret scanning
-            const input = 'stripe_key: [REDACTED]';
+            // Stripe keys must be at least 24 chars after prefix to match pattern
+            const input = 'stripe_key: [REDACTED_PREFIX]FakeKeyForTestingPurposes12345';
             const result = redactor.redact(input);
 
             expect(result.text).not.toContain('[REDACTED_PREFIX]');
