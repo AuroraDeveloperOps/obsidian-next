@@ -4,7 +4,8 @@
 
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-![Status](https://img.shields.io/badge/Status-Active_Development-green)
+![Release](https://img.shields.io/badge/Release-Pre--Alpha_(Early_Dev)-critical)
+![Security](https://img.shields.io/badge/Security-Zero_Trust_Roadmap-orange)
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
 
@@ -27,7 +28,21 @@ The `workspace/` directory is a dedicated environment where **Polyoxy** is curre
 
 - **Status**: Internal Evaluation / Pre-release.
 - **Benchmarks**: Comprehensive safety and performance benchmarks are running. Results will be published soon.
-- **Security**: This environment implements an **Apple Keychain-like Rotating Variable System**. This mechanism rotates API keys and sensitive environment variables automatically, ensuring maximum security during long-running agent sessions.
+- **Evaluation Goal**: The current workspace is used to stress-test the Auditor's ability to catch malicious patterns in a controlled environment.
+
+## Security Roadmap
+
+We are committed to **100% Zero Trust AI Automation**. Our roadmap focuses on eliminating implicit trust at every layer:
+
+1.  **Apple Keychain-like Rotating Key System** (In Progress):
+    - A secure, encrypted vault for API keys that rotates secrets automatically during long-running sessions.
+    - Ensures that no static keys exist in memory or on disk for longer than the session duration.
+2.  **Hardware-Level Sandboxing**:
+    - Integration with native OS hypervisors (Apple Virtualization Framework) for true VM isolation.
+3.  **Real-Time PII Redaction**:
+    - Pre-flight auditing to strip Personally Identifiable Information (PII) before it hits the LLM context.
+4.  **Signed Execution**:
+    - Only allowing cryptographically signed tool definitions to run.
 
 ## Documentation Directory
 
