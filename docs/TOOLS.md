@@ -47,6 +47,32 @@ List files and directories.
 **Parameters:**
 - `path` (string, optional): Directory to list (defaults to current)
 
+### grep
+Search for patterns in files using regex.
+
+**Parameters:**
+- `pattern` (string, required): Regex pattern to search for
+- `path` (string, optional): Directory to search (defaults to current)
+- `limit` (number, optional): Maximum results (default: 50)
+
+### glob
+Find files matching a glob pattern.
+
+**Parameters:**
+- `pattern` (string, required): Glob pattern (e.g., **/*.ts)
+- `path` (string, optional): Base directory (defaults to current)
+
+### web_fetch
+Fetch content from URLs (documentation, APIs, etc.).
+
+**Parameters:**
+- `url` (string, required): URL to fetch
+
+**Safety:**
+- Cannot fetch from localhost/private addresses
+- 10 second timeout
+- Large responses are truncated
+
 ## Usage
 
 ### From the AI

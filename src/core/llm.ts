@@ -338,6 +338,12 @@ cwd: ${process.cwd()}`;
                     type: 'string',
                     description: 'Base directory (defaults to current directory)'
                 }
+            },
+            web_fetch: {
+                url: {
+                    type: 'string',
+                    description: 'URL to fetch content from'
+                }
             }
         };
 
@@ -352,7 +358,8 @@ cwd: ${process.cwd()}`;
             edit: ['path', 'search', 'replace'],
             list: [],
             grep: ['pattern'],
-            glob: ['pattern']
+            glob: ['pattern'],
+            web_fetch: ['url']
         };
 
         return required[toolName] || [];
