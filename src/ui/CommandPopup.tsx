@@ -33,8 +33,6 @@ export const CommandPopup = ({ matches, selectedIndex }: CommandPopupProps) => {
     return (
         <Box
             flexDirection="column"
-            borderStyle="round"
-            borderColor="gray"
             paddingX={1}
             marginBottom={0}
             width="100%"
