@@ -10,6 +10,7 @@
 
 import { bus } from './bus.js';
 import { config } from './config.js';
+import { settings } from './settings.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
@@ -86,9 +87,15 @@ export class SandboxExecutor {
     async initialize(): Promise<boolean> {
         try {
             const cfg = await config.load();
+            const s = await settings.load();
 
-            // Check if sandbox mode is requested
-            this.mode = (cfg as any).executionMode || 'local';
+            // Check if sandbox mode is requested via Config OR Settings
+            if ((cfg as any).executionMode === 'sandbox' || s.security.sandbox) {
+                this.mode = 'sandbox';
+            } else {
+                this.mode = 'local';
+            }
+
             this.config = {
                 ...DEFAULT_SANDBOX_CONFIG,
                 ...((cfg as any).sandbox || {}),
@@ -126,13 +133,14 @@ export class SandboxExecutor {
 
                 return true;
             } catch (importError: any) {
-                // Sandbox runtime not available, fall back to local mode
+                // Sandbox runtime not available, do NOT revert to local.
+                // We will fall back to wrapWithNativeSandbox in wrapCommand.
                 bus.emitAgent({
-                    type: 'error',
-                    message: `Sandbox runtime unavailable: ${importError.message}. Using local mode.`,
+                    type: 'thought',
+                    content: `[SANDBOX] Runtime library unavailable. Falling back to native OS sandbox.`,
                 });
 
-                this.mode = 'local';
+                this.sandboxManager = null;
                 this.initialized = true;
                 return true;
             }
@@ -231,7 +239,7 @@ export class SandboxExecutor {
 
         bus.emitAgent({
             type: 'thought',
-            content: `[SANDBOX] Execution mode set to: ${mode}`,
+            content: `[sandbox] Execution mode set to: ${mode}`,
         });
     }
 

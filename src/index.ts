@@ -5,11 +5,13 @@ import { Root } from './ui/Root.js';
 import { supervisor } from './agents/supervisor.js';
 
 async function main() {
-    process.stdout.write('\x1b[?1049h');
-    process.stdout.write('\x1Bc');
+    // process.stdout.write('\x1b[?1049h'); // Disable Alt Screen to allow native scrolling
+    process.stdout.write('\x1b[2J');     // Clear Screen
+    process.stdout.write('\x1b[3J');     // Clear Scrollback
+    process.stdout.write('\x1b[H');      // Move cursor to top-left
     const { waitUntilExit, cleanup } = render(React.createElement(Root), {
         patchConsole: false,
-        exitOnCtrlC: true
+        exitOnCtrlC: false
     });
 
     try {

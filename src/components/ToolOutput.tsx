@@ -7,7 +7,7 @@ interface ToolOutputProps {
     isError?: boolean;
 }
 
-const MAX_VISIBLE_LINES = 8;
+const MAX_VISIBLE_LINES = 4;
 
 /**
  * Colorize a line based on content type
@@ -70,14 +70,14 @@ export const ToolOutput: React.FC<ToolOutputProps> = ({ tool, output, isError })
             {/* First line with ⎿ prefix and checkmark */}
             <Box>
                 <Text color={isError ? 'red' : 'green'}>{isError ? '  ✗  ' : '  ⎿  '}</Text>
-                {colorizeLine(visibleLines[0] || '', isError)}
+                {colorizeLine(visibleLines[0] || '', isError || false)}
             </Box>
 
             {/* Additional lines with indentation */}
             {visibleLines.slice(1).map((line, i) => (
                 <Box key={i}>
                     <Text>     </Text>
-                    {colorizeLine(line, isError)}
+                    {colorizeLine(line, isError || false)}
                 </Box>
             ))}
 

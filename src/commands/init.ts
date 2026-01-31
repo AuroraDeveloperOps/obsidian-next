@@ -13,6 +13,7 @@ import { bus } from '../core/bus.js';
 import { config } from '../core/config.js';
 import { keyManager, detectEnvFile } from '../core/keyManager.js';
 import { CommandHandler } from '../core/commands.js';
+import { formatHeader } from '../utils/ui.js';
 
 // Helper to generate unique request IDs
 function generateRequestId(): string {
@@ -68,58 +69,71 @@ function waitForChoice(options: Array<{ id: string; label: string }>): Promise<s
 }
 
 export const initCommand: CommandHandler = async (args) => {
-    const isReset = args.includes('--reset') || args.includes('-r');
-    const skipKey = args.includes('--skip-key');
+    // Determine if we should show the menu loop or just run setup
+    // For now, always prefer menu unless explicitly scripted (future)
 
-    // Check for existing config
-    const configExists = await config.exists();
-    const hasKey = await keyManager.hasKey();
+    let running = true;
 
-    if (configExists && hasKey && !isReset) {
+    while (running) {
+        // Refresh config and key state before showing menu
+        await config.reload();
+        // Crucial: loadKey() ensures backend state is populated for getBackend()
+        const apiKey = await keyManager.loadKey();
         const backend = keyManager.getBackend();
+        const cfg = await config.load();
+
+        // Menu Options
+        const options = [
+            { id: 'setup', label: 'Run Full Setup (Key + Model)' },
+            { id: 'key', label: `Update API Key (Current: ${backend || 'Not set'})` },
+            { id: 'model', label: `Change Model (Current: ${cfg.model})` },
+            { id: 'status', label: 'Show Configuration Status' },
+            { id: 'exit', label: 'Exit' }
+        ];
+
         bus.emitAgent({
             type: 'thought',
-            content: [
-                '[INFO] Configuration already initialized.',
-                '',
-                `  Config:  ${config.getPath()}`,
-                `  API Key: Stored in ${backend || 'unknown'}`,
-                '',
-                'Use /init --reset to reconfigure.',
-            ].join('\n'),
+            content: formatHeader('Configuration Menu')
         });
-        bus.emitAgent({ type: 'done', summary: 'Already initialized.' });
-        return;
+
+        const choice = await waitForChoice(options);
+
+        switch (choice) {
+            case 'setup':
+                await setupApiKey(true); // Force reset
+                await setupModel();
+                await showSetupSummary();
+                break;
+            case 'key':
+                await setupApiKey(true);
+                break;
+            case 'model':
+                await setupModel();
+                break;
+            case 'status':
+                await showSetupSummary();
+                // Pause to let user read
+                bus.emitAgent({ type: 'thought', content: 'Press any key to continue...' }); // Placeholder, actually just loops
+                // In a real TUI we'd wait, here we just loop and the menu re-prints
+                break;
+            case 'exit':
+            case 'cancel':
+                running = false;
+                break;
+        }
+
+        if (running) {
+            bus.emitAgent({ type: 'thought', content: '\n' });
+        }
     }
-
-    bus.emitAgent({
-        type: 'thought',
-        content: [
-            '='.repeat(50),
-            'OBSIDIAN NEXT - Setup',
-            '='.repeat(50),
-            '',
-        ].join('\n'),
-    });
-
-    // Step 1: API Key Setup
-    if (!skipKey) {
-        await setupApiKey(isReset);
-    }
-
-    // Step 2: Model Selection
-    await setupModel();
-
-    // Step 3: Show summary
-    await showSetupSummary();
 
     bus.emitAgent({
         type: 'done',
-        summary: 'Initialization complete.',
+        summary: 'Configuration closed.',
     });
 };
 
-async function setupApiKey(isReset: boolean): Promise<void> {
+async function setupApiKey(forceReset: boolean): Promise<void> {
     const hasKey = await keyManager.hasKey();
 
     // Check for .env file
@@ -135,7 +149,9 @@ async function setupApiKey(isReset: boolean): Promise<void> {
         });
     }
 
-    if (hasKey && !isReset) {
+    if (hasKey && !forceReset) {
+        // Ensure backend info is available
+        await keyManager.loadKey();
         const backend = keyManager.getBackend();
         bus.emitAgent({
             type: 'thought',
@@ -147,7 +163,7 @@ async function setupApiKey(isReset: boolean): Promise<void> {
     bus.emitAgent({
         type: 'thought',
         content: [
-            '[Step 1/2] API Key Setup',
+            '[Setup] API Key',
             '',
             'Your API key will be stored securely using:',
             '  - macOS: Keychain',
@@ -199,7 +215,7 @@ async function setupApiKey(isReset: boolean): Promise<void> {
     if (result.success) {
         bus.emitAgent({
             type: 'thought',
-            content: `[OK] API key stored in ${result.backend}.\n`,
+            content: `\n[OK] API key stored in ${result.backend}.\n`,
         });
     } else {
         bus.emitAgent({
@@ -212,7 +228,7 @@ async function setupApiKey(isReset: boolean): Promise<void> {
 async function setupModel(): Promise<void> {
     bus.emitAgent({
         type: 'thought',
-        content: '[Step 2/2] Model Selection\n',
+        content: '[Setup] Model Selection\n',
     });
 
     const models = [
@@ -247,6 +263,7 @@ async function setupModel(): Promise<void> {
 
 async function showSetupSummary(): Promise<void> {
     const cfg = await config.load();
+    await keyManager.loadKey(); // Ensure backend state is populated
     const backend = keyManager.getBackend();
 
     const lines = [

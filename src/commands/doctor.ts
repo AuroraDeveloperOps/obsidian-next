@@ -4,8 +4,10 @@
 
 import { bus } from '../core/bus.js';
 import { config } from '../core/config.js';
+import { keyManager } from '../core/keyManager.js';
 import { tools } from '../core/tools.js';
 import { sandbox } from '../core/sandbox.js';
+import { formatHeader, formatFooter } from '../utils/ui.js';
 import Anthropic from '@anthropic-ai/sdk';
 
 interface CheckResult {
@@ -22,17 +24,20 @@ export async function doctorCommand(args: string[]): Promise<void> {
     // 1. Check configuration
     try {
         const cfg = await config.load();
-        if (cfg.apiKey) {
+        const apiKey = await keyManager.loadKey();
+        const backend = keyManager.getBackend();
+
+        if (apiKey) {
             results.push({
                 name: 'API Key',
                 status: 'ok',
-                message: `Configured (***${cfg.apiKey.slice(-4)})`
+                message: `Configured (${backend})`
             });
         } else {
             results.push({
                 name: 'API Key',
                 status: 'error',
-                message: 'Not set. Run /init or set ANTHROPIC_API_KEY'
+                message: 'Not set. Run /init to configure'
             });
         }
 
@@ -67,9 +72,9 @@ export async function doctorCommand(args: string[]): Promise<void> {
 
     // 4. Check API connectivity
     try {
-        const cfg = await config.load();
-        if (cfg.apiKey) {
-            const client = new Anthropic({ apiKey: cfg.apiKey });
+        const apiKey = await keyManager.loadKey();
+        if (apiKey) {
+            const client = new Anthropic({ apiKey });
             // Quick health check - just verify we can create a client
             // A full request would cost money, so we just verify the client instantiates
             results.push({
@@ -117,15 +122,12 @@ export async function doctorCommand(args: string[]): Promise<void> {
     };
 
     const output = [
-        'System Diagnostics',
-        '='.repeat(50),
-        '',
+        formatHeader('System Diagnostics'),
         ...results.map(r => {
             const icon = statusIcons[r.status];
             return `${icon.padEnd(6)} ${r.name.padEnd(12)} ${r.message}`;
         }),
-        '',
-        '='.repeat(50),
+        formatFooter(),
         `Total: ${results.filter(r => r.status === 'ok').length} OK, ` +
         `${results.filter(r => r.status === 'warn').length} warnings, ` +
         `${results.filter(r => r.status === 'error').length} errors`

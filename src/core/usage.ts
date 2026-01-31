@@ -26,10 +26,24 @@ const MODEL_PRICES: Record<string, { input: number; output: number }> = {
     'claude-3-sonnet': { input: 3.00, output: 15.00 },
 };
 
+const CONTEXT_WINDOW_SIZES: Record<string, number> = {
+    // Claude 4.5 Family
+    'claude-sonnet-4-5-20250929': 200_000,
+    'claude-haiku-4-5-20251001': 200_000,
+    'claude-opus-4-5-20251101': 200_000,
+    // Legacy (Claude 3.5 Family)
+    'claude-3-5-sonnet': 200_000,
+    'claude-3-5-haiku': 200_000,
+};
+
 export class UsageTracker {
     private usagePath: string;
     private stats: UsageStats;
     private sessionCost: number = 0;
+    private sessionInputTokens: number = 0;
+    private sessionOutputTokens: number = 0;
+    private sessionDuration: number = 0;
+    private lastContextSize: number = 0;
 
     constructor(customPath?: string) {
         this.usagePath = customPath || path.join(os.homedir(), '.obsidian', 'usage.json');
@@ -60,13 +74,57 @@ export class UsageTracker {
         this.stats.totalInputTokens += input;
         this.stats.totalOutputTokens += output;
         this.stats.totalCost += cost;
+
+        // Session tracking
         this.sessionCost += cost;
+        this.sessionInputTokens += input;
+        this.sessionOutputTokens += output;
+
+        this.lastContextSize = input; // Input tokens = context size for that request
 
         await this.save();
     }
 
     getSessionCost(): number {
         return this.sessionCost;
+    }
+
+    getSessionTokens() {
+        return {
+            input: this.sessionInputTokens,
+            output: this.sessionOutputTokens,
+            total: this.sessionInputTokens + this.sessionOutputTokens
+        };
+    }
+
+    addSessionDuration(ms: number) {
+        this.sessionDuration += ms;
+    }
+
+    getSessionDuration(): number {
+        return this.sessionDuration;
+    }
+
+    getContextUsage(model: string) {
+        // Find best matching limit
+        let limit = 200_000; // Default safe
+        if (CONTEXT_WINDOW_SIZES[model]) {
+            limit = CONTEXT_WINDOW_SIZES[model];
+        } else {
+            const key = Object.keys(CONTEXT_WINDOW_SIZES).find(k => model.includes(k));
+            if (key) limit = CONTEXT_WINDOW_SIZES[key];
+        }
+
+        const used = this.lastContextSize;
+        const remaining = Math.max(0, limit - used);
+        const percentUsed = (used / limit) * 100;
+
+        return {
+            used,
+            limit,
+            remaining,
+            percentRemaining: 100 - percentUsed
+        };
     }
 
     async trackSession() {
