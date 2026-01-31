@@ -14,6 +14,8 @@ import { redactor } from './redactor.js';
 import { auditLog } from './auditLog.js';
 import { usage } from './usage.js';
 
+import { history } from './history.js';
+
 export interface AgentPlan {
     task: string;
     steps: string[];
@@ -43,6 +45,7 @@ class Agent {
                 bus.emitAgent({ type: 'error', message: `Failed to resume session: ${result.error}` });
                 // Fallback to new session
                 await context.startNewSession();
+                await history.clear();
             } else {
                 bus.emitAgent({ type: 'thought', content: `Resumed session: ${resumeSessionId}` });
             }
@@ -50,6 +53,7 @@ class Agent {
             // Start a fresh session (archives old one)
             // This prevents the agent from "remembering" stale tasks from previous runs
             await context.startNewSession();
+            await history.clear();
         }
 
         await tasks.init();
@@ -193,6 +197,12 @@ APPROVAL: <yes if destructive, no otherwise>`;
         const { plan, originalInput } = this.pendingPlan;
         this.pendingPlan = null;
 
+        // Auto-create task and steps
+        await tools.execute('task', { action: 'create', title: plan.task });
+        for (const step of plan.steps) {
+            await tools.execute('task', { action: 'add_step', step });
+        }
+
         await this.executePlan(plan, originalInput);
     }
 
@@ -212,7 +222,11 @@ ORIGINAL REQUEST: ${originalInput}
 PLAN:
 ${this.formatPlan(plan)}
 
-Execute each step carefully. Use available tools as needed.`;
+Execute each step carefully. Use available tools as needed.
+
+IMPORTANT:
+1. You have an active task. You MUST use the 'task' tool to mark steps as done (action: 'complete_step', step_index: <index>) immediately after completing them to keep the user informed.
+2. Do NOT create 'summary' files (e.g., SUMMARY.md, START_HERE.txt) to report completion. Report results directly in the final chat message. Keep the workspace clean.`;
 
         try {
             const response = await llm.streamChat(executionPrompt);

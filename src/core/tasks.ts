@@ -4,6 +4,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { bus } from './bus.js';
 
 const TASKS_DIR = '.obsidian';
 const TASKS_FILE = 'tasks.md';
@@ -44,6 +45,8 @@ class TaskTracker {
         } catch {
             this.task = null;
         }
+        // Emit update so UI syncs immediately (important for /resume)
+        bus.emitAgent({ type: 'task_update', task: this.task });
     }
 
     private parse(content: string): Task | null {
@@ -128,6 +131,7 @@ class TaskTracker {
     async save(): Promise<void> {
         const content = this.serialize();
         await fs.writeFile(this.tasksPath, content);
+        bus.emitAgent({ type: 'task_update', task: this.task });
     }
 
     // Task management

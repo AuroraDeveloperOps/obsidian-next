@@ -24,6 +24,8 @@ import { usage } from '../core/usage.js';
 import { config } from '../core/config.js';
 import { context } from '../core/context.js';
 import { agent } from '../core/agent.js';
+import { tasks } from '../core/tasks.js';
+import { session } from '../core/session.js';
 import { highlightJson } from '../utils/highlight.js';
 
 // Pending prompt types
@@ -57,6 +59,7 @@ export const Root = () => {
     const [events, setEvents] = useState<AgentEvent[]>([]);
     const [input, setInput] = useState('');
     const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
+    const [taskProgress, setTaskProgress] = useState(tasks.getProgress());
     const { exit } = useApp();
 
     // State for footer data
@@ -141,6 +144,10 @@ export const Root = () => {
             // Keep busy state for tool_start, thought, tool_result
             else if (event.type === 'tool_start' || event.type === 'thought') {
                 setIsBusy(true);
+            }
+            // Update task progress
+            else if (event.type === 'task_update') {
+                setTaskProgress(tasks.getProgress());
             }
 
             // Handle interactive prompts
@@ -234,11 +241,17 @@ export const Root = () => {
     const handleExit = useCallback(async () => {
         bus.emitAgent({
             type: 'thought',
-            content: 'Archiving session and shutting down...',
+            content: 'Saving session and shutting down...',
         });
 
-        // Archive the current session for safe keeping
-        await history.archive(events);
+        // Save the full session state (Context, History, Tasks)
+        // This allows /resume to work correctly
+        try {
+            const { sessionId } = await session.save();
+            bus.emitAgent({ type: 'thought', content: `Session saved: ${sessionId}` });
+        } catch (err) {
+            bus.emitAgent({ type: 'error', message: `Failed to save session: ${err}` });
+        }
 
         // Clear the active history file so next boot is fresh
         await history.clear();
@@ -248,7 +261,7 @@ export const Root = () => {
         setTimeout(() => {
             exit();
         }, 800);
-    }, [events, exit]);
+    }, [exit]);
 
     useInput((input, key) => {
         // Graceful Exit - Ctrl+C
@@ -578,7 +591,7 @@ export const Root = () => {
 
                 {/* Footer Stats Area */}
                 <Box paddingX={0} marginBottom={0} marginTop={0}>
-                    <Footer mode={stats.mode} model={stats.model} />
+                    <Footer mode={stats.mode} model={stats.model} taskProgress={taskProgress} />
                 </Box>
 
                 {/* Input Area (disabled when prompt is active) */}

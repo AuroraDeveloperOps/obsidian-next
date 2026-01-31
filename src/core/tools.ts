@@ -11,6 +11,7 @@ import { bus } from './bus.js';
 import { auditor } from './auditor.js';
 import { sandbox } from './sandbox.js';
 import { context } from './context.js';
+import { tasks } from './tasks.js';
 import { undo } from './undo.js';
 import { settings } from './settings.js';
 import { auditLog } from './auditLog.js';
@@ -676,6 +677,58 @@ async function globSearch(
 }
 
 /**
+ * Task Tool - Manage active tasks/subtasks
+ */
+export const TaskTool: Tool = {
+    name: 'task',
+    description: 'Manage the active task list. actions: create, add_step, complete_step, fail_step, complete_task',
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const action = args.action as string;
+        const title = args.title as string;
+        const step = args.step as string;
+        const stepIndex = args.step_index as number;
+
+        if (!action) return { success: false, error: 'No action provided' };
+
+        try {
+            switch (action) {
+                case 'create':
+                    if (!title) return { success: false, error: 'Title required for create' };
+                    await tasks.create(title);
+                    return { success: true, output: `Created task: ${title}` };
+
+                case 'add_step':
+                    if (!step) return { success: false, error: 'Step text required' };
+                    await tasks.addSubtask(step);
+                    return { success: true, output: `Added step: ${step}` };
+
+                case 'complete_step':
+                    if (stepIndex === undefined) return { success: false, error: 'Step index required' };
+                    await tasks.completeSubtask(stepIndex);
+                    return { success: true, output: `Completed step ${stepIndex}` };
+
+                case 'fail_step':
+                    // We don't have a specific 'fail' state for subtasks yet, maybe just log or mark as blocked?
+                    // For now, let's just assume we can't complete it.
+                    // But the plan mentioned 'fail_step'. Let's map it to 'blocked' status for the task if critical?
+                    // Or maybe just leave it unchecked.
+                    return { success: true, output: `Marked step ${stepIndex} as failed (not implemented in tracker yet)` };
+
+                case 'complete_task':
+                    await tasks.complete();
+                    return { success: true, output: 'Marked task as complete' };
+
+                default:
+                    return { success: false, error: `Unknown action: ${action}` };
+            }
+        } catch (error: any) {
+            return { success: false, error: `Task action failed: ${error.message}` };
+        }
+    },
+};
+
+/**
  * WebFetch Tool - Fetch content from URLs
  */
 export const WebFetchTool: Tool = {
@@ -777,6 +830,8 @@ export class ToolRegistry {
         this.register(ListTool);
         this.register(GrepTool);
         this.register(GlobTool);
+        this.register(GlobTool);
+        this.register(TaskTool);
         this.register(WebFetchTool);
     }
 
