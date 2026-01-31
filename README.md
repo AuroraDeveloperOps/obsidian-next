@@ -4,7 +4,7 @@
 
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-![Release](https://img.shields.io/badge/Release-v0.4.0-blue)
+![Release](https://img.shields.io/badge/Release-v0.4.1-blue)
 ![Status](https://img.shields.io/badge/Status-Pre--release-orange)
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
@@ -30,11 +30,11 @@ The `workspace/` directory is a dedicated environment where **Polyoxy** is curre
 - **Benchmarks**: Comprehensive safety and performance benchmarks are running. Results will be published soon.
 - **Evaluation Goal**: The current workspace is used to stress-test the Auditor's ability to catch malicious patterns in a controlled environment.
 
-## Security Features (v0.3.0)
+## Security Features (v0.4.1)
 
 Obsidian Next implements **Zero Trust AI Automation** with the following security layers:
 
-### Implemented (v0.3.0-security)
+### Implemented (v0.4.1-security)
 
 1.  **Rotating Key System** [NEW]
     - Secure API key storage via macOS Keychain, Linux secret-tool, or encrypted file fallback
@@ -165,24 +165,26 @@ npm start
 | `/undo` | Undo file changes |
 | `/diff` | View recent file changes with line-level diffs |
 | `/sandbox` | Toggle sandbox mode |
-| `/clear` | Clear conversation |
+| `/clear` | Clear conversation (Prompted) |
 | `/doctor` | Run diagnostics |
 | `/resume` | Restore a saved session |
-| `/exit` | Save session and exit gracefully |
+| `/exit` | Save session and exit (Prompted) |
 
 ### Settings Menu
 
 Access the interactive settings menu with `/settings`:
 
 ```
-[*] Settings
-> [1] Execution Mode          Current: safe
-  [2] Security                PII redaction, audit logging
-  [3] UI Preferences          Syntax highlighting, colors
-  [4] Permissions             Allow/deny lists
-  [5] Close Settings
+[ Settings ]      Mode: SAFE
 
-Arrows: navigate | Enter: select/toggle | Esc: back
+> Execution Mode          Current: safe
+  Security                PII, audit, sandbox
+  UI Preferences          Syntax, colors
+  Permissions             Allow/deny lists
+  Commands                Quick access
+  Close Settings
+
+Arrows: navigate | Enter: select | Esc: back | Shift+Tab: cycle mode
 ```
 
 ### Security Settings

@@ -10,6 +10,7 @@
 
 import { bus } from './bus.js';
 import { config } from './config.js';
+import { settings } from './settings.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
@@ -18,14 +19,14 @@ const execAsync = promisify(exec);
 
 // Types from sandbox-runtime (may need adjustment based on actual package exports)
 interface SandboxRuntimeConfig {
-    network?: {
-        allowedDomains?: string[];
-        deniedDomains?: string[];
+    network: {
+        allowedDomains: string[];
+        deniedDomains: string[];
     };
-    filesystem?: {
-        denyRead?: string[];
-        allowWrite?: string[];
-        denyWrite?: string[];
+    filesystem: {
+        denyRead: string[];
+        allowWrite: string[];
+        denyWrite: string[];
     };
 }
 
@@ -86,9 +87,15 @@ export class SandboxExecutor {
     async initialize(): Promise<boolean> {
         try {
             const cfg = await config.load();
+            const s = await settings.load();
 
-            // Check if sandbox mode is requested
-            this.mode = (cfg as any).executionMode || 'local';
+            // Check if sandbox mode is requested via Config OR Settings
+            if ((cfg as any).executionMode === 'sandbox' || s.security.sandbox) {
+                this.mode = 'sandbox';
+            } else {
+                this.mode = 'local';
+            }
+
             this.config = {
                 ...DEFAULT_SANDBOX_CONFIG,
                 ...((cfg as any).sandbox || {}),
@@ -126,13 +133,14 @@ export class SandboxExecutor {
 
                 return true;
             } catch (importError: any) {
-                // Sandbox runtime not available, fall back to local mode
+                // Sandbox runtime not available, do NOT revert to local.
+                // We will fall back to wrapWithNativeSandbox in wrapCommand.
                 bus.emitAgent({
-                    type: 'error',
-                    message: `Sandbox runtime unavailable: ${importError.message}. Using local mode.`,
+                    type: 'thought',
+                    content: `[SANDBOX] Runtime library unavailable (Error: ${importError.message}). Falling back to native OS sandbox.`,
                 });
 
-                this.mode = 'local';
+                this.sandboxManager = null;
                 this.initialized = true;
                 return true;
             }
@@ -180,20 +188,40 @@ export class SandboxExecutor {
         if (platform === 'darwin') {
             // macOS: Use sandbox-exec with a permissive profile
             // This restricts network and sensitive file access
-            const profile = `
-(version 1)
-(allow default)
-(deny network*)
-(allow network-outbound (remote tcp "*:80" "*:443"))
+            const profile = `(version 1)
+(deny default)
+(allow process-exec*)
+(allow process-fork)
+(allow signal)
+(allow syscall-unix)
+(allow sysctl-read)
+(allow file-read*)
+(allow file-write* (subpath "/tmp"))
+(allow file-write* (subpath "${process.cwd()}"))
+(deny file-write* (literal "${process.cwd()}/.env"))
 (deny file-read* (subpath "${os.homedir()}/.ssh"))
 (deny file-read* (subpath "${os.homedir()}/.aws"))
-(deny file-read* (subpath "${os.homedir()}/.gnupg"))
-(deny file-write* (literal "${process.cwd()}/.env"))
+(allow network-outbound (remote tcp "*:80" "*:443"))
+(allow network*)
+(allow mach-lookup*)
+(allow iokit*)
             `.trim();
 
             // Write profile to temp file and use it
+            // Using /tmp for profile to avoid command line length limits issues and quoting hell
+            const profilePath = `/tmp/obsidian-sandbox-${Date.now()}.sb`;
+            const fs = await import('fs/promises');
+            await fs.writeFile(profilePath, profile);
+
+            // Escape command for bash -c
+            // Use simplest approach: run bash, pass command as script
+            // Or better: allow bash to execute the command string directly
+
+            // We need to return a string that the shell will execute
+            // The shell executes: sandbox-exec -f profilePath bash -c "command"
+
             const escapedCommand = command.replace(/"/g, '\\"');
-            return `sandbox-exec -p '${profile}' bash -c "${escapedCommand}"`;
+            return `sandbox-exec -f ${profilePath} bash -c "${escapedCommand}"`;
         }
 
         if (platform === 'linux') {
@@ -231,7 +259,7 @@ export class SandboxExecutor {
 
         bus.emitAgent({
             type: 'thought',
-            content: `[SANDBOX] Execution mode set to: ${mode}`,
+            content: `[sandbox] Execution mode set to: ${mode}`,
         });
     }
 

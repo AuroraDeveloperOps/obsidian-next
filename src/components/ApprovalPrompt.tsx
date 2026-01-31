@@ -59,39 +59,30 @@ export const ApprovalPrompt: React.FC<ApprovalPromptProps> = ({
     return (
         <Box
             flexDirection="column"
-            borderStyle="round"
-            borderColor="yellow"
-            paddingX={1}
-            paddingY={0}
+            paddingX={0}
             marginY={1}
         >
-            {/* Header */}
-            <Box marginBottom={1}>
-                <Text bold color="yellow">[!] Approval Required</Text>
-            </Box>
-
-            {/* Context */}
-            <Box marginBottom={1}>
-                <Text color="white">{context}</Text>
+            {/* Context with Alert Icon */}
+            <Box marginBottom={0}>
+                <Text color="red" bold>[ ! ] </Text>
+                <Text color="white" bold>{context}</Text>
             </Box>
 
             {/* Diff Preview (if provided) */}
             {diff && (
                 <Box
                     flexDirection="column"
-                    borderStyle="single"
-                    borderColor="gray"
-                    paddingX={1}
+                    paddingX={0}
                     marginBottom={1}
+                    marginTop={1}
                 >
-                    <Text color="gray" dimColor>Preview:</Text>
                     {diff.split('\n').slice(0, 10).map((line, i) => (
                         <Text
                             key={i}
                             color={
                                 line.startsWith('+') ? 'green' :
-                                line.startsWith('-') ? 'red' :
-                                'gray'
+                                    line.startsWith('-') ? 'red' :
+                                        'gray'
                             }
                         >
                             {line}
@@ -103,12 +94,13 @@ export const ApprovalPrompt: React.FC<ApprovalPromptProps> = ({
                 </Box>
             )}
 
-            {/* Action Buttons */}
-            <Box>
-                <Text color="green" bold>[Y]</Text>
-                <Text color="white"> Approve  </Text>
-                <Text color="red" bold>[N]</Text>
-                <Text color="white"> Deny</Text>
+            {/* Inline Confirmation */}
+            <Box marginTop={diff ? 0 : 1}>
+                <Text color="gray">      </Text>
+                <Text color="red" bold>(y)</Text>
+                <Text color="gray"> Confirm   </Text>
+                <Text color="red" bold>(n)</Text>
+                <Text color="gray"> Cancel</Text>
             </Box>
         </Box>
     );

@@ -5,9 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - 2026-01-31
+## [0.4.1] - 2026-01-31
+
+### Fixed
+- **Sandbox**: Robust OS-level isolation fixes
+  - Fixed syntax error in macOS `sandbox-exec` profile (`sys*` -> `syscall-unix`)
+  - Improved runtime diagnostics and fallback recovery logic
+  - Integrated `@vscode/ripgrep` to ensure dependency availability
 
 ### Added
+- **Dependencies**: Bundled `@vscode/ripgrep` to stabilize primary sandbox runtime
+
+## [0.3.1] - 2026-01-31
+
+### Added
+- **UI Safety**: Global confirmation intercepts for destructive commands (`/clear`, `/exit`)
+- **Settings Safeguards**: Local warnings for Auto Mode, key backend switching, and permission clearing
+
+### Changed
+- **Design System**: "Red Minimalist" overhaul - removed borders, standardized red accents
+- **Typography**: Cleaner header styling (`[ Title ]`) and unified component layouts
+- **Refactors**: `DoctorView`, `HelpView`, `UsageView`, `TaskView`, and `SettingsMenu` updated to new style
 
 - **Session Management**: Persistent sessions for long-running tasks
   - `/exit` - Save session state (context, history, tasks) and exit gracefully

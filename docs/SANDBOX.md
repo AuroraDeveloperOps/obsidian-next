@@ -26,9 +26,9 @@ Located in `src/core/sandbox.ts`.
 
 ### Fallback Strategy
 The system attempts to use the best available isolation method:
-1. **@anthropic-ai/sandbox-runtime** (Preferred): If available.
+1. **@anthropic-ai/sandbox-runtime** (Preferred): Bundled with `@vscode/ripgrep` for zero-config availability.
 2. **Native OS Sandbox**:
-   - **macOS**: uses `sandbox-exec` with a restrict-network profile.
+   - **macOS**: uses `sandbox-exec` with a restrict-network SBPL profile (Verified on macOS Sonoma).
    - **Linux**: uses `firejail` (if installed) to block network/sensitive paths.
 3. **Local**: Falls back to direct execution if no sandbox tools are available (with Auditor warnings).
 
