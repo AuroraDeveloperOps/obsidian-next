@@ -21,7 +21,7 @@ export const Footer: React.FC<FooterProps> = ({ mode, model }) => {
             {/* Header / Stats Line */}
             <Box flexDirection="row" justifyContent="space-between">
                 <Text color="gray">
-                    <Text dimColor>{formatK(tokens.input)} in</Text> · <Text dimColor>{formatK(tokens.output)} out</Text>
+                    <Text dimColor>Session: {formatK(tokens.input)} in</Text> · <Text dimColor>{formatK(tokens.output)} out</Text>
                 </Text>
             </Box>
 
