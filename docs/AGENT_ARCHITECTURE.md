@@ -62,8 +62,14 @@ Working memory for the agent.
   "working_set": ["src/ui/login.tsx"],
   "created_at": "2026-01-01T12:00:00.000Z"
 }
-```
 
+
+### Session Persistence (`.obsidian/sessions/`)
+
+Global storage for resumed workflows.
+- **Scope**: User-global (`~/.obsidian/sessions` by default).
+- **Format**: JSON bundles containing Context, History, and Task snapshots.
+- **Lifecycle**: Saved on `/exit`, restores full state on `/resume`.
 ## Tool Execution Flow
 
 ```

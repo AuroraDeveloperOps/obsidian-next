@@ -5,9 +5,13 @@
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![Release](https://img.shields.io/badge/Release-v0.4.1-blue)
-![Status](https://img.shields.io/badge/Status-Pre--release-orange)
+![Status](https://img.shields.io/badge/Status-Unstable-red)
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
+
+> [!WARNING]
+> **Active Development**
+> This project is currently **Unstable**. While improvements are drastic and features are being added rapidly, expect breaking changes and occasional instability as we finalize the core architecture. Use with caution in production environments.
 
 ---
 
@@ -26,9 +30,9 @@ Most AI coding assistants stream raw text and execute code blindly. Obsidian Nex
 
 The `workspace/` directory is a dedicated environment where **Polyoxy** is currently evaluating Obsidian Next.
 
-- **Status**: Internal Evaluation / Pre-release.
-- **Benchmarks**: Comprehensive safety and performance benchmarks are running. Results will be published soon.
-- **Evaluation Goal**: The current workspace is used to stress-test the Auditor's ability to catch malicious patterns in a controlled environment.
+- **Status**: v0.4.1 (Stable Release Candidate)
+- **Benchmarks**: Safety and performance benchmarks are running.
+- **Evaluation Goal**: Stress-testing the Auditor and Session Persistence mechanisms.
 
 ## Security Features (v0.4.1)
 
@@ -65,7 +69,8 @@ Obsidian Next implements **Zero Trust AI Automation** with the following securit
 
 ### Roadmap
 
-1.  **MCP & Plugin Ecosystem (v0.4.x)**:
+1.  **MCP & Plugin Ecosystem (Phase v0.5.x) [ACTIVE]**:
+    - **READY**: System stability verified. Now entering MCP implementation phase.
     - **MCP Manager**: Core module for managing Model Context Protocol connections.
     - **Commands**: `/mcp` for connection management and `/plugin` for extending functionality.
     - **UI**: Interactive `MCPMenu` component for easy configuration.

@@ -17,6 +17,7 @@ import { DoctorView } from './views/DoctorView.js';
 import { HelpView } from './views/HelpView.js';
 import { UsageView } from './views/UsageView.js';
 import { TaskView } from './views/TaskView.js';
+import { SessionView } from './views/SessionView.js';
 import { SettingsMenu, MenuView } from '../components/SettingsMenu.js';
 
 import { history } from '../core/history.js';
@@ -66,7 +67,7 @@ export const Root = () => {
     const [stats, setStats] = useState({ cost: 0, model: 'Loading...', mode: 'safe' as 'auto' | 'plan' | 'safe' });
 
     // Active View State Machine
-    type ActiveView = 'chat' | 'settings' | 'doctor' | 'help' | 'usage' | 'task';
+    type ActiveView = 'chat' | 'settings' | 'doctor' | 'help' | 'usage' | 'task' | 'sessions';
     const [activeView, setActiveView] = useState<ActiveView>('chat');
     const [settingsTab, setSettingsTab] = useState<MenuView | undefined>();
 
@@ -359,6 +360,11 @@ export const Root = () => {
             setInput('');
             return;
         }
+        if (value.trim() === '/resume' || value.trim() === '/sessions') {
+            setActiveView('sessions');
+            setInput('');
+            return;
+        }
         if (value.trim() === '/sandbox') {
             setSettingsTab('security');
             setActiveView('settings');
@@ -454,6 +460,21 @@ export const Root = () => {
                     <UsageView onClose={() => setActiveView('chat')} />
                 ) : activeView === 'task' ? (
                     <TaskView onClose={() => setActiveView('chat')} />
+                ) : activeView === 'sessions' ? (
+                    <SessionView
+                        onClose={() => setActiveView('chat')}
+                        onResume={async (id) => {
+                            // Trigger resume via agent event
+                            // We need to tell the agent to restart/reload with this session
+                            // For now, let's just emit a command or handle it.
+                            // Actually, switching sessions at runtime is tricky.
+                            // Easier: Exit and tell user to run with flag?
+                            // OR: Agent supports re-init.
+                            // Let's try to re-init.
+                            setActiveView('chat');
+                            bus.emitUser({ type: 'user_input', content: `/resume ${id}` });
+                        }}
+                    />
                 ) : (
                     events.slice(-MAX_EVENTS).map((event: any, i) => {
                         let content = null;

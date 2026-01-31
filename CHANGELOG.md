@@ -13,7 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved runtime diagnostics and fallback recovery logic
   - Integrated `@vscode/ripgrep` to ensure dependency availability
 
+- **Stability**: Critical Persistence Fixes
+  - **Session Leak**: Fixed `Agent.init` to properly wipe history on fresh starts, preventing "ghost" sessions.
+  - **Sticky Config**: Fixed `workspaceRoot` persisting locally; now correctly respects `process.cwd()` for global installs.
+  - **Production Save**: Fixed `Root.tsx` to properly await `session.save()` during UI exit.
+
 ### Added
+- **Session UI**: Interactive `/resume` menu
+  - Browse saved sessions with arrow keys
+  - Delete sessions with `D` or `Delete`
+  - Resume with `Enter`
 - **Dependencies**: Bundled `@vscode/ripgrep` to stabilize primary sandbox runtime
 
 ## [0.3.1] - 2026-01-31
