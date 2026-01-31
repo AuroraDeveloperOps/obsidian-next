@@ -15,6 +15,7 @@ import { undo } from './undo.js';
 import { settings } from './settings.js';
 import { auditLog } from './auditLog.js';
 import { diffManager } from './diff.js';
+import { redactor } from './redactor.js';
 import { UserEvent } from '../events/types.js';
 
 const execAsync = promisify(exec);
@@ -816,10 +817,14 @@ export class ToolRegistry {
         const result = await tool.execute(args);
 
         // Emit tool_result event
+        // Redact PII from output before emitting to event bus (visible to UI/History)
+        const rawOutput = result.success ? (result.output || 'Success') : (result.error || 'Failed');
+        const redacted = redactor.redactToolOutput(name, rawOutput);
+
         bus.emitAgent({
             type: 'tool_result',
             tool: name,
-            output: result.success ? (result.output || 'Success') : (result.error || 'Failed'),
+            output: redacted.text,
             isError: !result.success,
         });
 

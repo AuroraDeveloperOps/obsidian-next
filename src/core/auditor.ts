@@ -117,7 +117,9 @@ export class Auditor {
 
     checkPath(filePath: string): AuditResult {
         const resolved = path.resolve(this.workspaceRoot, filePath);
-        if (!resolved.startsWith(this.workspaceRoot)) {
+        const relative = path.relative(this.workspaceRoot, resolved);
+
+        if (relative.startsWith('..') || path.isAbsolute(relative)) {
             return { approved: false, reason: `Path outside workspace: ${filePath}`, isCritical: true };
         }
         return { approved: true };

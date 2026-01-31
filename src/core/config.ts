@@ -13,6 +13,16 @@ export const ConfigSchema = z.object({
     language: z.string().default('en'),
     // Deprecated: apiKey should be managed by KeyManager, not stored in config
     apiKey: z.string().optional(),
+
+    // Sandbox Configuration
+    executionMode: z.enum(['local', 'sandbox']).default('local'),
+    sandbox: z.object({
+        allowedDomains: z.array(z.string()).default(['*.github.com', '*.npmjs.org', '*.npmjs.com', 'api.anthropic.com', 'registry.npmjs.org']),
+        deniedDomains: z.array(z.string()).default([]),
+        denyRead: z.array(z.string()).default(['~/.ssh', '~/.aws', '~/.config/gcloud', '~/.kube', '~/.gnupg']),
+        allowWrite: z.array(z.string()).default(['.', '/tmp']),
+        denyWrite: z.array(z.string()).default(['.env', '.env.*', '*.key', '*.pem', '.git/config']),
+    }).default({}),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -22,6 +32,14 @@ const DEFAULT_CONFIG: Config = {
     maxTokens: 8192,
     language: 'en',
     workspaceRoot: process.cwd(),
+    executionMode: 'local',
+    sandbox: {
+        allowedDomains: ['*.github.com', '*.npmjs.org', '*.npmjs.com', 'api.anthropic.com', 'registry.npmjs.org'],
+        deniedDomains: [],
+        denyRead: ['~/.ssh', '~/.aws', '~/.config/gcloud', '~/.kube', '~/.gnupg'],
+        allowWrite: ['.', '/tmp'],
+        denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config'],
+    },
 };
 
 export class ConfigManager {

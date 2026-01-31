@@ -10,6 +10,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { settings } from './settings.js';
+import { redactor } from './redactor.js';
 
 export type AuditEventType =
     | 'command_executed'
@@ -105,7 +106,7 @@ class AuditLogger {
         await this.log({
             eventType: success ? 'command_executed' : 'command_blocked',
             tool: 'bash',
-            command,
+            command: redactor.redact(command).text,
             success,
             reason,
         });
