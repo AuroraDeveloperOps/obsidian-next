@@ -239,7 +239,7 @@ export class SandboxExecutor {
 
         bus.emitAgent({
             type: 'thought',
-            content: `[SANDBOX] Execution mode set to: ${mode}`,
+            content: `[sandbox] Execution mode set to: ${mode}`,
         });
     }
 

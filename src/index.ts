@@ -9,7 +9,7 @@ async function main() {
     process.stdout.write('\x1Bc');
     const { waitUntilExit, cleanup } = render(React.createElement(Root), {
         patchConsole: false,
-        exitOnCtrlC: true
+        exitOnCtrlC: false
     });
 
     try {

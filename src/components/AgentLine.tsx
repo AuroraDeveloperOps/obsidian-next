@@ -1,14 +1,12 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { renderMarkdown } from '../utils/syntax.js';
+import { Glitter } from './Glitter.js';
 
 interface AgentLineProps {
     content: string;
     isStreaming?: boolean;
 }
-
-// Static processing indicator - no animation to prevent flickering
-const PROCESSING_INDICATOR = "◆";
 
 // Only short messages with these exact patterns show processing state
 const isProcessingMessage = (content: string): boolean => {
@@ -20,6 +18,8 @@ const isProcessingMessage = (content: string): boolean => {
         lower.startsWith('[safe]') ||
         lower.startsWith('[plan]') ||
         lower.startsWith('[auto]') ||
+        lower.startsWith('[sandbox]') ||
+        lower.includes('thinking') ||
         lower === 'generating plan...' ||
         lower === 'executing plan...';
 };
@@ -43,7 +43,7 @@ export const AgentLine: React.FC<AgentLineProps> = ({ content, isStreaming }) =>
             <Box flexDirection="row">
                 <Box marginRight={1}>
                     {isProcessing ? (
-                        <Text color="yellow">{PROCESSING_INDICATOR}</Text>
+                        <Glitter />
                     ) : (
                         <Text color="cyan">*</Text>
                     )}

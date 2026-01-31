@@ -216,6 +216,32 @@ export const Root = () => {
     }, [stats.mode]);
 
     useInput((input, key) => {
+        // Graceful Exit - Ctrl+C
+        if (input === '\x03' || (key.ctrl && input === 'c')) {
+            // Prevent multiple triggers
+            if (activeView === 'chat' && pendingPrompt === null) {
+                bus.emitAgent({
+                    type: 'thought',
+                    content: 'Shutting down gracefully...',
+                });
+
+                // Save history explicitly
+                history.save(events).then(() => {
+                    bus.emitAgent({
+                        type: 'clear_history', // Hack to trigger ephemeral message
+                    });
+
+                    setTimeout(() => {
+                        exit();
+                    }, 800);
+                });
+            } else {
+                // Force exit if stuck or in other views
+                exit();
+            }
+            return;
+        }
+
         // Mode Toggle - Shift+Tab
         if (key.shift && key.tab) {
             cycleMode();
@@ -360,7 +386,14 @@ export const Root = () => {
                             // Filter out "Mode: ..." thoughts as they are now shown in the UI
                             if (event.content.startsWith('Mode:')) return null;
                             if (event.hidden) return null;
-                            content = <AgentLine key={i} content={event.content} />;
+
+                            // Check if this is the latest event and if we should consider it streaming
+                            // Since we don't track 'isAgentBusy' globally here easily, we assume the LAST thought
+                            // in the list is streaming if it hasn't been followed by a result/error/done event.
+                            // But actually, the events list updates as we go.
+                            // A simple heuristic: if it's the very last event in the list, it might be streaming.
+                            const isLast = i === events.slice(-MAX_EVENTS).length - 1;
+                            content = <AgentLine key={i} content={event.content} isStreaming={isLast} />;
                         } else if (event.type === 'tool_start') {
                             // Format: ⏺ ToolName(args summary) with background
                             let argsSummary = '';
