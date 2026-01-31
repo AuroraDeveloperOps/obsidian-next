@@ -1,9 +1,9 @@
 {
     "name": "@aurora-foundation/obsidian-next",
 <<<<<<< HEAD
-    "version": "0.3.0",
+    "version": "0.4.0",
 =======
-    "version": "0.3.1",
+    "version": "0.4.0",
 >>>>>>> polyoxy-dev/v0.4.0-mcp
     "description": "Next-gen AI Agent CLI",
     "main": "dist/index.js",
