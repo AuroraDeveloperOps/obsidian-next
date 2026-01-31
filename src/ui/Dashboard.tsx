@@ -108,6 +108,19 @@ export const Dashboard: React.FC = () => {
     const leftWidth = isNarrow ? '100%' : '50%';
     const rightWidth = isNarrow ? '100%' : '50%';
 
+    // Animation State
+    const [frame, setFrame] = useState(0);
+
+    // Sprite Animation Loop
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setFrame(f => (f + 1) % 30); // 30 frame cycle
+        }, 100);
+        return () => clearInterval(timer);
+    }, []);
+
+    // ... (rest of render)
+
     return (
         <Box
             borderStyle="round"
@@ -116,7 +129,7 @@ export const Dashboard: React.FC = () => {
             paddingX={0}
             paddingY={0}
         >
-            {/* Title Bar */}
+            {/* Title Bar - Unchanged */}
             <Box
                 borderStyle="single"
                 borderTop={false}
@@ -153,12 +166,24 @@ export const Dashboard: React.FC = () => {
                         <Text>!</Text>
                     </Box>
 
-                    {/* Sprite */}
+                    {/* Sprite with Animation */}
                     <Box justifyContent="center" marginBottom={1}>
                         <Box flexDirection="column">
-                            {SPRITE.map((line, i) => (
-                                <Text key={i} color="red">{line}</Text>
-                            ))}
+                            {SPRITE.map((line, i) => {
+                                // Animation Logic
+                                // Scanline effect: A white line moves down the sprite every ~3 seconds
+                                const isScanline = frame === i;
+                                // Glitch effect: Randomly invert a character (simulated by color change)
+                                const isGlitch = frame === 25 && i === 2;
+
+                                let color = "red";
+                                if (isScanline) color = "white";
+                                if (isGlitch) color = "magenta";
+
+                                return (
+                                    <Text key={i} color={color} bold={isScanline}>{line}</Text>
+                                );
+                            })}
                         </Box>
                     </Box>
 

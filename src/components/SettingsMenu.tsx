@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { settings, Settings } from '../core/settings.js';
+import { config, Config } from '../core/config.js';
 import { bus } from '../core/bus.js';
 
 // Export this type so Root.tsx can use it
-export type MenuView = 'categories' | 'mode' | 'security' | 'ui' | 'permissions' | 'commands' | 'plan-confirm';
+export type MenuView = 'categories' | 'mode' | 'security' | 'ui' | 'permissions' | 'commands' | 'plan-confirm' | 'models';
 
 interface SettingsMenuProps {
     onClose: () => void;
@@ -26,11 +27,13 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
     const [view, setView] = useState<MenuView>(initialTab || 'categories');
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [currentSettings, setCurrentSettings] = useState<Settings | null>(null);
+    const [currentConfig, setCurrentConfig] = useState<Config | null>(null);
     const [saving, setSaving] = useState(false);
 
     // Load settings on mount
     useEffect(() => {
         settings.load().then(setCurrentSettings);
+        config.load().then(setCurrentConfig);
     }, []);
 
     // Reset selection when view changes
@@ -46,14 +49,25 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
         setSaving(false);
     }, []);
 
+    const saveConfigUpdate = useCallback(async (updates: Partial<Config>) => {
+        if (!currentConfig) return;
+        setSaving(true);
+        const newConfig = { ...currentConfig, ...updates };
+        await config.save(newConfig);
+        const updated = await config.reload();
+        setCurrentConfig(updated);
+        setSaving(false);
+    }, [currentConfig]);
+
     // Get menu items based on current view
     const getMenuItems = useCallback((): MenuItem[] => {
-        if (!currentSettings) return [];
+        if (!currentSettings || !currentConfig) return [];
 
         switch (view) {
             case 'categories':
                 return [
                     { key: 'mode', label: 'Execution Mode', type: 'category', description: `Current: ${currentSettings.mode} (Shift+Tab to cycle)` },
+                    { key: 'models', label: 'Model Selection', type: 'category', description: `Current: ${currentConfig.model.split('-').slice(0, 2).join(' ')}` },
                     { key: 'security', label: 'Security', type: 'category', description: 'PII redaction, audit logging' },
                     { key: 'ui', label: 'UI Preferences', type: 'category', description: 'Syntax highlighting, colors' },
                     { key: 'permissions', label: 'Permissions', type: 'category', description: 'Allow/deny lists' },
@@ -66,6 +80,15 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                     { key: 'auto', label: 'Auto Mode', type: 'select', value: currentSettings.mode === 'auto', description: 'Execute all commands without confirmation' },
                     { key: 'plan', label: 'Plan Mode', type: 'select', value: currentSettings.mode === 'plan', description: 'Read-only planning, approve before execution' },
                     { key: 'safe', label: 'Safe Mode', type: 'select', value: currentSettings.mode === 'safe', description: 'Require approval for all write operations' },
+                    { key: 'back', label: 'Back', type: 'action' },
+                ];
+
+            case 'models':
+                const currentModel = currentConfig.model;
+                return [
+                    { key: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', type: 'select', value: currentModel.includes('sonnet'), description: 'Best for coding (Balanced)' },
+                    { key: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', type: 'select', value: currentModel.includes('haiku'), description: 'Fastest response time' },
+                    { key: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', type: 'select', value: currentModel.includes('opus'), description: 'Most capable (Expensive)' },
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
 
@@ -139,7 +162,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                     // Already shown in permissions view
                 } else if (item.key === 'viewDeny') {
                     // Already shown in permissions view
-                } else if (['mode', 'security', 'ui', 'permissions', 'commands'].includes(item.key)) {
+                } else if (['mode', 'models', 'security', 'ui', 'permissions', 'commands'].includes(item.key)) {
                     setView(item.key as MenuView);
                 }
                 break;
@@ -165,6 +188,8 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
             case 'select':
                 if (view === 'mode' && item.key !== 'back') {
                     await saveAndUpdate({ mode: item.key as 'auto' | 'plan' | 'safe' });
+                } else if (view === 'models' && item.key !== 'back') {
+                    await saveConfigUpdate({ model: item.key });
                 }
                 break;
 
@@ -241,6 +266,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
         switch (view) {
             case 'categories': return 'Settings';
             case 'mode': return 'Execution Mode';
+            case 'models': return 'Model Selection';
             case 'security': return 'Security Settings';
             case 'ui': return 'UI Preferences';
             case 'permissions': return 'Permission Lists';

@@ -217,26 +217,32 @@ export const Root = () => {
         setStats(prev => ({ ...prev, mode: nextMode }));
     }, [stats.mode]);
 
+    // Shutdown Logic
+    const handleExit = useCallback(async () => {
+        bus.emitAgent({
+            type: 'thought',
+            content: 'Archiving session and shutting down...',
+        });
+
+        // Archive the current session for safe keeping
+        await history.archive(events);
+
+        // Clear the active history file so next boot is fresh
+        await history.clear();
+
+        bus.emitAgent({ type: 'clear_history' });
+
+        setTimeout(() => {
+            exit();
+        }, 800);
+    }, [events, exit]);
+
     useInput((input, key) => {
         // Graceful Exit - Ctrl+C
         if (input === '\x03' || (key.ctrl && input === 'c')) {
             // Prevent multiple triggers
             if (activeView === 'chat' && pendingPrompt === null) {
-                bus.emitAgent({
-                    type: 'thought',
-                    content: 'Shutting down gracefully...',
-                });
-
-                // Save history explicitly
-                history.save(events).then(() => {
-                    bus.emitAgent({
-                        type: 'clear_history', // Hack to trigger ephemeral message
-                    });
-
-                    setTimeout(() => {
-                        exit();
-                    }, 800);
-                });
+                handleExit();
             } else {
                 // Force exit if stuck or in other views
                 exit();
@@ -334,8 +340,8 @@ export const Root = () => {
             setInput('');
             return;
         }
-        if (value.trim() === '/models') {
-            setSettingsTab('ui'); // Assuming models might be here or just general config, actually let's use 'categories' if no specific tab matches
+        if (value.trim() === '/models' || value.trim() === '/model') {
+            setSettingsTab('models');
             setActiveView('settings');
             setInput('');
             return;
@@ -343,6 +349,11 @@ export const Root = () => {
         if (value.trim() === '/config') {
             setSettingsTab('categories');
             setActiveView('settings');
+            setInput('');
+            return;
+        }
+        if (value.trim() === '/exit') {
+            handleExit();
             setInput('');
             return;
         }

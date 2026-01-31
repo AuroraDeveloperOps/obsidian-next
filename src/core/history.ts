@@ -37,6 +37,23 @@ export class HistoryManager {
         }, 500);
     }
 
+    async archive(events: AgentEvent[]) {
+        if (this.saveTimer) clearTimeout(this.saveTimer);
+        try {
+            const sessionsDir = path.join(path.dirname(this.historyPath), 'sessions');
+            await fs.mkdir(sessionsDir, { recursive: true });
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const archivePath = path.join(sessionsDir, `session-${timestamp}.json`);
+
+            await fs.writeFile(archivePath, JSON.stringify(events, null, 2));
+            return archivePath;
+        } catch (error) {
+            console.error('Failed to archive session:', error);
+            return null;
+        }
+    }
+
     async clear() {
         if (this.saveTimer) clearTimeout(this.saveTimer);
         try {
