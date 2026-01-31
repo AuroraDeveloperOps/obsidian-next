@@ -7,6 +7,10 @@ import { AgentLine } from '../components/AgentLine.js';
 import { ToolOutput } from '../components/ToolOutput.js';
 import { ApprovalPrompt } from '../components/ApprovalPrompt.js';
 import { ChoicePrompt } from '../components/ChoicePrompt.js';
+<<<<<<< HEAD
+=======
+import { TextInputPrompt } from '../components/TextInputPrompt.js';
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 import { SettingsMenu } from '../components/SettingsMenu.js';
 import { Dashboard } from './Dashboard.js';
 import { CommandPopup, COMMANDS } from './CommandPopup.js';
@@ -32,7 +36,19 @@ import { highlightJson } from '../utils/highlight.js';
         options: Option[];
     }
 
+<<<<<<< HEAD
     type PendingPrompt = PendingApproval | PendingChoice;
+=======
+    interface PendingTextInput {
+        type: 'text_input';
+        requestId: string;
+        prompt: string;
+        masked?: boolean;
+        placeholder?: string;
+    }
+
+    type PendingPrompt = PendingApproval | PendingChoice | PendingTextInput;
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 
     // How many events to show
     const MAX_EVENTS = 50;
@@ -104,6 +120,18 @@ import { highlightJson } from '../utils/highlight.js';
                     return;
                 }
 
+<<<<<<< HEAD
+=======
+                // Handle shutdown - exit after rendering final messages
+                if (event.type === 'shutdown_complete') {
+                    // Delay exit to allow final render
+                    setTimeout(() => {
+                        exit();
+                    }, 200);
+                    return;
+                }
+
+>>>>>>> polyoxy-dev/v0.4.0-mcp
                 // Handle interactive prompts
                 if (event.type === 'approval_request') {
                     setPendingPrompt({
@@ -124,6 +152,20 @@ import { highlightJson } from '../utils/highlight.js';
                     return;
                 }
 
+<<<<<<< HEAD
+=======
+                if (event.type === 'text_input_request') {
+                    setPendingPrompt({
+                        type: 'text_input',
+                        requestId: event.requestId,
+                        prompt: event.prompt,
+                        masked: event.masked,
+                        placeholder: event.placeholder,
+                    });
+                    return;
+                }
+
+>>>>>>> polyoxy-dev/v0.4.0-mcp
                 setEvents(prev => {
                     // If it's a thought and the last event was also a thought, UPDATE it for streaming effect
                     const last = prev[prev.length - 1];
@@ -220,11 +262,14 @@ import { highlightJson } from '../utils/highlight.js';
                 }
             }
 
+<<<<<<< HEAD
             if (value.trim() === '/exit') {
                 exit();
                 return;
             }
 
+=======
+>>>>>>> polyoxy-dev/v0.4.0-mcp
             // Show settings menu instead of command
             if (value.trim() === '/settings') {
                 setShowSettings(true);
@@ -314,6 +359,18 @@ import { highlightJson } from '../utils/highlight.js';
                         onResolve={handlePromptResolve}
                     />
                 )}
+<<<<<<< HEAD
+=======
+                {pendingPrompt?.type === 'text_input' && (
+                    <TextInputPrompt
+                        requestId={pendingPrompt.requestId}
+                        prompt={pendingPrompt.prompt}
+                        masked={pendingPrompt.masked}
+                        placeholder={pendingPrompt.placeholder}
+                        onResolve={handlePromptResolve}
+                    />
+                )}
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 
                 {/* Settings Menu */}
                 {showSettings && (

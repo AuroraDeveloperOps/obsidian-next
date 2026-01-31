@@ -348,6 +348,92 @@ class KeyManager {
             this.currentKey = null;
         }
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * Check if key exists in any backend (without loading it)
+     */
+    async hasKey(): Promise<boolean> {
+        // Check env first
+        if (process.env.ANTHROPIC_API_KEY) return true;
+
+        // Check keychain
+        if (process.platform === 'darwin') {
+            const key = await this.loadFromKeychain();
+            if (key) return true;
+        }
+
+        // Check secret-tool
+        if (process.platform === 'linux') {
+            const key = await this.loadFromSecretTool();
+            if (key) return true;
+        }
+
+        // Check encrypted file
+        const key = await this.loadFromEncryptedFile();
+        return !!key;
+    }
+
+    /**
+     * Migrate key from environment variable to secure storage
+     * Returns true if migration was successful
+     */
+    async migrateFromEnv(): Promise<{ migrated: boolean; backend?: StorageBackend; error?: string }> {
+        const envKey = process.env.ANTHROPIC_API_KEY;
+
+        if (!envKey) {
+            return { migrated: false, error: 'No ANTHROPIC_API_KEY found in environment' };
+        }
+
+        // Check if already stored in secure backend
+        if (this.currentKey && this.currentKey.backend !== 'env') {
+            return { migrated: false, error: 'Key already in secure storage' };
+        }
+
+        // Store in most secure available backend
+        const result = await this.storeKey(envKey);
+
+        if (result.success) {
+            return { migrated: true, backend: result.backend };
+        }
+
+        return { migrated: false, error: result.error };
+    }
+
+    /**
+     * Validate an API key by making a test request
+     */
+    async validateKey(key: string): Promise<boolean> {
+        // Basic format validation for Anthropic keys
+        if (!key.startsWith('sk-ant-')) {
+            return false;
+        }
+
+        // Length check (Anthropic keys are typically ~100 chars)
+        if (key.length < 50 || key.length > 200) {
+            return false;
+        }
+
+        return true;
+    }
+}
+
+// Helper function to detect .env file and warn user
+export async function detectEnvFile(workspaceRoot: string): Promise<{ found: boolean; path?: string }> {
+    const envPath = path.join(workspaceRoot, '.env');
+
+    try {
+        const content = await fs.readFile(envPath, 'utf-8');
+        if (content.includes('ANTHROPIC_API_KEY')) {
+            return { found: true, path: envPath };
+        }
+    } catch {
+        // File doesn't exist or can't be read
+    }
+
+    return { found: false };
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 }
 
 export const keyManager = new KeyManager();
