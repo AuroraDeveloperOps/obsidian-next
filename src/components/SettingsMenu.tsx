@@ -3,10 +3,12 @@ import { Box, Text, useInput } from 'ink';
 import { settings, Settings } from '../core/settings.js';
 import { bus } from '../core/bus.js';
 
-type MenuView = 'categories' | 'mode' | 'security' | 'ui' | 'permissions' | 'commands' | 'plan-confirm';
+// Export this type so Root.tsx can use it
+export type MenuView = 'categories' | 'mode' | 'security' | 'ui' | 'permissions' | 'commands' | 'plan-confirm';
 
 interface SettingsMenuProps {
     onClose: () => void;
+    initialTab?: MenuView;
 }
 
 interface MenuItem {
@@ -18,13 +20,10 @@ interface MenuItem {
     description?: string;
 }
 
-/**
- * SettingsMenu - Interactive settings editor
- *
- * Navigate with arrow keys, Enter to select/toggle, Escape to go back
- */
-export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose }) => {
-    const [view, setView] = useState<MenuView>('categories');
+// ...
+
+export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab }) => {
+    const [view, setView] = useState<MenuView>(initialTab || 'categories');
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [currentSettings, setCurrentSettings] = useState<Settings | null>(null);
     const [saving, setSaving] = useState(false);

@@ -8,10 +8,14 @@ import { ToolOutput } from '../components/ToolOutput.js';
 import { ApprovalPrompt } from '../components/ApprovalPrompt.js';
 import { ChoicePrompt } from '../components/ChoicePrompt.js';
 import { TextInputPrompt } from '../components/TextInputPrompt.js';
-import { SettingsMenu } from '../components/SettingsMenu.js';
 import { Dashboard } from './Dashboard.js';
 import { CommandPopup, COMMANDS } from './CommandPopup.js';
 import { EphemeralItem } from '../components/EphemeralItem.js';
+import { DoctorView } from './views/DoctorView.js';
+import { HelpView } from './views/HelpView.js';
+import { UsageView } from './views/UsageView.js';
+import { TaskView } from './views/TaskView.js';
+import { SettingsMenu, MenuView } from '../components/SettingsMenu.js';
 
 import { history } from '../core/history.js';
 import { usage } from '../core/usage.js';
@@ -56,8 +60,10 @@ export const Root = () => {
     // State for footer data
     const [stats, setStats] = useState({ cost: 0, model: 'Loading...', mode: 'safe' as 'auto' | 'plan' | 'safe' });
 
-    // State for settings menu
-    const [showSettings, setShowSettings] = useState(false);
+    // Active View State Machine
+    type ActiveView = 'chat' | 'settings' | 'doctor' | 'help' | 'usage' | 'task';
+    const [activeView, setActiveView] = useState<ActiveView>('chat');
+    const [settingsTab, setSettingsTab] = useState<MenuView | undefined>();
 
     // Handle prompt resolution
     const handlePromptResolve = useCallback(() => {
@@ -261,9 +267,54 @@ export const Root = () => {
             }
         }
 
-        // Show settings menu instead of command
+        // View Route Handlers
         if (value.trim() === '/settings') {
-            setShowSettings(true);
+            setSettingsTab(undefined);
+            setActiveView('settings');
+            setInput('');
+            return;
+        }
+        if (value.trim() === '/doctor') {
+            setActiveView('doctor');
+            setInput('');
+            return;
+        }
+        if (value.trim() === '/help') {
+            setActiveView('help');
+            setInput('');
+            return;
+        }
+        if (value.trim() === '/usage' || value.trim() === '/cost') {
+            setActiveView('usage');
+            setInput('');
+            return;
+        }
+        if (value.trim() === '/task') {
+            setActiveView('task');
+            setInput('');
+            return;
+        }
+        if (value.trim() === '/sandbox') {
+            setSettingsTab('security');
+            setActiveView('settings');
+            setInput('');
+            return;
+        }
+        if (value.trim() === '/mode') {
+            setSettingsTab('mode');
+            setActiveView('settings');
+            setInput('');
+            return;
+        }
+        if (value.trim() === '/models') {
+            setSettingsTab('ui'); // Assuming models might be here or just general config, actually let's use 'categories' if no specific tab matches
+            setActiveView('settings');
+            setInput('');
+            return;
+        }
+        if (value.trim() === '/config') {
+            setSettingsTab('categories');
+            setActiveView('settings');
             setInput('');
             return;
         }
@@ -279,10 +330,18 @@ export const Root = () => {
                 <Dashboard />
             </Box>
 
-            {/* Event Stream OR Settings Menu - Scrollable/Main Area */}
-            <Box flexDirection="column" flexGrow={1} overflowY="hidden" justifyContent={showSettings ? "flex-start" : "flex-end"} marginY={1}>
-                {showSettings ? (
-                    <SettingsMenu onClose={() => setShowSettings(false)} />
+            {/* Active View Area */}
+            <Box flexDirection="column" flexGrow={1} overflowY="hidden" justifyContent={activeView !== 'chat' ? "flex-start" : "flex-end"} marginY={1}>
+                {activeView === 'settings' ? (
+                    <SettingsMenu initialTab={settingsTab} onClose={() => setActiveView('chat')} />
+                ) : activeView === 'doctor' ? (
+                    <DoctorView onClose={() => setActiveView('chat')} />
+                ) : activeView === 'help' ? (
+                    <HelpView onClose={() => setActiveView('chat')} />
+                ) : activeView === 'usage' ? (
+                    <UsageView onClose={() => setActiveView('chat')} />
+                ) : activeView === 'task' ? (
+                    <TaskView onClose={() => setActiveView('chat')} />
                 ) : (
                     events.slice(-MAX_EVENTS).map((event: any, i) => {
                         let content = null;
@@ -412,6 +471,7 @@ export const Root = () => {
                             onChange={pendingPrompt ? () => { } : setInput}
                             onSubmit={pendingPrompt ? () => { } : handleSubmit}
                             placeholder={pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...'}
+                            focus={activeView === 'chat'} // Only focus when in chat mode
                         />
                     </Box>
 
