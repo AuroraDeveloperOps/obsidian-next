@@ -4,8 +4,8 @@
 
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-![Release](https://img.shields.io/badge/Release-v0.4.0-blue)
-![Status](https://img.shields.io/badge/Status-Pre--release-orange)
+![Release](https://img.shields.io/badge/Release-v0.4.1-blue)
+![Status](https://img.shields.io/badge/Status-Stable-green)
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
 
@@ -30,11 +30,11 @@ The `workspace/` directory is a dedicated environment where **Polyoxy** is curre
 - **Benchmarks**: Comprehensive safety and performance benchmarks are running. Results will be published soon.
 - **Evaluation Goal**: The current workspace is used to stress-test the Auditor's ability to catch malicious patterns in a controlled environment.
 
-## Security Features (v0.3.0)
+## Security Features (v0.4.1)
 
 Obsidian Next implements **Zero Trust AI Automation** with the following security layers:
 
-### Implemented (v0.3.0-security)
+### Implemented (v0.4.1-security)
 
 1.  **Rotating Key System** [NEW]
     - Secure API key storage via macOS Keychain, Linux secret-tool, or encrypted file fallback

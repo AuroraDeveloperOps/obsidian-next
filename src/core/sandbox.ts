@@ -137,7 +137,7 @@ export class SandboxExecutor {
                 // We will fall back to wrapWithNativeSandbox in wrapCommand.
                 bus.emitAgent({
                     type: 'thought',
-                    content: `[SANDBOX] Runtime library unavailable. Falling back to native OS sandbox.`,
+                    content: `[SANDBOX] Runtime library unavailable (Error: ${importError.message}). Falling back to native OS sandbox.`,
                 });
 
                 this.sandboxManager = null;
@@ -188,20 +188,40 @@ export class SandboxExecutor {
         if (platform === 'darwin') {
             // macOS: Use sandbox-exec with a permissive profile
             // This restricts network and sensitive file access
-            const profile = `
-(version 1)
-(allow default)
-(deny network*)
-(allow network-outbound (remote tcp "*:80" "*:443"))
+            const profile = `(version 1)
+(deny default)
+(allow process-exec*)
+(allow process-fork)
+(allow signal)
+(allow syscall-unix)
+(allow sysctl-read)
+(allow file-read*)
+(allow file-write* (subpath "/tmp"))
+(allow file-write* (subpath "${process.cwd()}"))
+(deny file-write* (literal "${process.cwd()}/.env"))
 (deny file-read* (subpath "${os.homedir()}/.ssh"))
 (deny file-read* (subpath "${os.homedir()}/.aws"))
-(deny file-read* (subpath "${os.homedir()}/.gnupg"))
-(deny file-write* (literal "${process.cwd()}/.env"))
+(allow network-outbound (remote tcp "*:80" "*:443"))
+(allow network*)
+(allow mach-lookup*)
+(allow iokit*)
             `.trim();
 
             // Write profile to temp file and use it
+            // Using /tmp for profile to avoid command line length limits issues and quoting hell
+            const profilePath = `/tmp/obsidian-sandbox-${Date.now()}.sb`;
+            const fs = await import('fs/promises');
+            await fs.writeFile(profilePath, profile);
+
+            // Escape command for bash -c
+            // Use simplest approach: run bash, pass command as script
+            // Or better: allow bash to execute the command string directly
+
+            // We need to return a string that the shell will execute
+            // The shell executes: sandbox-exec -f profilePath bash -c "command"
+
             const escapedCommand = command.replace(/"/g, '\\"');
-            return `sandbox-exec -p '${profile}' bash -c "${escapedCommand}"`;
+            return `sandbox-exec -f ${profilePath} bash -c "${escapedCommand}"`;
         }
 
         if (platform === 'linux') {
