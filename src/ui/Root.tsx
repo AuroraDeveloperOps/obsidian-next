@@ -274,7 +274,7 @@ export const Root = () => {
                     if (event.type === 'user_input') {
                         content = (
                             <Box key={i} flexDirection="row" paddingX={1} marginBottom={0}>
-                                <Text backgroundColor="#222222" dimColor>
+                                <Text backgroundColor="#222222">
                                     <Text color="gray">{' > '}</Text>
                                     <Text color="white">{event.content}</Text>
                                     <Text>{' '}</Text>
