@@ -229,10 +229,21 @@ export const Root = () => {
         if (key.return || key.tab) {
             // Handle Selection
             const selected = matches[selectedIndex];
-            // If we have a match, and the input isn't ALREADY the full command
-            if (selected && input !== selected.name) {
-                setInput(selected.name);
-                setInputKey(prev => prev + 1); // Force remount to fix cursor position
+
+            if (selected) {
+                // Determine if we should execute immediately (Enter) or just autofill (Tab)
+                // User requested "straight tap" -> Instant execution on Enter
+                if (key.return) {
+                    setInput(selected.name);
+                    handleSubmit(selected.name);
+                    return;
+                }
+
+                // For Tab, just autofill and let user edit if needed
+                if (input !== selected.name) {
+                    setInput(selected.name);
+                    setInputKey(prev => prev + 1); // Force remount to fix cursor position
+                }
             }
         }
     });
@@ -263,11 +274,15 @@ export const Root = () => {
 
     return (
         <Box flexDirection="column" height="100%">
-            {/* Header / Dashboard */}
-            <Dashboard />
+            {/* Header / Dashboard - Fixed Height */}
+            <Box flexShrink={0}>
+                <Dashboard />
+            </Box>
 
-            {/* Event Stream - shows last MAX_EVENTS */}
-            <Box flexDirection="column" flexGrow={1} marginY={1} overflowY="hidden" justifyContent="flex-end">
+            {/* Event Stream - Scrollable Area */}
+            {/* flexGrow=1 takes up all remaining space. overflowY="hidden" lets Ink handle internal rendering. */}
+            {/* We effectively "scroll" by rendering the last N events that fit, or just a slice. */}
+            <Box flexDirection="column" flexGrow={1} overflowY="hidden" justifyContent="flex-end" marginY={1}>
                 {events.slice(-MAX_EVENTS).map((event: any, i) => {
                     let content = null;
 
@@ -334,109 +349,121 @@ export const Root = () => {
                 })}
             </Box>
 
-            {/* Interactive Prompts */}
-            {pendingPrompt?.type === 'approval' && (
-                <ApprovalPrompt
-                    requestId={pendingPrompt.requestId}
-                    context={pendingPrompt.context}
-                    diff={pendingPrompt.diff}
-                    onResolve={handlePromptResolve}
-                />
-            )}
-            {pendingPrompt?.type === 'choice' && (
-                <ChoicePrompt
-                    question={pendingPrompt.question}
-                    options={pendingPrompt.options}
-                    onResolve={handlePromptResolve}
-                />
-            )}
-            {pendingPrompt?.type === 'text_input' && (
-                <TextInputPrompt
-                    requestId={pendingPrompt.requestId}
-                    prompt={pendingPrompt.prompt}
-                    masked={pendingPrompt.masked}
-                    placeholder={pendingPrompt.placeholder}
-                    onResolve={handlePromptResolve}
-                />
-            )}
+            {/* Input & Footer - Fixed Height at Bottom */}
+            <Box flexDirection="column" flexShrink={0}>
 
-            {/* Settings Menu */}
-            {showSettings && (
-                <SettingsMenu onClose={() => setShowSettings(false)} />
-            )}
+                {/* Interactive Prompts (Rendered here to stack above input) */}
+                {pendingPrompt?.type === 'approval' && (
+                    <Box marginBottom={1}>
+                        <ApprovalPrompt
+                            requestId={pendingPrompt.requestId}
+                            context={pendingPrompt.context}
+                            diff={pendingPrompt.diff}
+                            onResolve={handlePromptResolve}
+                        />
+                    </Box>
+                )}
+                {pendingPrompt?.type === 'choice' && (
+                    <Box marginBottom={1}>
+                        <ChoicePrompt
+                            question={pendingPrompt.question}
+                            options={pendingPrompt.options}
+                            onResolve={handlePromptResolve}
+                        />
+                    </Box>
+                )}
+                {pendingPrompt?.type === 'text_input' && (
+                    <Box marginBottom={1}>
+                        <TextInputPrompt
+                            requestId={pendingPrompt.requestId}
+                            prompt={pendingPrompt.prompt}
+                            masked={pendingPrompt.masked}
+                            placeholder={pendingPrompt.placeholder}
+                            onResolve={handlePromptResolve}
+                        />
+                    </Box>
+                )}
+
+                {/* Settings Menu */}
+                {showSettings && (
+                    <Box marginBottom={1}>
+                        <SettingsMenu onClose={() => setShowSettings(false)} />
+                    </Box>
+                )}
 
 
-            {/* Input Area (disabled when prompt is active) */}
-            <Box flexDirection="column">
-                {/* Separator Line (Responsive) */}
-                <Box
-                    borderStyle="single"
-                    borderTop={false}
-                    borderLeft={false}
-                    borderRight={false}
-                    borderBottom={true}
-                    borderColor="gray"
-                    marginBottom={0}
-                />
+                {/* Input Area (disabled when prompt is active) */}
+                <Box flexDirection="column">
+                    {/* Separator Line (Responsive) */}
+                    <Box
+                        borderStyle="single"
+                        borderTop={false}
+                        borderLeft={false}
+                        borderRight={false}
+                        borderBottom={true}
+                        borderColor="gray"
+                        marginBottom={0}
+                    />
 
-                <Box marginY={0} paddingX={0}>
-                    <Text color="red" bold>❯ </Text>
-                    <TextInput
-                        key={inputKey}
-                        value={input}
-                        onChange={pendingPrompt ? () => { } : setInput}
-                        onSubmit={pendingPrompt ? () => { } : handleSubmit}
-                        placeholder={pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...'}
+                    <Box marginY={0} paddingX={0}>
+                        <Text color="red" bold>❯ </Text>
+                        <TextInput
+                            key={inputKey}
+                            value={input}
+                            onChange={pendingPrompt ? () => { } : setInput}
+                            onSubmit={pendingPrompt ? () => { } : handleSubmit}
+                            placeholder={pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...'}
+                        />
+                    </Box>
+
+                    {/* Bottom Separator (Responsive) */}
+                    <Box
+                        borderStyle="single"
+                        borderTop={true}
+                        borderLeft={false}
+                        borderRight={false}
+                        borderBottom={false}
+                        borderColor="gray"
+                        marginTop={0}
                     />
                 </Box>
 
-                {/* Bottom Separator (Responsive) */}
-                <Box
-                    borderStyle="single"
-                    borderTop={true}
-                    borderLeft={false}
-                    borderRight={false}
-                    borderBottom={false}
-                    borderColor="gray"
-                    marginTop={0}
+                {/* Popup now appears BELOW the input area */}
+                <CommandPopup
+                    matches={matches}
+                    selectedIndex={selectedIndex}
                 />
+
+                {/* Footer / Status Bar - Hidden when popup is open */}
+                {matches.length === 0 && (
+                    <Box flexDirection="column" marginTop={0} paddingX={0}>
+                        {/* Row 1 */}
+                        <Box flexDirection="row" justifyContent="space-between">
+                            <Box>
+                                <Text>
+                                    {stats.mode === 'plan' ? '⏸ ' : stats.mode === 'auto' ? '▶ ' : '⏺ '}
+                                    <Text bold>{stats.mode} mode on</Text>
+                                    <Text dimColor> (shift+Tab to cycle)</Text>
+                                </Text>
+                            </Box>
+                            <Box>
+                                <Text dimColor>Context: {Math.round(usage.getContextUsage(stats.model).percentRemaining)}%</Text>
+                            </Box>
+                        </Box>
+
+                        {/* Row 2 */}
+                        <Box flexDirection="row" justifyContent="space-between">
+                            <Box>
+                                {/* Placeholder for status messages or errors */}
+                                <Text dimColor></Text>
+                            </Box>
+                            <Box>
+                                <Text dimColor>@aurora-foundation/obsidian-next</Text>
+                            </Box>
+                        </Box>
+                    </Box>
+                )}
             </Box>
-
-            {/* Popup now appears BELOW the input area */}
-            <CommandPopup
-                matches={matches}
-                selectedIndex={selectedIndex}
-            />
-
-            {/* Footer / Status Bar - Hidden when popup is open */}
-            {matches.length === 0 && (
-                <Box flexDirection="column" marginTop={0} paddingX={0}>
-                    {/* Row 1 */}
-                    <Box flexDirection="row" justifyContent="space-between">
-                        <Box>
-                            <Text>
-                                {stats.mode === 'plan' ? '⏸ ' : stats.mode === 'auto' ? '▶ ' : '⏺ '}
-                                <Text bold>{stats.mode} mode on</Text>
-                                <Text dimColor> (shift+Tab to cycle)</Text>
-                            </Text>
-                        </Box>
-                        <Box>
-                            <Text dimColor>Context: {Math.round(usage.getContextUsage(stats.model).percentRemaining)}%</Text>
-                        </Box>
-                    </Box>
-
-                    {/* Row 2 */}
-                    <Box flexDirection="row" justifyContent="space-between">
-                        <Box>
-                            {/* Placeholder for status messages or errors */}
-                            <Text dimColor></Text>
-                        </Box>
-                        <Box>
-                            <Text dimColor>@aurora-foundation/obsidian-next</Text>
-                        </Box>
-                    </Box>
-                </Box>
-            )}
         </Box>
     );
 };

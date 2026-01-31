@@ -30,6 +30,20 @@ interface CommandPopupProps {
 export const CommandPopup = ({ matches, selectedIndex }: CommandPopupProps) => {
     if (matches.length === 0) return null;
 
+    // Scrolling Window Logic
+    const WINDOW_SIZE = 4;
+    // Calculate the start index to ensure selectedIndex is always visible
+    // If selectedIndex is 0, start is 0
+    // If selectedIndex is 3 (4th item), start is 0
+    // If selectedIndex is 4 (5th item), start is 1
+    let startIndex = 0;
+    if (selectedIndex >= WINDOW_SIZE) {
+        startIndex = selectedIndex - WINDOW_SIZE + 1;
+    }
+
+    // Ensure we don't scroll past the end unnecessarily (though simple offset works too)
+    const visibleMatches = matches.slice(startIndex, startIndex + WINDOW_SIZE);
+
     return (
         <Box
             flexDirection="column"
@@ -37,18 +51,31 @@ export const CommandPopup = ({ matches, selectedIndex }: CommandPopupProps) => {
             marginBottom={0}
             width="100%"
         >
-            {matches.map((cmd, i) => {
-                const isSelected = i === selectedIndex;
+
+            {visibleMatches.map((cmd, i) => {
+                // The actual index in the full list
+                const actualIndex = startIndex + i;
+                const isSelected = actualIndex === selectedIndex;
+
                 return (
-                    <Box key={cmd.name} justifyContent="space-between">
-                        <Text color={isSelected ? 'cyan' : 'red'} bold={isSelected}>
-                            {isSelected ? '> ' : '  '}
-                            {cmd.name}
-                        </Text>
+                    <Box key={cmd.name} flexDirection="row">
+                        <Box minWidth={14}>
+                            <Text
+                                color={isSelected ? 'red' : 'white'}
+                                bold={isSelected}
+                            >
+                                {isSelected ? '> ' : '  '}
+                                {cmd.name.slice(1)}
+                            </Text>
+                        </Box>
                         <Text color={isSelected ? 'white' : 'gray'}>{cmd.desc}</Text>
                     </Box>
                 );
             })}
+
+            {startIndex + WINDOW_SIZE < matches.length && (
+                <Text color="gray" dimColor>  ↓ ...</Text>
+            )}
         </Box>
     );
 };
