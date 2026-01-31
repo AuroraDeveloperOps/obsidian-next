@@ -12,6 +12,7 @@ import { tools } from './tools.js';
 import { undo } from './undo.js';
 import { redactor } from './redactor.js';
 import { auditLog } from './auditLog.js';
+import { usage } from './usage.js';
 
 export interface AgentPlan {
     task: string;
@@ -153,8 +154,9 @@ APPROVAL: <yes if destructive, no otherwise>`;
 
         if (response) {
             await context.setLastAction(input.slice(0, 50));
-            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-            bus.emitAgent({ type: 'done', summary: `Completed in ${duration}s` });
+            const durationMs = Date.now() - startTime;
+            usage.addSessionDuration(durationMs);
+            bus.emitAgent({ type: 'done', summary: `Completed in ${(durationMs / 1000).toFixed(1)}s` });
         } else {
             bus.emitAgent({ type: 'error', message: 'Failed to get response' });
         }
@@ -200,8 +202,9 @@ Execute each step carefully. Use available tools as needed.`;
 
             if (response) {
                 await context.setLastAction(`Executed: ${plan.task.slice(0, 40)}`);
-                const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-                bus.emitAgent({ type: 'done', summary: `Plan executed in ${duration}s` });
+                const durationMs = Date.now() - startTime;
+                usage.addSessionDuration(durationMs);
+                bus.emitAgent({ type: 'done', summary: `Plan executed in ${(durationMs / 1000).toFixed(1)}s` });
             } else {
                 bus.emitAgent({ type: 'error', message: 'Failed to execute plan' });
             }

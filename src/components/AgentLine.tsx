@@ -45,12 +45,12 @@ export const AgentLine: React.FC<AgentLineProps> = ({ content, isStreaming }) =>
                     {isProcessing ? (
                         <Glitter />
                     ) : (
-                        <Text color="cyan">*</Text>
+                        <Text color="white">●</Text>
                     )}
                 </Box>
                 <Box flexGrow={1} flexDirection="column">
                     {renderedContent.split('\n').map((line, i) => (
-                        <Text key={i} color={isProcessing ? "gray" : undefined}>
+                        <Text key={i} color={isProcessing ? "gray" : "white"}>
                             {line}
                         </Text>
                     ))}

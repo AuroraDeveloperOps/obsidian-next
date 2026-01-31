@@ -49,37 +49,41 @@ export const TaskView: React.FC<TaskViewProps> = ({ onClose }) => {
                         </Text>
                     </Box>
 
-                    {/* Progress */}
+                    {/* Progress - Checklist Style */}
                     <Box flexDirection="column" marginBottom={1}>
-                        <Text underline>Progress</Text>
+                        <Text color="cyan">
+                            Tasks ({task.subtasks.filter(t => t.done).length} done, {task.subtasks.filter(t => !t.done).length} open)
+                        </Text>
                         {task.subtasks.map((st, i) => (
-                            <Box key={i} marginLeft={1}>
+                            <Box key={i} marginLeft={0}>
                                 <Text color={st.done ? 'green' : 'white'}>
-                                    [{st.done ? 'x' : ' '}] {st.text}
+                                    {st.done ? '  ✔ ' : '  ◻ '} {st.text}
                                 </Text>
                             </Box>
                         ))}
-                        {task.subtasks.length === 0 && (
-                            <Box marginLeft={1}>
-                                <Text dimColor>(No subtasks defined)</Text>
-                            </Box>
-                        )}
                     </Box>
 
-                    {/* Context */}
+                    {/* Context - Tree Style */}
                     {task.context.length > 0 && (
-                        <Box flexDirection="column">
-                            <Text underline>Context</Text>
-                            {task.context.slice(0, 10).map((ctx, i) => (
-                                <Box key={i} marginLeft={1}>
-                                    <Text dimColor>- {ctx}</Text>
-                                </Box>
-                            ))}
-                            {task.context.length > 10 && (
-                                <Box marginLeft={1}>
-                                    <Text dimColor>... and {task.context.length - 10} more</Text>
-                                </Box>
-                            )}
+                        <Box flexDirection="column" marginTop={1}>
+                            <Text color="cyan">Context</Text>
+                            {task.context.slice(0, 15).map((ctx, i, arr) => {
+                                const isLast = i === arr.length - 1;
+                                return (
+                                    <Box key={i} flexDirection="column">
+                                        {/* Main Line */}
+                                        <Box flexDirection="row">
+                                            <Text color="gray">{isLast ? ' └─ ● ' : ' ├─ ● '}</Text>
+                                            <Text dimColor>{ctx}</Text>
+                                        </Box>
+                                        {/* Status Line (Mocked for now as 'Done' since context is history) */}
+                                        <Box flexDirection="row">
+                                            <Text color="gray">{isLast ? '    ' : ' │  '}</Text>
+                                            <Text color="gray">⎿  Done</Text>
+                                        </Box>
+                                    </Box>
+                                );
+                            })}
                         </Box>
                     )}
                 </Box>

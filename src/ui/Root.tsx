@@ -4,6 +4,7 @@ import TextInput from 'ink-text-input';
 import { bus } from '../core/bus.js';
 import { AgentEvent, Option } from '../events/types.js';
 import { AgentLine } from '../components/AgentLine.js';
+import { Glitter } from '../components/Glitter.js';
 import { ToolOutput } from '../components/ToolOutput.js';
 import { ApprovalPrompt } from '../components/ApprovalPrompt.js';
 import { ChoicePrompt } from '../components/ChoicePrompt.js';
@@ -11,6 +12,7 @@ import { TextInputPrompt } from '../components/TextInputPrompt.js';
 import { Dashboard } from './Dashboard.js';
 import { CommandPopup, COMMANDS } from './CommandPopup.js';
 import { EphemeralItem } from '../components/EphemeralItem.js';
+import { Footer } from '../components/Footer.js';
 import { DoctorView } from './views/DoctorView.js';
 import { HelpView } from './views/HelpView.js';
 import { UsageView } from './views/UsageView.js';
@@ -407,9 +409,14 @@ export const Root = () => {
                                 }
                             } catch { }
 
+                            // Check if this tool is the latest event (active)
+                            const isLast = i === events.slice(-MAX_EVENTS).length - 1;
+
                             content = (
                                 <Box key={i}>
-                                    <Text backgroundColor="#1a1a2e" color="cyan"> ⏺ </Text>
+                                    <Text backgroundColor="#1a1a2e" color="white">
+                                        {isLast ? <Glitter /> : ' ⏺ '}
+                                    </Text>
                                     <Text backgroundColor="#1a1a2e" color="white" bold> {event.tool}</Text>
                                     <Text backgroundColor="#1a1a2e" color="gray">({argsSummary}) </Text>
                                 </Box>
@@ -483,6 +490,11 @@ export const Root = () => {
                 {/* Settings Menu REMOVED from here */}
 
 
+                {/* Footer Stats Area */}
+                <Box paddingX={0} marginBottom={0} marginTop={0}>
+                    <Footer mode={stats.mode} model={stats.model} />
+                </Box>
+
                 {/* Input Area (disabled when prompt is active) */}
                 <Box flexDirection="column">
                     {/* Separator Line (Responsive) */}
@@ -539,7 +551,9 @@ export const Root = () => {
                                 </Text>
                             </Box>
                             <Box>
-                                <Text dimColor>Context: {Math.round(usage.getContextUsage(stats.model).percentRemaining)}%</Text>
+                                <Text dimColor>
+                                    Context: {Math.round(usage.getContextUsage(stats.model).used / 1000)}k / {Math.round(usage.getContextUsage(stats.model).limit / 1000)}k ({Math.round((usage.getContextUsage(stats.model).used / usage.getContextUsage(stats.model).limit) * 100)}%)
+                                </Text>
                             </Box>
                         </Box>
 

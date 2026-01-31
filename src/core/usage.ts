@@ -40,6 +40,9 @@ export class UsageTracker {
     private usagePath: string;
     private stats: UsageStats;
     private sessionCost: number = 0;
+    private sessionInputTokens: number = 0;
+    private sessionOutputTokens: number = 0;
+    private sessionDuration: number = 0;
     private lastContextSize: number = 0;
 
     constructor(customPath?: string) {
@@ -71,7 +74,12 @@ export class UsageTracker {
         this.stats.totalInputTokens += input;
         this.stats.totalOutputTokens += output;
         this.stats.totalCost += cost;
+
+        // Session tracking
         this.sessionCost += cost;
+        this.sessionInputTokens += input;
+        this.sessionOutputTokens += output;
+
         this.lastContextSize = input; // Input tokens = context size for that request
 
         await this.save();
@@ -79,6 +87,22 @@ export class UsageTracker {
 
     getSessionCost(): number {
         return this.sessionCost;
+    }
+
+    getSessionTokens() {
+        return {
+            input: this.sessionInputTokens,
+            output: this.sessionOutputTokens,
+            total: this.sessionInputTokens + this.sessionOutputTokens
+        };
+    }
+
+    addSessionDuration(ms: number) {
+        this.sessionDuration += ms;
+    }
+
+    getSessionDuration(): number {
+        return this.sessionDuration;
     }
 
     getContextUsage(model: string) {
