@@ -71,15 +71,9 @@ export const UsageView: React.FC<UsageViewProps> = ({ onClose }) => {
                 </Box>
             </Box>
 
-            {/* Footer Info */}
-            <Box marginTop={1} marginLeft={1}>
-                <Text dimColor>
-                    Rate: $3.00/M (In) • $15.00/M (Out)
-                </Text>
-            </Box>
-
-            {/* View Footer */}
-            <Box marginTop={1} borderStyle="single" borderLeft={false} borderRight={false} borderBottom={false} borderTop={true} borderColor="gray" paddingTop={0}>
+            {/* Footer Info & Close */}
+            <Box marginTop={1} borderStyle="single" borderLeft={false} borderRight={false} borderBottom={false} borderTop={true} borderColor="gray" paddingTop={0} flexDirection="row" justifyContent="space-between">
+                <Text dimColor>Rate: $3.00/M (In) • $15.00/M (Out)</Text>
                 <Text color="gray" dimColor>Esc to close</Text>
             </Box>
         </Box>
