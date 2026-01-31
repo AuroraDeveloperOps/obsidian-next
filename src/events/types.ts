@@ -20,13 +20,44 @@ export type AgentEvent =
     // 3. User Interaction
     | { type: "choice_request"; question: string; options: Option[] }
     | { type: "approval_request"; requestId: string; context: string; diff?: string }
+<<<<<<< HEAD
+=======
+    | { type: "text_input_request"; requestId: string; prompt: string; masked?: boolean; placeholder?: string }
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 
     // 4. System/Status
     | { type: "error"; message: string; code?: string }
     | { type: "done"; summary: string }
+<<<<<<< HEAD
     | { type: "clear_history" };
+=======
+    | { type: "clear_history" }
+
+    // 5. Session Management
+    | { type: "shutdown_request" }
+    | { type: "session_saved"; sessionId: string; path: string }
+    | { type: "shutdown_complete"; summary: SessionSummary };
+
+/**
+ * Session summary for graceful shutdown
+ */
+export interface SessionSummary {
+    sessionId: string;
+    duration: number;
+    filesRead: number;
+    filesModified: number;
+    tasksCompleted: number;
+    tasksPending: number;
+    totalCost: number;
+}
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 
 export type UserEvent =
     | { type: "user_input"; content: string }
     | { type: "user_choice"; selectionId: string; context?: string }
+<<<<<<< HEAD
     | { type: "approval_response"; approved: boolean; requestId: string };
+=======
+    | { type: "approval_response"; approved: boolean; requestId: string }
+    | { type: "text_input_response"; requestId: string; value: string; cancelled?: boolean };
+>>>>>>> polyoxy-dev/v0.4.0-mcp

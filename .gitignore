@@ -49,4 +49,10 @@ calculator.js
 calculator.test.js
 CONTINUE.md
 PLAN.md
+<<<<<<< HEAD
 test-workspace/
+=======
+test-workspace/
+workspace/
+workspace/*
+>>>>>>> polyoxy-dev/v0.4.0-mcp

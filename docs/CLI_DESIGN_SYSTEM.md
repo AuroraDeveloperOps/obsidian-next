@@ -79,3 +79,36 @@ Always visible at the bottom (Ink `Box` with flex-between).
 - **Mode**: "[ default ]" (White), "[ plan mode ]" (Yellow), "[ auto-accept ON ]" (Green).
 - **Context**: File count.
 - **Cost**: Session cost.
+<<<<<<< HEAD
+=======
+
+### 3.5. Text Input Prompts
+For masked input (API keys) and interactive setup (`TextInputPrompt.tsx`).
+```
+Enter your Anthropic API key:
+> sk-ant-****************************
+```
+
+### 3.6. Session Summary
+Shown on `/exit` with activity stats.
+```
+==================================================
+SESSION SUMMARY
+==================================================
+
+Session ID: abc123
+Duration:   1h 23m
+
+[Activity]
+  Files read:     12
+  Files modified: 3
+  Tasks done:     2
+  Tasks pending:  1
+
+[Cost]
+  Session total:  $0.0847
+
+Session saved. Resume with: /resume abc123
+==================================================
+```
+>>>>>>> polyoxy-dev/v0.4.0-mcp

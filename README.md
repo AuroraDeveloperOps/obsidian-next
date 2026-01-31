@@ -4,8 +4,13 @@
 
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
+<<<<<<< HEAD
 ![Release](https://img.shields.io/badge/Release-v0.3.0--security-blue)
 ![Security](https://img.shields.io/badge/Security-Production_Ready-green)
+=======
+![Release](https://img.shields.io/badge/Release-v0.3.1-blue)
+![Status](https://img.shields.io/badge/Status-Pre--release-orange)
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
 
@@ -134,10 +139,19 @@ Obsidian Next can be run as a Model Context Protocol (MCP) server.
 ### Usage
 
 ```bash
+<<<<<<< HEAD
 # Set your API Key (or use /init to store securely)
 export ANTHROPIC_API_KEY="sk-ant-..."
 
 # Start the Agent
+=======
+# Initialize (stores API key securely, selects model)
+npm start
+/init
+
+# Or set API key via environment
+export ANTHROPIC_API_KEY="sk-ant-..."
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 npm start
 ```
 
@@ -145,16 +159,29 @@ npm start
 
 | Command | Description |
 |---------|-------------|
+<<<<<<< HEAD
+=======
+| `/init` | Initialize configuration with interactive setup |
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 | `/settings` | Interactive settings menu (arrow keys + Enter) |
 | `/mode` | Set execution mode (auto/plan/safe) |
 | `/models` | Select AI model |
 | `/status` | Show system status |
 | `/cost` | Show session cost |
 | `/undo` | Undo file changes |
+<<<<<<< HEAD
 | `/sandbox` | Toggle sandbox mode |
 | `/clear` | Clear conversation |
 | `/doctor` | Run diagnostics |
 | `/exit` | Exit the CLI |
+=======
+| `/diff` | View recent file changes with line-level diffs |
+| `/sandbox` | Toggle sandbox mode |
+| `/clear` | Clear conversation |
+| `/doctor` | Run diagnostics |
+| `/resume` | Restore a saved session |
+| `/exit` | Save session and exit gracefully |
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 
 ### Settings Menu
 
@@ -187,6 +214,27 @@ Arrows: navigate | Enter: select/toggle | Esc: back
 | `plan` | Read-only planning, approve plan before execution |
 | `auto` | Execute all commands without confirmation |
 
+<<<<<<< HEAD
+=======
+### Session Management
+
+Obsidian Next supports persistent sessions for long-running tasks:
+
+| Command | Description |
+|---------|-------------|
+| `/exit` | Save session state and exit gracefully |
+| `/exit --force` | Exit even with pending tasks |
+| `/resume` | List all saved sessions |
+| `/resume <id>` | Restore a specific session |
+| `/resume --last` | Restore the most recent session |
+
+Sessions preserve:
+- Conversation history and context
+- Current task progress
+- Working set of files
+- Cost tracking
+
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 ## References & Standards
 
 This project adheres to strict industry standards:

@@ -13,6 +13,12 @@ import { undoCommand } from '../commands/undo.js';
 import { configCommand } from '../commands/config.js';
 import { doctorCommand } from '../commands/doctor.js';
 import { settingsCommand } from '../commands/settings.js';
+<<<<<<< HEAD
+=======
+import { exitCommand } from '../commands/exit.js';
+import { resumeCommand } from '../commands/resume.js';
+import { diffCommand } from '../commands/diff.js';
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -51,6 +57,12 @@ export class CommandRegistry {
         this.register('config', 'View/edit configuration', configCommand);
         this.register('doctor', 'Run system diagnostics', doctorCommand);
         this.register('settings', 'View/edit settings (mode, permissions, ui)', settingsCommand);
+<<<<<<< HEAD
+=======
+        this.register('exit', 'Save session and exit gracefully', exitCommand);
+        this.register('resume', 'Restore a saved session', resumeCommand);
+        this.register('diff', 'View recent file changes', diffCommand);
+>>>>>>> polyoxy-dev/v0.4.0-mcp
     }
 
     register(name: string, description: string, handler: CommandHandler) {

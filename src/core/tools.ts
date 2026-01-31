@@ -14,6 +14,10 @@ import { context } from './context.js';
 import { undo } from './undo.js';
 import { settings } from './settings.js';
 import { auditLog } from './auditLog.js';
+<<<<<<< HEAD
+=======
+import { diffManager } from './diff.js';
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 import { UserEvent } from '../events/types.js';
 
 const execAsync = promisify(exec);
@@ -289,10 +293,18 @@ export const WriteTool: Tool = {
             // Write file
             await fs.writeFile(fullPath, content, 'utf-8');
 
+<<<<<<< HEAD
             // Track in context, undo, and audit log
             await context.trackModified(filePath);
             await undo.recordChange(filePath, 'create', null, content);
             await auditLog.logFileOperation('write', filePath, true);
+=======
+            // Track in context, undo, audit log, and diff
+            await context.trackModified(filePath);
+            await undo.recordChange(filePath, 'create', null, content);
+            await auditLog.logFileOperation('write', filePath, true);
+            await diffManager.saveDiff(filePath, '', content);
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 
             return {
                 success: true,
@@ -370,10 +382,18 @@ export const EditTool: Tool = {
             const modifiedLines = modified.split('\n').length;
             const delta = modifiedLines - originalLines;
 
+<<<<<<< HEAD
             // Track in context, undo, and audit log
             await context.trackModified(filePath);
             await undo.recordChange(filePath, 'edit', original, modified);
             await auditLog.logFileOperation('edit', filePath, true);
+=======
+            // Track in context, undo, audit log, and diff
+            await context.trackModified(filePath);
+            await undo.recordChange(filePath, 'edit', original, modified);
+            await auditLog.logFileOperation('edit', filePath, true);
+            await diffManager.saveDiff(filePath, original, modified);
+>>>>>>> polyoxy-dev/v0.4.0-mcp
 
             const occurrenceText = occurrences > 1 ? ` (${occurrences} occurrences)` : '';
             return {

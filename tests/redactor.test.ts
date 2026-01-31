@@ -96,11 +96,19 @@ describe('Redactor', () => {
         });
 
         it('should redact Stripe keys', () => {
+<<<<<<< HEAD
             // Using FAKE_KEY_ prefix to avoid GitHub secret scanning
             const input = 'stripe_key: sk_live_FAKE_KEY_FOR_TESTING_1234';
             const result = redactor.redact(input);
 
             expect(result.text).not.toContain('sk_live_');
+=======
+            // Stripe keys must be at least 24 chars after prefix to match pattern
+            const input = 'stripe_key: [REDACTED_PREFIX]FakeKeyForTestingPurposes12345';
+            const result = redactor.redact(input);
+
+            expect(result.text).not.toContain('[REDACTED_PREFIX]');
+>>>>>>> polyoxy-dev/v0.4.0-mcp
             expect(result.redactedTypes).toContain('stripe-key');
         });
     });
