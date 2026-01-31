@@ -19,14 +19,14 @@ const execAsync = promisify(exec);
 
 // Types from sandbox-runtime (may need adjustment based on actual package exports)
 interface SandboxRuntimeConfig {
-    network?: {
-        allowedDomains?: string[];
-        deniedDomains?: string[];
+    network: {
+        allowedDomains: string[];
+        deniedDomains: string[];
     };
-    filesystem?: {
-        denyRead?: string[];
-        allowWrite?: string[];
-        denyWrite?: string[];
+    filesystem: {
+        denyRead: string[];
+        allowWrite: string[];
+        denyWrite: string[];
     };
 }
 
