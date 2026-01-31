@@ -165,24 +165,26 @@ npm start
 | `/undo` | Undo file changes |
 | `/diff` | View recent file changes with line-level diffs |
 | `/sandbox` | Toggle sandbox mode |
-| `/clear` | Clear conversation |
+| `/clear` | Clear conversation (Prompted) |
 | `/doctor` | Run diagnostics |
 | `/resume` | Restore a saved session |
-| `/exit` | Save session and exit gracefully |
+| `/exit` | Save session and exit (Prompted) |
 
 ### Settings Menu
 
 Access the interactive settings menu with `/settings`:
 
 ```
-[*] Settings
-> [1] Execution Mode          Current: safe
-  [2] Security                PII redaction, audit logging
-  [3] UI Preferences          Syntax highlighting, colors
-  [4] Permissions             Allow/deny lists
-  [5] Close Settings
+[ Settings ]      Mode: SAFE
 
-Arrows: navigate | Enter: select/toggle | Esc: back
+> Execution Mode          Current: safe
+  Security                PII, audit, sandbox
+  UI Preferences          Syntax, colors
+  Permissions             Allow/deny lists
+  Commands                Quick access
+  Close Settings
+
+Arrows: navigate | Enter: select | Esc: back | Shift+Tab: cycle mode
 ```
 
 ### Security Settings
