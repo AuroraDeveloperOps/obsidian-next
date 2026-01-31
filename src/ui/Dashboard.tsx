@@ -69,9 +69,15 @@ export const Dashboard: React.FC = () => {
                     sessionCost: usage.getSessionCost(),
                 }));
             }
-            if (event.type === 'thought' && event.content?.includes('API key')) {
-                const hasKey = await keyManager.hasKey();
-                setState(prev => ({ ...prev, keyStatus: hasKey ? 'valid' : 'missing' }));
+            if (event.type === 'thought') {
+                if (event.content?.includes('API key')) {
+                    const hasKey = await keyManager.hasKey();
+                    setState(prev => ({ ...prev, keyStatus: hasKey ? 'valid' : 'missing' }));
+                }
+                if (event.content?.startsWith('Mode')) {
+                    const s = await settings.load();
+                    setState(prev => ({ ...prev, mode: s.mode }));
+                }
             }
         };
 
