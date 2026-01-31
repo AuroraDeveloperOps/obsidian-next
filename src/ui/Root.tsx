@@ -67,6 +67,8 @@ export const Root = () => {
     const [activeView, setActiveView] = useState<ActiveView>('chat');
     const [settingsTab, setSettingsTab] = useState<MenuView | undefined>();
 
+    const [isBusy, setIsBusy] = useState(false);
+
     // Handle prompt resolution
     const handlePromptResolve = useCallback(() => {
         setPendingPrompt(null);
@@ -124,11 +126,21 @@ export const Root = () => {
 
             // Handle shutdown - exit after rendering final messages
             if (event.type === 'shutdown_complete') {
+                setIsBusy(false);
                 // Delay exit to allow final render
                 setTimeout(() => {
                     exit();
                 }, 200);
                 return;
+            }
+
+            // Stop busy state on done/error
+            if (event.type === 'done' || event.type === 'error') {
+                setIsBusy(false);
+            }
+            // Keep busy state for tool_start, thought, tool_result
+            else if (event.type === 'tool_start' || event.type === 'thought') {
+                setIsBusy(true);
             }
 
             // Handle interactive prompts
@@ -179,6 +191,7 @@ export const Root = () => {
         const userHandler = (event: any) => {
             if (event.type === 'user_input') {
                 setEvents(prev => [...prev, { type: 'user_input', content: event.content } as any]);
+                setIsBusy(true); // User input starts the busy state
             }
         };
 
@@ -506,6 +519,21 @@ export const Root = () => {
                         );
                     })
                 )}
+                {/* Persistent Spinner when Busy but last event isn't animating */}
+                {isBusy && events.length > 0 && (() => {
+                    const lastEvent = events[events.length - 1];
+                    // If last event is NOT a thought (which animates itself) AND NOT a tool_start (which animates itself)
+                    // We need a persistent "Working..." indicator
+                    const isAnimating = lastEvent.type === 'thought' || lastEvent.type === 'tool_start';
+                    if (!isAnimating) {
+                        return (
+                            <Box marginTop={1} marginLeft={1}>
+                                <Text color="yellow"><Glitter /> Thinking...</Text>
+                            </Box>
+                        );
+                    }
+                    return null;
+                })()}
             </Box>
 
             {/* Input & Footer - Fixed Height at Bottom */}

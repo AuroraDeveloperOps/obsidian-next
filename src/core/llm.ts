@@ -6,7 +6,7 @@ import { tools } from './tools.js';
 import { redactor } from './redactor.js';
 import { keyManager, detectEnvFile } from './keyManager.js';
 
-const MAX_TOOL_ITERATIONS = 10;
+const MAX_TOOL_ITERATIONS = 67;
 
 export class LLMClient {
     private client: Anthropic | null = null;
@@ -97,7 +97,7 @@ export class LLMClient {
         return false;
     }
 
-    async streamChat(userMessage: string) {
+    async streamChat(userMessage: string): Promise<string | null> {
         if (!this.client) {
             const initialized = await this.initialize();
             if (!initialized || !this.client) return null;
@@ -155,20 +155,36 @@ export class LLMClient {
                 .map(t => `- ${t.name}: ${t.description}`)
                 .join('\n');
 
-            const systemPrompt = `You are a CLI coding agent. You have tools. Use them.
+            const systemPrompt = `You are an expert coding agent called Obsidian.
+Your persona is friendly but serious, professional, and hyper-focused on code quality, security, and best practices.
 
-Available: ${tools.list().map(t => t.name).join(', ')}
+**Core Directives:**
+1. **Explore First:** Never assume the state of the codebase. Use \`list\` and \`grep\` to explore. Read files completely before editing.
+2. **Code Quality:**
+   - Write strict, type-safe TypeScript. Avoid \`any\`.
+   - Prefer modular, functional code.
+   - properly handle errors. Don't swallow exceptions.
+3. **Tool Mastery:**
+   - **Edit:** precision is key. Use unique context strings. If an edit fails, READ the file again to find unique context.
+   - **Bash:** Use valid commands. Don't use interactive commands (vim, nano).
+4. **Communication:**
+   - Be concise. One thought, then act.
+   - No Markdown formatting in your thought process (no \`**bold**\` or \`# headers\`).
+   - If you are stuck, explain why and what you checked.
+5. **Security:**
+   - Never output API keys or secrets.
+   - Don't read outside the workspace unless necessary (system paths).
 
-- Dont explain. Just do it.
-- No markdown. No ** or \` or #. Plain text.
-- Read files before editing.
-- Grep to find code. Read to understand. Edit to change.
-- One thought, then act. No preamble.
-- If asked to do something, do it. Dont ask for confirmation.
-- Errors: fix them, dont apologize.
-- Never read node_modules or .git.
+**Workflow:**
+1. **Analyze**: Understand the request.
+2. **Explore**: Find relevant files (ls, find, grep).
+3. **Read**: Load content (read).
+4. **Plan**: Decide on changes.
+5. **Act**: Execute changes (edit, write).
+6. **Verify**: Check your work (diff, lint, test).
 
-cwd: ${process.cwd()}`;
+Current Working Directory: ${process.cwd()}
+Available Tools: ${tools.list().map(t => t.name).join(', ')}`;
 
             const createMessage = async (model: string) => {
                 return await this.client!.messages.create({
@@ -176,7 +192,7 @@ cwd: ${process.cwd()}`;
                     max_tokens: this.lastConfig?.maxTokens || 8192,
                     system: systemPrompt,
                     messages: [...this.conversationHistory],
-                    tools: toolDefinitions,
+                    tools: toolDefinitions as Anthropic.Tool[], // Cast to satisfy SDK types
                     stream: true,
                 });
             };

@@ -32,9 +32,26 @@ class Agent {
         this.sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     }
 
-    async init(): Promise<void> {
+    async init(resumeSessionId?: string): Promise<void> {
         if (this.initialized) return;
         await context.init();
+
+        if (resumeSessionId) {
+            const { session } = await import('./session.js');
+            const result = await session.restore(resumeSessionId);
+            if (!result.success) {
+                bus.emitAgent({ type: 'error', message: `Failed to resume session: ${result.error}` });
+                // Fallback to new session
+                await context.startNewSession();
+            } else {
+                bus.emitAgent({ type: 'thought', content: `Resumed session: ${resumeSessionId}` });
+            }
+        } else {
+            // Start a fresh session (archives old one)
+            // This prevents the agent from "remembering" stale tasks from previous runs
+            await context.startNewSession();
+        }
+
         await tasks.init();
         // Initialize undo system with session ID for change tracking
         await undo.init(this.sessionId);

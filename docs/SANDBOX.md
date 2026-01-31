@@ -45,6 +45,8 @@ Managed via `/sandbox` command or `.obsidian/config.json`.
     "allowWrite": ["."]
   }
 }
+
+> **Note**: The sandbox now enforces a **Strict Allowlist** policy by default. It denies read access to the User Home directory and only explicitly allows the Workspace, `/tmp`, and essential system paths (`/usr`, `/bin`, etc.).
 ```
 
 ## Usage

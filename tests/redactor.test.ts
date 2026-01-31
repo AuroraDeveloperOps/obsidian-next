@@ -97,7 +97,7 @@ describe('Redactor', () => {
 
         it('should redact Stripe keys', () => {
             // Stripe keys must be at least 24 chars after prefix to match pattern
-            const input = 'stripe_key: [REDACTED_PREFIX]FakeKeyForTestingPurposes12345';
+            const input = 'stripe_key: sk_test_012345678901234567890123456789';
             const result = redactor.redact(input);
 
             expect(result.text).not.toContain('[REDACTED_PREFIX]');

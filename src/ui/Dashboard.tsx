@@ -201,19 +201,20 @@ export const Dashboard: React.FC = () => {
                 <Box flexDirection="column" width={rightWidth} paddingLeft={isNarrow ? 0 : 1}>
 
                     {/* Tips */}
-                    <Box flexDirection="column" marginBottom={1}>
-                        <Text bold color="white">Tips for getting started</Text>
+                    <Box flexDirection="column" marginBottom={0}>
+                        <Text>Tips for getting started</Text>
                         <Text>✔ Run <Text color="cyan">/init</Text> to configure settings</Text>
                         <Text>✔ <Text color="cyan">Shift+Tab</Text> to toggle modes ({state.mode})</Text>
                     </Box>
 
-                    {/* Separator */}
-                    <Box marginY={0} borderStyle="single" borderTop={false} borderBottom={true} borderLeft={false} borderRight={false} borderColor={borderColor} width="100%">
+                    {/* Separator - Dashed line to match mock */}
+                    <Box marginY={1}>
+                        <Text color="gray">────────────────────────────────────────────────────────</Text>
                     </Box>
 
-                    {/* Recent Activity (Placeholder for now) */}
-                    <Box flexDirection="column" marginTop={1}>
-                        <Text bold color="white">Recent activity</Text>
+                    {/* Recent Activity */}
+                    <Box flexDirection="column">
+                        <Text>Recent activity</Text>
                         <Text dimColor>No recent activity</Text>
                     </Box>
                 </Box>

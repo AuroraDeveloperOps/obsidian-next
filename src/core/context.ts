@@ -70,7 +70,40 @@ class ContextManager {
 
     async save(): Promise<void> {
         this.ctx.updated_at = new Date().toISOString();
+        const dir = path.dirname(this.contextPath);
+        await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(this.contextPath, JSON.stringify(this.ctx, null, 2));
+    }
+
+    async archive(): Promise<void> {
+        try {
+            const sessionsDir = path.join(process.cwd(), CONTEXT_DIR, 'sessions');
+            await fs.mkdir(sessionsDir, { recursive: true });
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const archivePath = path.join(sessionsDir, `context-${timestamp}.json`);
+
+            await fs.writeFile(archivePath, JSON.stringify(this.ctx, null, 2));
+        } catch {
+            // Ignore archive errors
+        }
+    }
+
+    async startNewSession(): Promise<void> {
+        // Archive previous session if it had any meaningful activity
+        if (this.ctx.current_task || this.ctx.last_action || this.ctx.working_set.length > 0) {
+            await this.archive();
+        }
+
+        // Create fresh context but preserve mode preference
+        const oldMode = this.ctx.mode;
+        this.ctx = createEmptyContext();
+        this.ctx.mode = oldMode; // Keep user's mode preference (safe/auto/plan)
+
+        await this.save();
+
+        // Ensure settings are synced
+        await settings.set('mode', this.ctx.mode);
     }
 
     // Getters
