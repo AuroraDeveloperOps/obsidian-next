@@ -254,7 +254,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
         }
     });
 
-    if (!currentSettings) {
+    if (!currentSettings || !currentConfig) {
         return (
             <Box borderStyle="round" borderColor="cyan" padding={1}>
                 <Text color="gray">Loading settings...</Text>

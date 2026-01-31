@@ -210,8 +210,9 @@ Execute each step carefully. Use available tools as needed.`;
             }
         } finally {
             // Restore previous mode after execution
-            await context.setMode(previousMode);
-            bus.emitAgent({ type: 'thought', content: `Mode restored to: ${previousMode}` });
+            if (previousMode) {
+                await context.setMode(previousMode);
+            }
         }
     }
 
