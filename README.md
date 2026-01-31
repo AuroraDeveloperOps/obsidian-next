@@ -4,7 +4,7 @@
 
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-![Release](https://img.shields.io/badge/Release-v0.3.1-blue)
+![Release](https://img.shields.io/badge/Release-v0.4.0-blue)
 ![Status](https://img.shields.io/badge/Status-Pre--release-orange)
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
@@ -65,11 +65,20 @@ Obsidian Next implements **Zero Trust AI Automation** with the following securit
 
 ### Roadmap
 
-1.  **Hardware-Level Sandboxing**:
+1.  **MCP & Plugin Ecosystem (v0.4.x)**:
+    - **MCP Manager**: Core module for managing Model Context Protocol connections.
+    - **Commands**: `/mcp` for connection management and `/plugin` for extending functionality.
+    - **UI**: Interactive `MCPMenu` component for easy configuration.
+    - **Registry**: Preconfigured registry of useful MCP servers.
+    - **AI Integration**: Updated system prompts to leverage MCP capabilities.
+
+2.  **Quality Assurance**:
+    - **"Hella Testings"**: Comprehensive test coverage across all modules (Unit, Integration, E2E).
+
+3.  **Hardware-Level Sandboxing**:
     - Integration with native OS hypervisors (Apple Virtualization Framework) for true VM isolation.
-2.  **Signed Execution**:
-    - Only allowing cryptographically signed tool definitions to run.
-3.  **Network Isolation**:
+
+4.  **Network Isolation**:
     - Per-session network namespaces for complete network control.
 
 ## Documentation Directory
