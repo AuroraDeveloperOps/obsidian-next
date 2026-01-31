@@ -279,80 +279,83 @@ export const Root = () => {
                 <Dashboard />
             </Box>
 
-            {/* Event Stream - Scrollable Area */}
-            {/* flexGrow=1 takes up all remaining space. overflowY="hidden" lets Ink handle internal rendering. */}
-            {/* We effectively "scroll" by rendering the last N events that fit, or just a slice. */}
-            <Box flexDirection="column" flexGrow={1} overflowY="hidden" justifyContent="flex-end" marginY={1}>
-                {events.slice(-MAX_EVENTS).map((event: any, i) => {
-                    let content = null;
+            {/* Event Stream OR Settings Menu - Scrollable/Main Area */}
+            <Box flexDirection="column" flexGrow={1} overflowY="hidden" justifyContent={showSettings ? "flex-start" : "flex-end"} marginY={1}>
+                {showSettings ? (
+                    <SettingsMenu onClose={() => setShowSettings(false)} />
+                ) : (
+                    events.slice(-MAX_EVENTS).map((event: any, i) => {
+                        let content = null;
+                        // ... (keep mapping logic)
+                        if (event.type === 'user_input') {
+                            content = (
+                                <Box key={i} flexDirection="row" paddingX={1} marginBottom={0}>
+                                    <Text backgroundColor="#222222">
+                                        <Text color="gray">{' > '}</Text>
+                                        <Text color="white">{event.content}</Text>
+                                        <Text>{' '}</Text>
+                                    </Text>
+                                </Box>
+                            );
+                        } else if (event.type === 'thought') {
+                            // Filter out "Mode: ..." thoughts as they are now shown in the UI
+                            if (event.content.startsWith('Mode:')) return null;
+                            if (event.hidden) return null;
+                            content = <AgentLine key={i} content={event.content} />;
+                        } else if (event.type === 'tool_start') {
+                            // Format: ⏺ ToolName(args summary) with background
+                            let argsSummary = '';
+                            try {
+                                const args = JSON.parse(event.args);
+                                const firstVal = Object.values(args)[0];
+                                if (typeof firstVal === 'string') {
+                                    argsSummary = firstVal.length > 60
+                                        ? firstVal.slice(0, 60) + '...'
+                                        : firstVal;
+                                }
+                            } catch { }
 
-                    if (event.type === 'user_input') {
-                        content = (
-                            <Box key={i} flexDirection="row" paddingX={1} marginBottom={0}>
-                                <Text backgroundColor="#222222">
-                                    <Text color="gray">{' > '}</Text>
-                                    <Text color="white">{event.content}</Text>
-                                    <Text>{' '}</Text>
-                                </Text>
+                            content = (
+                                <Box key={i}>
+                                    <Text backgroundColor="#1a1a2e" color="cyan"> ⏺ </Text>
+                                    <Text backgroundColor="#1a1a2e" color="white" bold> {event.tool}</Text>
+                                    <Text backgroundColor="#1a1a2e" color="gray">({argsSummary}) </Text>
+                                </Box>
+                            );
+                        } else if (event.type === 'tool_result') {
+                            content = <ToolOutput key={i} tool={event.tool} output={event.output} isError={event.isError} />;
+                        } else if (event.type === 'done') {
+                            content = (
+                                <EphemeralItem delay={5000}>
+                                    <Text key={i} color="green">[OK] {event.summary}</Text>
+                                </EphemeralItem>
+                            );
+                        } else if (event.type === 'error') {
+                            content = <Text key={i} color="red">[ERR] {event.message}</Text>;
+                        } else if (event.type === 'clear_history') {
+                            content = (
+                                <EphemeralItem delay={3000}>
+                                    <Text key={i} color="gray">[SYS] History cleared</Text>
+                                </EphemeralItem>
+                            );
+                        }
+
+                        if (!content) return null;
+
+                        return (
+                            <Box key={i} marginTop={1}>
+                                {content}
                             </Box>
                         );
-                    } else if (event.type === 'thought') {
-                        // Filter out "Mode: ..." thoughts as they are now shown in the UI
-                        if (event.content.startsWith('Mode:')) return null;
-                        if (event.hidden) return null;
-                        content = <AgentLine key={i} content={event.content} />;
-                    } else if (event.type === 'tool_start') {
-                        // Format: ⏺ ToolName(args summary) with background
-                        let argsSummary = '';
-                        try {
-                            const args = JSON.parse(event.args);
-                            const firstVal = Object.values(args)[0];
-                            if (typeof firstVal === 'string') {
-                                argsSummary = firstVal.length > 60
-                                    ? firstVal.slice(0, 60) + '...'
-                                    : firstVal;
-                            }
-                        } catch { }
-
-                        content = (
-                            <Box key={i}>
-                                <Text backgroundColor="#1a1a2e" color="cyan"> ⏺ </Text>
-                                <Text backgroundColor="#1a1a2e" color="white" bold> {event.tool}</Text>
-                                <Text backgroundColor="#1a1a2e" color="gray">({argsSummary}) </Text>
-                            </Box>
-                        );
-                    } else if (event.type === 'tool_result') {
-                        content = <ToolOutput key={i} tool={event.tool} output={event.output} isError={event.isError} />;
-                    } else if (event.type === 'done') {
-                        content = (
-                            <EphemeralItem delay={5000}>
-                                <Text key={i} color="green">[OK] {event.summary}</Text>
-                            </EphemeralItem>
-                        );
-                    } else if (event.type === 'error') {
-                        content = <Text key={i} color="red">[ERR] {event.message}</Text>;
-                    } else if (event.type === 'clear_history') {
-                        content = (
-                            <EphemeralItem delay={3000}>
-                                <Text key={i} color="gray">[SYS] History cleared</Text>
-                            </EphemeralItem>
-                        );
-                    }
-
-                    if (!content) return null;
-
-                    return (
-                        <Box key={i} marginTop={1}>
-                            {content}
-                        </Box>
-                    );
-                })}
+                    })
+                )}
             </Box>
 
             {/* Input & Footer - Fixed Height at Bottom */}
             <Box flexDirection="column" flexShrink={0}>
 
-                {/* Interactive Prompts (Rendered here to stack above input) */}
+                {/* Interactive Prompts */}
+                {/* ... prompts ... */}
                 {pendingPrompt?.type === 'approval' && (
                     <Box marginBottom={1}>
                         <ApprovalPrompt
@@ -363,6 +366,7 @@ export const Root = () => {
                         />
                     </Box>
                 )}
+                {/* ... other prompts ... */}
                 {pendingPrompt?.type === 'choice' && (
                     <Box marginBottom={1}>
                         <ChoicePrompt
@@ -384,12 +388,7 @@ export const Root = () => {
                     </Box>
                 )}
 
-                {/* Settings Menu */}
-                {showSettings && (
-                    <Box marginBottom={1}>
-                        <SettingsMenu onClose={() => setShowSettings(false)} />
-                    </Box>
-                )}
+                {/* Settings Menu REMOVED from here */}
 
 
                 {/* Input Area (disabled when prompt is active) */}

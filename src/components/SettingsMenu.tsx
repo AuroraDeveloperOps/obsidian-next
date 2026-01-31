@@ -253,11 +253,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose }) => {
     return (
         <Box
             flexDirection="column"
-            borderStyle="round"
-            borderColor="cyan"
             paddingX={1}
             paddingY={0}
-            marginY={1}
+            width="100%"
+            height="100%"
         >
             {/* Header with Mode Indicator */}
             <Box marginBottom={1} justifyContent="space-between">
@@ -268,7 +267,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose }) => {
                     <Text
                         color={
                             currentSettings.mode === 'auto' ? 'green' :
-                            currentSettings.mode === 'plan' ? 'yellow' : 'white'
+                                currentSettings.mode === 'plan' ? 'yellow' : 'white'
                         }
                         bold
                     >
