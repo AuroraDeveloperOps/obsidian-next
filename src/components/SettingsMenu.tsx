@@ -73,6 +73,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                 return [
                     { key: 'piiRedaction', label: 'PII Redaction', type: 'toggle', value: currentSettings.security.piiRedaction, description: 'Redact sensitive data before sending to AI' },
                     { key: 'auditLogging', label: 'Audit Logging', type: 'toggle', value: currentSettings.security.auditLogging, description: 'Log all commands and file operations' },
+                    { key: 'sandbox', label: 'Sandbox Filesystem', type: 'toggle', value: currentSettings.security.sandbox, description: 'Restrict file access to current workspace' },
                     { key: 'keyBackend', label: 'Key Storage', type: 'category', description: `Current: ${currentSettings.security.keyBackend}` },
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
