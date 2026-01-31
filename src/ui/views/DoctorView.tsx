@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import { config } from '../../core/config.js';
 import { tools } from '../../core/tools.js';
 import { sandbox } from '../../core/sandbox.js';
+import { keyManager } from '../../core/keyManager.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { useInput } from 'ink';
 
@@ -27,11 +28,14 @@ export const DoctorView: React.FC<DoctorViewProps> = ({ onClose }) => {
         // 1. Check configuration
         try {
             const cfg = await config.load();
-            if (cfg.apiKey) {
+            const apiKey = await keyManager.loadKey();
+            const backend = keyManager.getBackend();
+
+            if (apiKey) {
                 checks.push({
                     name: 'API Key',
                     status: 'ok',
-                    message: `Configured (***${cfg.apiKey.slice(-4)})`
+                    message: `Configured (${backend})`
                 });
             } else {
                 checks.push({
@@ -72,10 +76,10 @@ export const DoctorView: React.FC<DoctorViewProps> = ({ onClose }) => {
 
         // 4. Check API connectivity (lightweight)
         try {
-            const cfg = await config.load();
-            if (cfg.apiKey) {
+            const apiKey = await keyManager.loadKey();
+            if (apiKey) {
                 // Just instantiate, don't ping to save cost/time
-                new Anthropic({ apiKey: cfg.apiKey });
+                new Anthropic({ apiKey });
                 checks.push({
                     name: 'API Client',
                     status: 'ok',
@@ -118,36 +122,39 @@ export const DoctorView: React.FC<DoctorViewProps> = ({ onClose }) => {
 
     return (
         <Box flexDirection="column" width="100%" height="100%" paddingX={1} paddingY={0}>
+            {/* Minimal Header */}
             <Box marginBottom={1}>
-                <Text bold color="cyan">[*] System Diagnostics</Text>
+                <Text bold color="white">[ System Diagnostics ]</Text>
             </Box>
 
             {loading ? (
-                <Text>Running checks...</Text>
+                <Text color="gray">Running checks...</Text>
             ) : (
                 <Box flexDirection="column">
-                    {results.map((r, i) => (
-                        <Box key={i} flexDirection="row" justifyContent="space-between" marginBottom={0}>
-                            <Box width={15}>
-                                <Text bold>{r.name}</Text>
+                    {results.map((check, i) => (
+                        <Box key={i} flexDirection="row" marginBottom={0}>
+                            <Box width={14}>
+                                <Text color="gray">{check.name}</Text>
                             </Box>
                             <Box>
                                 <Text
                                     color={
-                                        r.status === 'ok' ? 'green' :
-                                            r.status === 'warn' ? 'yellow' : 'red'
+                                        check.status === 'ok' ? 'green' :
+                                            check.status === 'warn' ? 'yellow' : 'red'
                                     }
                                 >
-                                    [{r.status.toUpperCase()}] {r.message}
+                                    {check.status === 'ok' ? 'OK' : check.status.toUpperCase()}
                                 </Text>
+                                <Text color="gray"> · {check.message}</Text>
                             </Box>
                         </Box>
                     ))}
                 </Box>
             )}
 
-            <Box marginTop={1} borderStyle="single" borderLeft={false} borderRight={false} borderBottom={false} borderTop={true} borderColor="gray" paddingTop={0}>
-                <Text color="gray" dimColor>Press 'r' to reload • Esc to close</Text>
+            {/* Minimal Footer */}
+            <Box marginTop={1}>
+                <Text color="gray" dimColor>Esc to close</Text>
             </Box>
         </Box>
     );

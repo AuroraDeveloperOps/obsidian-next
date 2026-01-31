@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { settings, Settings } from '../core/settings.js';
 import { config, Config } from '../core/config.js';
 import { bus } from '../core/bus.js';
+import { formatHeader } from '../utils/ui.js';
 
 // Export this type so Root.tsx can use it
 export type MenuView = 'categories' | 'mode' | 'security' | 'ui' | 'permissions' | 'commands' | 'plan-confirm' | 'models';
@@ -21,14 +22,20 @@ interface MenuItem {
     description?: string;
 }
 
-// ...
-
 export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab }) => {
     const [view, setView] = useState<MenuView>(initialTab || 'categories');
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [currentSettings, setCurrentSettings] = useState<Settings | null>(null);
     const [currentConfig, setCurrentConfig] = useState<Config | null>(null);
     const [saving, setSaving] = useState(false);
+
+    // Confirmation State
+    interface Confirmation {
+        type: 'clear_allow' | 'clear_deny' | 'backend' | 'auto_mode';
+        message: string;
+        payload?: any;
+    }
+    const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
 
     // Load settings on mount
     useEffect(() => {
@@ -68,66 +75,58 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                 return [
                     { key: 'mode', label: 'Execution Mode', type: 'category', description: `Current: ${currentSettings.mode} (Shift+Tab to cycle)` },
                     { key: 'models', label: 'Model Selection', type: 'category', description: `Current: ${currentConfig.model.split('-').slice(0, 2).join(' ')}` },
-                    { key: 'security', label: 'Security', type: 'category', description: 'PII redaction, audit logging' },
-                    { key: 'ui', label: 'UI Preferences', type: 'category', description: 'Syntax highlighting, colors' },
+                    { key: 'security', label: 'Security', type: 'category', description: 'PII, audit, sandbox' },
+                    { key: 'ui', label: 'UI Preferences', type: 'category', description: 'Syntax, colors' },
                     { key: 'permissions', label: 'Permissions', type: 'category', description: 'Allow/deny lists' },
-                    { key: 'commands', label: 'Commands', type: 'category', description: 'Quick access to slash commands' },
+                    { key: 'commands', label: 'Commands', type: 'category', description: 'Quick access' },
                     { key: 'close', label: 'Close Settings', type: 'action' },
                 ];
-
             case 'mode':
                 return [
-                    { key: 'auto', label: 'Auto Mode', type: 'select', value: currentSettings.mode === 'auto', description: 'Execute all commands without confirmation' },
-                    { key: 'plan', label: 'Plan Mode', type: 'select', value: currentSettings.mode === 'plan', description: 'Read-only planning, approve before execution' },
-                    { key: 'safe', label: 'Safe Mode', type: 'select', value: currentSettings.mode === 'safe', description: 'Require approval for all write operations' },
+                    { key: 'auto', label: 'Auto Mode', type: 'select', value: currentSettings.mode === 'auto', description: 'Execute without confirmation (Use with caution)' },
+                    { key: 'plan', label: 'Plan Mode', type: 'select', value: currentSettings.mode === 'plan', description: 'Read-only planning' },
+                    { key: 'safe', label: 'Safe Mode', type: 'select', value: currentSettings.mode === 'safe', description: 'Require approval for writes' },
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
-
             case 'models':
                 const currentModel = currentConfig.model;
                 return [
-                    { key: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', type: 'select', value: currentModel.includes('sonnet'), description: 'Best for coding (Balanced)' },
-                    { key: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', type: 'select', value: currentModel.includes('haiku'), description: 'Fastest response time' },
-                    { key: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', type: 'select', value: currentModel.includes('opus'), description: 'Most capable (Expensive)' },
+                    { key: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', type: 'select', value: currentModel.includes('sonnet'), description: 'Balanced' },
+                    { key: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', type: 'select', value: currentModel.includes('haiku'), description: 'Fastest' },
+                    { key: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', type: 'select', value: currentModel.includes('opus'), description: 'Most capable' },
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
-
             case 'security':
                 return [
-                    { key: 'piiRedaction', label: 'PII Redaction', type: 'toggle', value: currentSettings.security.piiRedaction, description: 'Redact sensitive data before sending to AI' },
-                    { key: 'auditLogging', label: 'Audit Logging', type: 'toggle', value: currentSettings.security.auditLogging, description: 'Log all commands and file operations' },
-                    { key: 'sandbox', label: 'Sandbox Filesystem', type: 'toggle', value: currentSettings.security.sandbox, description: 'Restrict file access to current workspace' },
+                    { key: 'piiRedaction', label: 'PII Redaction', type: 'toggle', value: currentSettings.security.piiRedaction, description: 'Redact sensitive data' },
+                    { key: 'auditLogging', label: 'Audit Logging', type: 'toggle', value: currentSettings.security.auditLogging, description: 'Log operations' },
+                    { key: 'sandbox', label: 'Sandbox Filesystem', type: 'toggle', value: currentSettings.security.sandbox, description: 'Restrict file access' },
                     { key: 'keyBackend', label: 'Key Storage', type: 'category', description: `Current: ${currentSettings.security.keyBackend}` },
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
-
             case 'ui':
                 return [
-                    { key: 'syntaxHighlight', label: 'Syntax Highlighting', type: 'toggle', value: currentSettings.ui.syntaxHighlight, description: 'Colorize code output' },
+                    { key: 'syntaxHighlight', label: 'Syntax Highlighting', type: 'toggle', value: currentSettings.ui.syntaxHighlight, description: 'Colorize code' },
                     { key: 'diffColors', label: 'Diff Colors', type: 'toggle', value: currentSettings.ui.diffColors, description: 'Show colored diffs' },
-                    { key: 'showLineNumbers', label: 'Line Numbers', type: 'toggle', value: currentSettings.ui.showLineNumbers, description: 'Show line numbers in file output' },
+                    { key: 'showLineNumbers', label: 'Line Numbers', type: 'toggle', value: currentSettings.ui.showLineNumbers, description: 'Show line numbers' },
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
-
             case 'permissions':
-                const allowCount = currentSettings.permissions.allow.length;
-                const denyCount = currentSettings.permissions.deny.length;
                 return [
-                    { key: 'viewAllow', label: 'View Allowed Patterns', type: 'category', description: `${allowCount} pattern(s)` },
-                    { key: 'viewDeny', label: 'View Denied Patterns', type: 'category', description: `${denyCount} pattern(s)` },
-                    { key: 'clearAllow', label: 'Clear Allowed Patterns', type: 'action', description: 'Reset allow list' },
-                    { key: 'clearDeny', label: 'Clear Denied Patterns', type: 'action', description: 'Reset deny list' },
+                    { key: 'viewAllow', label: 'View Allowed', type: 'category', description: `${currentSettings.permissions.allow.length} patterns` },
+                    { key: 'viewDeny', label: 'View Denied', type: 'category', description: `${currentSettings.permissions.deny.length} patterns` },
+                    { key: 'clearAllow', label: 'Clear Allowed', type: 'action', description: 'Reset allow list' },
+                    { key: 'clearDeny', label: 'Clear Denied', type: 'action', description: 'Reset deny list' },
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
-
             case 'commands':
                 return [
-                    { key: 'cmd:init', label: '/init', type: 'action', description: 'Initialize configuration' },
-                    { key: 'cmd:config', label: '/config', type: 'action', description: 'Edit configuration' },
-                    { key: 'cmd:status', label: '/status', type: 'action', description: 'Show system status' },
-                    { key: 'cmd:cost', label: '/cost', type: 'action', description: 'Show session cost' },
-                    { key: 'cmd:clear', label: '/clear', type: 'action', description: 'Clear conversation' },
-                    { key: 'cmd:exit', label: '/exit', type: 'action', description: 'Save and exit' },
+                    { key: 'cmd:init', label: '/init', type: 'action', description: 'Initialize' },
+                    { key: 'cmd:config', label: '/config', type: 'action', description: 'Edit config' },
+                    { key: 'cmd:status', label: '/status', type: 'action', description: 'System status' },
+                    { key: 'cmd:cost', label: '/cost', type: 'action', description: 'Session cost' },
+                    { key: 'cmd:clear', label: '/clear', type: 'action', description: 'Clear history' },
+                    { key: 'cmd:exit', label: '/exit', type: 'action', description: 'Save & Exit' },
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
 
@@ -142,122 +141,143 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
             default:
                 return [];
         }
-    }, [view, currentSettings]);
+    }, [view, currentSettings, currentConfig]);
 
     const items = getMenuItems();
+
+    // Handlers
+    const handleConfirmation = useCallback(async (approved: boolean) => {
+        if (!confirmation || !currentSettings) {
+            setConfirmation(null);
+            return;
+        }
+
+        if (approved) {
+            switch (confirmation.type) {
+                case 'auto_mode':
+                    await saveAndUpdate({ mode: 'auto' });
+                    break;
+                case 'backend':
+                    await saveAndUpdate({ security: { ...currentSettings.security, keyBackend: confirmation.payload } });
+                    break;
+                case 'clear_allow':
+                    await saveAndUpdate({ permissions: { ...currentSettings.permissions, allow: [] } });
+                    break;
+                case 'clear_deny':
+                    await saveAndUpdate({ permissions: { ...currentSettings.permissions, deny: [] } });
+                    break;
+            }
+        }
+        setConfirmation(null);
+    }, [confirmation, currentSettings, saveAndUpdate]);
 
     const handleSelect = useCallback(async () => {
         const item = items[selectedIndex];
         if (!item || !currentSettings) return;
 
-        switch (item.type) {
-            case 'category':
-                if (item.key === 'keyBackend') {
-                    // Cycle through key backends
-                    const backends = ['auto', 'keychain', 'secret-tool', 'encrypted-file', 'env'] as const;
-                    const currentIdx = backends.indexOf(currentSettings.security.keyBackend);
-                    const nextBackend = backends[(currentIdx + 1) % backends.length];
-                    await saveAndUpdate({ security: { ...currentSettings.security, keyBackend: nextBackend } });
-                } else if (item.key === 'viewAllow') {
-                    // Already shown in permissions view
-                } else if (item.key === 'viewDeny') {
-                    // Already shown in permissions view
-                } else if (['mode', 'models', 'security', 'ui', 'permissions', 'commands'].includes(item.key)) {
-                    setView(item.key as MenuView);
-                }
-                break;
-
-            case 'toggle':
-                if (view === 'security') {
-                    await saveAndUpdate({
-                        security: {
-                            ...currentSettings.security,
-                            [item.key]: !item.value
-                        }
+        // Routing & Toggles
+        if (item.type === 'category') {
+            if (item.key === 'keyBackend') {
+                // Confirm backend switch
+                const backends = ['auto', 'keychain', 'secret-tool', 'encrypted-file', 'env'] as const;
+                const currentIdx = backends.indexOf(currentSettings.security.keyBackend);
+                const nextBackend = backends[(currentIdx + 1) % backends.length];
+                setConfirmation({
+                    type: 'backend',
+                    message: `Switch key storage to '${nextBackend}'? Re-auth required.`,
+                    payload: nextBackend
+                });
+            } else if (['mode', 'models', 'security', 'ui', 'permissions', 'commands'].includes(item.key)) {
+                setView(item.key as MenuView);
+            }
+        } else if (item.type === 'toggle') {
+            if (view === 'security') {
+                await saveAndUpdate({ security: { ...currentSettings.security, [item.key]: !item.value } });
+            } else if (view === 'ui') {
+                await saveAndUpdate({ ui: { ...currentSettings.ui, [item.key]: !item.value } });
+            }
+        } else if (item.type === 'select') {
+            if (view === 'mode' && item.key !== 'back') {
+                if (item.key === 'auto' && !item.value) {
+                    setConfirmation({
+                        type: 'auto_mode',
+                        message: 'Enable Auto Mode? (Disables human-in-the-loop)'
                     });
-                } else if (view === 'ui') {
-                    await saveAndUpdate({
-                        ui: {
-                            ...currentSettings.ui,
-                            [item.key]: !item.value
-                        }
-                    });
+                } else {
+                    await saveAndUpdate({ mode: item.key as any });
                 }
-                break;
-
-            case 'select':
-                if (view === 'mode' && item.key !== 'back') {
-                    await saveAndUpdate({ mode: item.key as 'auto' | 'plan' | 'safe' });
-                } else if (view === 'models' && item.key !== 'back') {
-                    await saveConfigUpdate({ model: item.key });
-                }
-                break;
-
-            case 'action':
-                if (item.key === 'back') {
-                    setView('categories');
-                } else if (item.key === 'close') {
-                    onClose();
-                } else if (item.key === 'clearAllow') {
-                    await saveAndUpdate({ permissions: { ...currentSettings.permissions, allow: [] } });
-                } else if (item.key === 'clearDeny') {
-                    await saveAndUpdate({ permissions: { ...currentSettings.permissions, deny: [] } });
-                } else if (item.key.startsWith('cmd:')) {
-                    // Execute command
-                    const cmd = item.key.replace('cmd:', '/');
-                    onClose();
-                    // Emit user input to trigger the command
-                    bus.emitUser({ type: 'user_input', content: cmd });
-                } else if (item.key === 'plan-execute') {
-                    // Approve plan execution
-                    bus.emitUser({ type: 'approval_response', approved: true, requestId: 'plan' });
-                    onClose();
-                } else if (item.key === 'plan-cancel') {
-                    bus.emitUser({ type: 'approval_response', approved: false, requestId: 'plan' });
-                    onClose();
-                } else if (item.key === 'plan-modify') {
-                    // Request modifications - emit a user message
-                    bus.emitUser({ type: 'user_input', content: 'Please modify the plan' });
-                    onClose();
-                }
-                break;
-        }
-    }, [items, selectedIndex, currentSettings, view, saveAndUpdate, onClose]);
-
-    useInput((input, key) => {
-        // Navigation
-        if (key.upArrow) {
-            setSelectedIndex(prev => (prev > 0 ? prev - 1 : items.length - 1));
-        }
-        if (key.downArrow) {
-            setSelectedIndex(prev => (prev < items.length - 1 ? prev + 1 : 0));
-        }
-
-        // Selection
-        if (key.return) {
-            handleSelect();
-        }
-
-        // Back / Close
-        if (key.escape) {
-            if (view === 'categories') {
+            } else if (view === 'models' && item.key !== 'back') {
+                await saveConfigUpdate({ model: item.key });
+            }
+        } else if (item.type === 'action') {
+            if (item.key === 'back') setView('categories');
+            else if (item.key === 'close') onClose();
+            else if (item.key === 'clearAllow') setConfirmation({ type: 'clear_allow', message: 'Flush allow-list rules?' });
+            else if (item.key === 'clearDeny') setConfirmation({ type: 'clear_deny', message: 'Flush deny-list rules?' });
+            else if (item.key.startsWith('cmd:')) {
+                const cmd = item.key.replace('cmd:', '/');
+                // For immediate commands like clear/exit, we close and emit content
+                // For view navigation like /status, we might want to stay active or route appropriately
+                // The Root handler will catch this emission
                 onClose();
-            } else {
-                setView('categories');
+                bus.emitUser({ type: 'user_input', content: cmd });
+            } else if (item.key === 'plan-execute') {
+                bus.emitUser({ type: 'approval_response', approved: true, requestId: 'plan' });
+                onClose();
+            } else if (item.key === 'plan-cancel') {
+                bus.emitUser({ type: 'approval_response', approved: false, requestId: 'plan' });
+                onClose();
+            } else if (item.key === 'plan-modify') {
+                bus.emitUser({ type: 'user_input', content: 'Please modify the plan' });
+                onClose();
             }
         }
+    }, [items, selectedIndex, currentSettings, view, saveAndUpdate, saveConfigUpdate, onClose]);
 
-        // Quick number selection
-        const num = parseInt(input, 10);
-        if (num >= 1 && num <= items.length) {
-            setSelectedIndex(num - 1);
+    // Input Handling
+    useInput((input, key) => {
+        if (!currentSettings) return;
+
+        // Confirmation Input
+        if (confirmation) {
+            if (input === 'y' || input === 'Y' || key.return) handleConfirmation(true);
+            else if (input === 'n' || input === 'N' || key.escape) handleConfirmation(false);
+            return;
         }
+
+        // Menu Input
+        if (key.upArrow) setSelectedIndex(prev => (prev > 0 ? prev - 1 : items.length - 1));
+        if (key.downArrow) setSelectedIndex(prev => (prev < items.length - 1 ? prev + 1 : 0));
+        if (key.return) handleSelect();
+        if (key.escape) {
+            if (view === 'categories') onClose();
+            else setView('categories');
+        }
+        // Numeric shortcut
+        const num = parseInt(input, 10);
+        if (num >= 1 && num <= items.length) setSelectedIndex(num - 1);
     });
 
     if (!currentSettings || !currentConfig) {
         return (
-            <Box borderStyle="round" borderColor="cyan" padding={1}>
+            <Box padding={1}>
                 <Text color="gray">Loading settings...</Text>
+            </Box>
+        );
+    }
+
+    if (confirmation) {
+        return (
+            <Box flexDirection="column" paddingX={1} width="100%" height="100%" justifyContent="center">
+                <Box marginBottom={1}><Text color="red" bold>[ ! ] Confirmation Required</Text></Box>
+                <Box marginBottom={1}><Text color="white">{confirmation.message}</Text></Box>
+                <Box>
+                    <Text color="gray">      </Text>
+                    <Text color="red" bold>(y)</Text>
+                    <Text color="gray"> Confirm   </Text>
+                    <Text color="red" bold>(n)</Text>
+                    <Text color="gray"> Cancel</Text>
+                </Box>
             </Box>
         );
     }
@@ -284,10 +304,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
             width="100%"
             height="100%"
         >
-            {/* Header with Mode Indicator */}
-            <Box marginBottom={1} justifyContent="space-between">
-                <Text bold color="cyan">[*] {getViewTitle()}</Text>
-                <Box>
+            {/* Minimal Header */}
+            <Box marginBottom={1} flexDirection="row" justifyContent="flex-start">
+                <Text bold color="white">[ {getViewTitle()} ]</Text>
+                <Box marginLeft={2}>
                     {saving && <Text color="yellow">Saving... </Text>}
                     <Text color="gray">Mode: </Text>
                     <Text
@@ -302,7 +322,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                 </Box>
             </Box>
 
-            {/* Menu Items */}
+            {/* Menu Items - Borderless */}
             <Box flexDirection="column" marginBottom={1}>
                 {items.map((item, index) => {
                     const isSelected = index === selectedIndex;
@@ -313,7 +333,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                     if (item.type === 'toggle') {
                         valueDisplay = (
                             <Text color={item.value ? 'green' : 'red'}>
-                                [{item.value ? 'ON' : 'OFF'}]
+                                {item.value ? 'ON' : 'OFF'}
                             </Text>
                         );
                     } else if (item.type === 'select' && view === 'mode') {
@@ -322,21 +342,28 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                                 {item.value ? '[*]' : '[ ]'}
                             </Text>
                         );
+                    } else if (item.type === 'select' && view === 'models') {
+                        valueDisplay = (
+                            <Text color={item.value ? 'green' : 'gray'}>
+                                {item.value ? ' (Active)' : ''}
+                            </Text>
+                        );
                     }
 
                     return (
-                        <Box key={item.key} flexDirection="column">
+                        <Box key={item.key} flexDirection="column" marginBottom={0}>
                             <Box>
-                                <Text color={isSelected ? 'cyan' : 'gray'}>{indicator} </Text>
+                                <Text color={isSelected ? 'red' : 'gray'}>{indicator} </Text>
                                 <Text color={isSelected ? 'white' : 'gray'} bold={isSelected}>
-                                    [{index + 1}] {item.label}
+                                    {item.label}
                                 </Text>
-                                {valueDisplay && <Text> </Text>}
+                                {valueDisplay && <Text>  </Text>}
                                 {valueDisplay}
                             </Box>
+                            {/* Description inline if possible, or next line dimmed */}
                             {item.description && isSelected && (
-                                <Box marginLeft={4}>
-                                    <Text color="gray" dimColor>{item.description}</Text>
+                                <Box marginLeft={2}>
+                                    <Text color="gray" dimColor>  {item.description}</Text>
                                 </Box>
                             )}
                         </Box>
@@ -344,9 +371,9 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                 })}
             </Box>
 
-            {/* Permission lists display */}
+            {/* Permission lists display - Minimal List */}
             {view === 'permissions' && (
-                <Box flexDirection="column" marginBottom={1} borderStyle="single" borderColor="gray" paddingX={1}>
+                <Box flexDirection="column" marginBottom={1} paddingX={0}>
                     <Text color="gray" bold>Allowed patterns:</Text>
                     {currentSettings.permissions.allow.length === 0 ? (
                         <Text color="gray" dimColor>  (none)</Text>
@@ -359,24 +386,26 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                         <Text color="gray" dimColor>  ... and {currentSettings.permissions.allow.length - 5} more</Text>
                     )}
 
-                    <Text color="gray" bold>Denied patterns:</Text>
-                    {currentSettings.permissions.deny.length === 0 ? (
-                        <Text color="gray" dimColor>  (none)</Text>
-                    ) : (
-                        currentSettings.permissions.deny.slice(0, 5).map((p, i) => (
-                            <Text key={i} color="red">  - {p}</Text>
-                        ))
-                    )}
-                    {currentSettings.permissions.deny.length > 5 && (
-                        <Text color="gray" dimColor>  ... and {currentSettings.permissions.deny.length - 5} more</Text>
-                    )}
+                    <Box marginTop={1}>
+                        <Text color="gray" bold>Denied patterns:</Text>
+                        {currentSettings.permissions.deny.length === 0 ? (
+                            <Text color="gray" dimColor>  (none)</Text>
+                        ) : (
+                            currentSettings.permissions.deny.slice(0, 5).map((p, i) => (
+                                <Text key={i} color="red">  - {p}</Text>
+                            ))
+                        )}
+                        {currentSettings.permissions.deny.length > 5 && (
+                            <Text color="gray" dimColor>  ... and {currentSettings.permissions.deny.length - 5} more</Text>
+                        )}
+                    </Box>
                 </Box>
             )}
 
-            {/* Instructions */}
-            <Box borderStyle="single" borderColor="gray" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} paddingTop={0}>
+            {/* Minimal Footer */}
+            <Box marginTop={1}>
                 <Text color="gray" dimColor>
-                    Arrows: navigate | Enter: select | Esc: back | Shift+Tab: cycle mode
+                    Arrows: navigate  Enter: select  Esc: back  Shift+Tab: cycle mode
                 </Text>
             </Box>
         </Box>

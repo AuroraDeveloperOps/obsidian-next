@@ -103,31 +103,26 @@ export const TextInputPrompt: React.FC<TextInputPromptProps> = ({
     return (
         <Box
             flexDirection="column"
-            borderStyle="round"
-            borderColor="cyan"
-            paddingX={1}
-            paddingY={0}
+            paddingX={0}
             marginY={1}
         >
             {/* Prompt */}
-            <Box marginBottom={1}>
-                <Text bold color="cyan">[?] {prompt}</Text>
+            <Box marginBottom={0}>
+                <Text bold color="white">[ Input ] {prompt}</Text>
             </Box>
 
             {/* Input field */}
-            <Box marginBottom={1}>
-                <Text color="white">&gt; </Text>
-                <Text color={showPlaceholder ? 'gray' : 'white'}>
-                    {showPlaceholder ? placeholder : displayValue}
+            <Box marginBottom={0}>
+                <Text color={value.length > 0 ? 'white' : 'gray'}>
+                    &gt; {showPlaceholder ? placeholder : displayValue}
                 </Text>
-                <Text color="cyan">_</Text>
+                <Text color="red" bold>_</Text>
             </Box>
 
             {/* Instructions */}
             <Box>
                 <Text color="gray" dimColor>
-                    Enter to confirm, Esc to cancel
-                    {masked && ' (input is masked)'}
+                    Enter to submit, Esc to cancel {masked && '(Hidden)'}
                 </Text>
             </Box>
         </Box>

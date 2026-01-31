@@ -318,6 +318,11 @@ export const Root = () => {
             setInput('');
             return;
         }
+        if (value.trim() === '/status') {
+            setActiveView('doctor');
+            setInput('');
+            return;
+        }
         if (value.trim() === '/usage' || value.trim() === '/cost') {
             setActiveView('usage');
             setInput('');
@@ -352,8 +357,24 @@ export const Root = () => {
             setInput('');
             return;
         }
+
+        // Destructive Commands Interception
+        if (value.trim() === '/clear') {
+            setPendingPrompt({
+                type: 'approval',
+                requestId: 'ui:clear',
+                context: 'Flush session history? This cannot be undone.',
+            });
+            setInput('');
+            return;
+        }
+
         if (value.trim() === '/exit') {
-            handleExit();
+            setPendingPrompt({
+                type: 'approval',
+                requestId: 'ui:exit',
+                context: 'Terminate session? Progress will be archived.',
+            });
             setInput('');
             return;
         }
@@ -361,6 +382,32 @@ export const Root = () => {
         bus.emitUser({ type: 'user_input', content: value });
         setInput('');
     };
+
+    // Listen for UI-specific approval responses
+    useEffect(() => {
+        const uiHandler = (event: any) => {
+            if (event.type === 'approval_response') {
+                if (event.requestId === 'ui:clear') {
+                    if (event.approved) {
+                        setEvents([]);
+                        history.clear();
+                        bus.emitAgent({ type: 'clear_history' });
+                    }
+                    setPendingPrompt(null);
+                } else if (event.requestId === 'ui:exit') {
+                    if (event.approved) {
+                        handleExit();
+                    }
+                    setPendingPrompt(null);
+                }
+            }
+        };
+
+        bus.on('user', uiHandler);
+        return () => {
+            bus.off('user', uiHandler);
+        };
+    }, [handleExit]);
 
     return (
         <Box flexDirection="column" height="100%">
