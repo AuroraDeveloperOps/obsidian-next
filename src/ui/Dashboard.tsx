@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useStdout } from 'ink';
 import { bus } from '../core/bus.js';
 import { config } from '../core/config.js';
 import { settings } from '../core/settings.js';
@@ -85,12 +85,15 @@ export const Dashboard: React.FC = () => {
         return () => { bus.off('agent', handler); };
     }, []);
 
-    // Responsive: Track terminal width
+    // Responsive: Track terminal width using Ink's hook
+    // This avoids double-render glitches by aligning with Ink's internal resize logic
+    const { stdout } = useStdout();
+
     useEffect(() => {
-        const onResize = () => setColumns(process.stdout.columns || 80);
-        process.stdout.on('resize', onResize);
-        return () => { process.stdout.off('resize', onResize); };
-    }, []);
+        const onResize = () => setColumns(stdout.columns);
+        stdout.on('resize', onResize);
+        return () => { stdout.off('resize', onResize); };
+    }, [stdout]);
 
     // Format model name
     function formatModelName(model: string): string {
@@ -205,8 +208,7 @@ export const Dashboard: React.FC = () => {
                     </Box>
 
                     {/* Separator */}
-                    <Box marginY={0}>
-                        <Text color={borderColor}>──────────────────────────────</Text>
+                    <Box marginY={0} borderStyle="single" borderTop={false} borderBottom={true} borderLeft={false} borderRight={false} borderColor={borderColor} width="100%">
                     </Box>
 
                     {/* Recent Activity (Placeholder for now) */}

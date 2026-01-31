@@ -370,7 +370,7 @@ export const Root = () => {
             </Box>
 
             {/* Active View Area */}
-            <Box flexDirection="column" flexGrow={1} overflowY="hidden" justifyContent={activeView !== 'chat' ? "flex-start" : "flex-end"} marginY={1}>
+            <Box flexDirection="column" flexGrow={1} overflowY={activeView === 'chat' ? undefined : 'hidden'} justifyContent={activeView !== 'chat' ? "flex-start" : "flex-end"} marginY={1}>
                 {activeView === 'settings' ? (
                     <SettingsMenu initialTab={settingsTab} onClose={() => setActiveView('chat')} />
                 ) : activeView === 'doctor' ? (
