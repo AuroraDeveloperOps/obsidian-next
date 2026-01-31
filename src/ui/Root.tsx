@@ -563,7 +563,7 @@ export const Root = () => {
                             </Box>
                             <Box>
                                 <Text dimColor>
-                                    Context: {Math.round(usage.getContextUsage(stats.model).used / 1000)}k / {Math.round(usage.getContextUsage(stats.model).limit / 1000)}k ({Math.round((usage.getContextUsage(stats.model).used / usage.getContextUsage(stats.model).limit) * 100)}%)
+                                    Context: {(usage.getContextUsage(stats.model).used / 1000).toFixed(1)}k / {(usage.getContextUsage(stats.model).limit / 1000).toFixed(0)}k ({Math.round(usage.getContextUsage(stats.model).percentRemaining === 100 ? 0 : (100 - usage.getContextUsage(stats.model).percentRemaining))}%)
                                 </Text>
                             </Box>
                         </Box>
