@@ -83,8 +83,8 @@ export const TextInputPrompt: React.FC<TextInputPromptProps> = ({
             return;
         }
 
-        // Add printable characters
-        if (input && input.length === 1) {
+        // Add printable characters (including paste)
+        if (input) {
             setValue(prev => prev + input);
         }
     });
