@@ -21,6 +21,8 @@ interface DashboardState {
     keyStatus: 'valid' | 'missing' | 'rotating';
     sessionCost: number;
     workspace: string;
+    user: string;
+    version: string;
 }
 
 export const Dashboard: React.FC = () => {
@@ -30,7 +32,9 @@ export const Dashboard: React.FC = () => {
         mode: 'safe',
         keyStatus: 'missing',
         sessionCost: 0,
-        workspace: process.cwd(),
+        workspace: process.cwd().split('/').slice(-2).join('/'), // Shortened path
+        user: process.env.USER || 'User',
+        version: 'v0.4.0-pre-release',
     });
 
     // Load initial state
@@ -52,19 +56,12 @@ export const Dashboard: React.FC = () => {
         loadState();
     }, []);
 
-    // Subscribe to events that should trigger updates
+    // Subscribe to events
     useEffect(() => {
         const handler = async (event: AgentEvent) => {
-            // Update on relevant events
-            if (
-                event.type === 'done' ||
-                event.type === 'tool_result' ||
-                event.type === 'session_saved' ||
-                event.type === 'shutdown_complete'
-            ) {
+            if (['done', 'tool_result', 'session_saved', 'shutdown_complete'].includes(event.type)) {
                 const cfg = await config.load();
                 const s = await settings.load();
-
                 setState(prev => ({
                     ...prev,
                     model: formatModelName(cfg.model),
@@ -72,36 +69,24 @@ export const Dashboard: React.FC = () => {
                     sessionCost: usage.getSessionCost(),
                 }));
             }
-
-            // Update key status on specific events
             if (event.type === 'thought' && event.content?.includes('API key')) {
                 const hasKey = await keyManager.hasKey();
-                setState(prev => ({
-                    ...prev,
-                    keyStatus: hasKey ? 'valid' : 'missing',
-                }));
+                setState(prev => ({ ...prev, keyStatus: hasKey ? 'valid' : 'missing' }));
             }
         };
 
         bus.on('agent', handler);
-        return () => {
-            bus.off('agent', handler);
-        };
+        return () => { bus.off('agent', handler); };
     }, []);
 
     // Responsive: Track terminal width
     useEffect(() => {
         const onResize = () => setColumns(process.stdout.columns || 80);
         process.stdout.on('resize', onResize);
-        return () => {
-            process.stdout.off('resize', onResize);
-        };
+        return () => { process.stdout.off('resize', onResize); };
     }, []);
 
-    const showExtended = columns >= 80;
-    const showFull = columns >= 100;
-
-    // Format model name for display
+    // Format model name
     function formatModelName(model: string): string {
         if (model.includes('sonnet')) return 'Sonnet 4.5';
         if (model.includes('haiku')) return 'Haiku 4.5';
@@ -109,66 +94,95 @@ export const Dashboard: React.FC = () => {
         return model.split('-').slice(0, 2).join(' ');
     }
 
-    // Mode color
-    const modeColor = state.mode === 'auto' ? 'green' :
-                      state.mode === 'plan' ? 'yellow' : 'white';
+    // Colors
+    const borderColor = 'gray';
 
-    // Key status color and icon
-    const keyIcon = state.keyStatus === 'valid' ? '●' :
-                    state.keyStatus === 'rotating' ? '○' : '○';
-    const keyColor = state.keyStatus === 'valid' ? 'green' :
-                     state.keyStatus === 'rotating' ? 'yellow' : 'red';
+    // Responsive Layout
+    const isNarrow = columns < 100;
+    const leftWidth = isNarrow ? '100%' : '50%';
+    const rightWidth = isNarrow ? '100%' : '50%';
 
     return (
         <Box
             borderStyle="round"
-            borderColor="red"
+            borderColor={borderColor}
             flexDirection="column"
-            paddingX={1}
+            paddingX={0}
             paddingY={0}
         >
-            {/* Header with Sprite */}
-            <Box flexDirection="row">
-                {/* Left: Character Sprite */}
-                <Box flexDirection="column" marginRight={2}>
-                    {SPRITE.map((line, i) => (
-                        <Text key={i} color="red">{line}</Text>
-                    ))}
+            {/* Title Bar */}
+            <Box
+                borderStyle="single"
+                borderTop={false}
+                borderLeft={false}
+                borderRight={false}
+                borderBottom={true}
+                borderColor={borderColor}
+                paddingX={2}
+            >
+                <Text color="red" bold>Obsidian Next </Text>
+                <Text color="gray">{state.version}</Text>
+            </Box>
+
+            {/* Content Area */}
+            <Box flexDirection={isNarrow ? 'column' : 'row'} padding={1}>
+
+                {/* LEFT COLUMN: Identity & Status */}
+                <Box
+                    flexDirection="column"
+                    width={leftWidth}
+                    paddingRight={isNarrow ? 0 : 1}
+                    marginBottom={isNarrow ? 1 : 0}
+                    borderStyle={isNarrow ? undefined : "single"}
+                    borderTop={false}
+                    borderBottom={false}
+                    borderLeft={false}
+                    borderRight={!isNarrow}
+                    borderColor={borderColor}
+                >
+                    {/* Welcome */}
+                    <Box justifyContent="center" marginBottom={1}>
+                        <Text>Welcome back </Text>
+                        <Text bold color="white">{state.user}</Text>
+                        <Text>!</Text>
+                    </Box>
+
+                    {/* Sprite */}
+                    <Box justifyContent="center" marginBottom={1}>
+                        <Box flexDirection="column">
+                            {SPRITE.map((line, i) => (
+                                <Text key={i} color="red">{line}</Text>
+                            ))}
+                        </Box>
+                    </Box>
+
+                    {/* Metadata */}
+                    <Box flexDirection="column" alignItems="center">
+                        <Text dimColor>{state.model} · Obsidian Pro</Text>
+                        <Text dimColor>~/{state.workspace}</Text>
+                    </Box>
                 </Box>
 
-                {/* Right: Info Panel */}
-                <Box flexDirection="column" justifyContent="center" flexGrow={1}>
-                    {/* Title Row */}
-                    <Box>
-                        <Text bold color="red">OBSIDIAN</Text>
-                        <Text color="gray"> </Text>
-                        <Text color={modeColor}>[{state.mode.toUpperCase()}]</Text>
+                {/* RIGHT COLUMN: Tips & Activity */}
+                <Box flexDirection="column" width={rightWidth} paddingLeft={isNarrow ? 0 : 1}>
+
+                    {/* Tips */}
+                    <Box flexDirection="column" marginBottom={1}>
+                        <Text bold color="white">Tips for getting started</Text>
+                        <Text>✔ Run <Text color="cyan">/init</Text> to configure settings</Text>
+                        <Text>✔ <Text color="cyan">Shift+Tab</Text> to toggle modes ({state.mode})</Text>
                     </Box>
 
-                    {/* Model Row */}
-                    <Box>
-                        <Text color="gray">Model: </Text>
-                        <Text color="white" bold>{state.model}</Text>
+                    {/* Separator */}
+                    <Box marginY={0}>
+                        <Text color={borderColor}>──────────────────────────────</Text>
                     </Box>
 
-                    {/* Status Row */}
-                    <Box>
-                        <Text color={keyColor}>{keyIcon}</Text>
-                        <Text color="gray"> Key </Text>
-                        {showExtended && (
-                            <>
-                                <Text color="gray">| </Text>
-                                <Text color="green">${state.sessionCost.toFixed(4)}</Text>
-                            </>
-                        )}
+                    {/* Recent Activity (Placeholder for now) */}
+                    <Box flexDirection="column" marginTop={1}>
+                        <Text bold color="white">Recent activity</Text>
+                        <Text dimColor>No recent activity</Text>
                     </Box>
-
-                    {/* Help Row */}
-                    {showFull && (
-                        <Text color="gray" dimColor>
-                            Shift+Tab: mode | /help: commands
-                        </Text>
-                    )}
                 </Box>
             </Box>
         </Box>
