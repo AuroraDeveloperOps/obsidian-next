@@ -5,7 +5,7 @@
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![Release](https://img.shields.io/badge/Release-v0.4.1-blue)
-![Status](https://img.shields.io/badge/Status-Stable-green)
+![Status](https://img.shields.io/badge/Status-Pre--release-orange)
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
 

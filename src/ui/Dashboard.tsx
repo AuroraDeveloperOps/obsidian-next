@@ -34,7 +34,7 @@ export const Dashboard: React.FC = () => {
         sessionCost: 0,
         workspace: process.cwd().split('/').slice(-2).join('/'), // Shortened path
         user: process.env.USER || 'User',
-        version: 'v0.4.0-pre-release',
+        version: 'v0.4.1',
     });
 
     // Load initial state
