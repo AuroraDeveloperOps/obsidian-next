@@ -15,28 +15,30 @@ export const HelpView: React.FC<HelpViewProps> = ({ onClose }) => {
 
     return (
         <Box flexDirection="column" width="100%" height="100%" paddingX={1} paddingY={0}>
+            {/* Minimal Header */}
             <Box marginBottom={1}>
-                <Text bold color="cyan">[*] Help & Documentation</Text>
+                <Text bold color="white">[ Help & Documentation ]</Text>
             </Box>
 
             <Box flexDirection="column">
                 <Box marginBottom={1}>
-                    <Text bold>Available Commands</Text>
+                    <Text bold color="gray">Available Commands</Text>
                 </Box>
 
                 {COMMANDS.map((cmd) => (
-                    <Box key={cmd.name} flexDirection="column" marginBottom={1}>
-                        <Box>
-                            <Text color="green" bold>{cmd.name}</Text>
+                    <Box key={cmd.name} flexDirection="row" marginBottom={0}>
+                        <Box width={14}>
+                            <Text color="red">{cmd.name}</Text>
                         </Box>
-                        <Box marginLeft={2}>
+                        <Box>
                             <Text color="white">{cmd.desc}</Text>
                         </Box>
                     </Box>
                 ))}
             </Box>
 
-            <Box marginTop={1} borderStyle="single" borderLeft={false} borderRight={false} borderBottom={false} borderTop={true} borderColor="gray" paddingTop={0}>
+            {/* Minimal Footer */}
+            <Box marginTop={1}>
                 <Text color="gray" dimColor>Esc to close</Text>
             </Box>
         </Box>

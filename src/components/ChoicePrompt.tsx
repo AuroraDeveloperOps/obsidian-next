@@ -82,15 +82,12 @@ export const ChoicePrompt: React.FC<ChoicePromptProps> = ({
     return (
         <Box
             flexDirection="column"
-            borderStyle="round"
-            borderColor="cyan"
-            paddingX={1}
-            paddingY={0}
+            paddingX={0}
             marginY={1}
         >
             {/* Question */}
             <Box marginBottom={1}>
-                <Text bold color="cyan">[?] {question}</Text>
+                <Text bold color="white">[ ? ] {question}</Text>
             </Box>
 
             {/* Options */}
@@ -99,11 +96,11 @@ export const ChoicePrompt: React.FC<ChoicePromptProps> = ({
                     const isSelected = index === selectedIndex;
                     return (
                         <Box key={option.id}>
-                            <Text color={isSelected ? 'cyan' : 'gray'}>
-                                {isSelected ? '>' : ' '}
+                            <Text color={isSelected ? 'red' : 'gray'}>
+                                {isSelected ? '> ' : '  '}
                             </Text>
                             <Text color={isSelected ? 'white' : 'gray'} bold={isSelected}>
-                                [{index + 1}] {option.label}
+                                {option.label}
                             </Text>
                         </Box>
                     );
@@ -113,7 +110,7 @@ export const ChoicePrompt: React.FC<ChoicePromptProps> = ({
             {/* Instructions */}
             <Box>
                 <Text color="gray" dimColor>
-                    Use arrows or numbers to select, Enter to confirm, Esc to cancel
+                    Use arrows to select, Enter to confirm
                 </Text>
             </Box>
         </Box>

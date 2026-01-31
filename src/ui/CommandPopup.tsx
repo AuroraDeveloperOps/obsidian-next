@@ -47,7 +47,7 @@ export const CommandPopup = ({ matches, selectedIndex }: CommandPopupProps) => {
     return (
         <Box
             flexDirection="column"
-            paddingX={1}
+            paddingX={0}
             marginBottom={0}
             width="100%"
         >
@@ -59,16 +59,20 @@ export const CommandPopup = ({ matches, selectedIndex }: CommandPopupProps) => {
 
                 return (
                     <Box key={cmd.name} flexDirection="row">
-                        <Box minWidth={14}>
+                        <Box minWidth={12}>
+                            <Text
+                                color={isSelected ? 'red' : 'gray'}
+                            >
+                                {isSelected ? '> ' : '  '}
+                            </Text>
                             <Text
                                 color={isSelected ? 'red' : 'white'}
                                 bold={isSelected}
                             >
-                                {isSelected ? '> ' : '  '}
-                                {cmd.name.slice(1)}
+                                {cmd.name}
                             </Text>
                         </Box>
-                        <Text color={isSelected ? 'white' : 'gray'}>{cmd.desc}</Text>
+                        <Text color="gray">  {cmd.desc}</Text>
                     </Box>
                 );
             })}
