@@ -360,7 +360,7 @@ export const Root = () => {
             setInput('');
             return;
         }
-        if (value.trim() === '/usage' || value.trim() === '/cost') {
+        if (value.trim() === '/context' || value.trim() === '/usage' || value.trim() === '/cost') {
             setActiveView('usage');
             setInput('');
             return;

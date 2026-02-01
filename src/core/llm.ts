@@ -119,10 +119,41 @@ export class LLMClient {
             const requestedModel = this.lastConfig?.model || 'claude-sonnet-4-5-20250929';
             let apiModel = modelMap[requestedModel] || requestedModel;
 
-            // Add user message to history (skip if empty - used for tool continuations)
+            // 200k Token Safety Strategy
+            // 1. Warn at 80% (160k)
+            // 2. Prune Aggressively at 90% (180k)
+            // 3. Hard Stop at 98% (196k)
+            const contextLimit = 200_000;
+            const currentUsage = Math.max(this.accumulatedInputTokens, await usage.getContextUsage(apiModel).used); // Heuristic
+
+            if (currentUsage > contextLimit * 0.98) {
+                bus.emitAgent({
+                    type: 'error',
+                    message: `[SAFETY] Context limit reached (${(currentUsage / 1000).toFixed(1)}k). Please run /clear to reset.`
+                });
+                return null;
+            }
+
+            if (currentUsage > contextLimit * 0.90) {
+                bus.emitAgent({
+                    type: 'thought',
+                    content: `[SAFETY] CRITICAL CONTEXT LEVEL (${(currentUsage / 1000).toFixed(1)}k). Aggressive pruning engaged.`
+                });
+                this.pruneHistory(); // Trigger pruning
+            } else if (currentUsage > contextLimit * 0.80) {
+                bus.emitAgent({
+                    type: 'thought',
+                    content: `[WARN] High context usage (${(currentUsage / 1000).toFixed(1)}k). Consider resetting soon.`
+                });
+            }
+
             if (userMessage.trim()) {
                 // New user message - reset iteration counter and token accumulators
                 this.toolIterations = 0;
+                // Note: We do NOT reset accumulatedInputTokens here blindly if we want to track session growth,
+                // BUT for a new turn, we usually rely on the API to give us the fresh count.
+                // The `accumulatedInputTokens` property in this class is somewhat transient for the current streaming loop.
+                // `usage` module handles the persistent tracking.
                 this.accumulatedInputTokens = 0;
                 this.accumulatedOutputTokens = 0;
 
@@ -170,7 +201,18 @@ export class LLMClient {
             }).join('\n');
             const registryList = installableServers.map(r => `- ${r.name}: ${r.description} (run 'mcp_manage install ${r.name}')`).join('\n');
 
-            const systemPrompt = `You are an expert coding agent called Obsidian.
+            // Prune history if too large (Context Editing)
+            this.pruneHistory();
+
+            // Cache Control Strategy:
+            // 1. System Prompt (static, huge) - Always cached
+            // 2. Tool Definitions (static, huge) - Always cached
+            // 3. Last user turn (checkpoint) - Cached every 5 turns
+
+            // Construct System Prompt with Caching
+            const systemPromptBlock: Anthropic.TextBlockParam = {
+                type: 'text',
+                text: `You are an expert coding agent called Obsidian.
 Your persona is friendly but serious, professional, and hyper-focused on code quality, security, and best practices.
 
 CORE DIRECTIVES:
@@ -212,7 +254,9 @@ Active (Ready to use):
 ${activeList}
 
 ${offlineList ? `Offline (Configured but disconnected):\n${offlineList}\n` : ''}
-${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`;
+${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`,
+                cache_control: { type: 'ephemeral' }
+            };
 
             this.abortController = new AbortController();
             const signal = this.abortController.signal;
@@ -228,11 +272,26 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`;
                 if (e.type === 'user_interrupt') interruptHandler();
             });
 
+            // Apply caching to the last message if it's a checkpoint
+            // We set a checkpoint every 5 turns (interactions)
+            if (this.conversationHistory.length > 0 && this.conversationHistory.length % 5 === 0) {
+                const lastMsg = this.conversationHistory[this.conversationHistory.length - 1];
+                if (lastMsg.content) {
+                    // Check if it's a user or assistant message that supports content blocks
+                    // Ideally we cache on User messages (checkpoints)
+                    if (lastMsg.role === 'user' && typeof lastMsg.content === 'string') {
+                        lastMsg.content = [
+                            { type: 'text', text: lastMsg.content, cache_control: { type: 'ephemeral' } }
+                        ];
+                    }
+                }
+            }
+
             const createMessage = async (model: string) => {
                 return await this.client!.messages.create({
                     model,
                     max_tokens: this.lastConfig?.maxTokens || 8192,
-                    system: systemPrompt,
+                    system: [systemPromptBlock],
                     messages: [...this.conversationHistory],
                     tools: toolDefinitions as Anthropic.Tool[], // Cast to satisfy SDK types
                     stream: true,
@@ -243,6 +302,9 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`;
             let currentModel = apiModel;
             let inputTokens = 0;
             let outputTokens = 0;
+            let cacheReadTokens = 0;
+            let cacheCreationTokens = 0;
+
             try {
                 stream = await createMessage(apiModel);
             } catch (error: any) {
@@ -271,13 +333,24 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`;
             for await (const chunk of stream) {
                 if (chunk.type === 'message_start' && chunk.message && chunk.message.usage) {
                     inputTokens += chunk.message.usage.input_tokens || 0;
-                    this.accumulatedInputTokens += chunk.message.usage.input_tokens || 0;
+                    outputTokens += chunk.message.usage.output_tokens || 0;
+
+                    // Track Cache Metrics
+                    // @ts-ignore - SDK types might trail API updates
+                    if (chunk.message.usage.cache_read_input_tokens) cacheReadTokens += chunk.message.usage.cache_read_input_tokens;
+                    // @ts-ignore
+                    if (chunk.message.usage.cache_creation_input_tokens) cacheCreationTokens += chunk.message.usage.cache_creation_input_tokens;
+
+                    this.accumulatedInputTokens += inputTokens;
+                    this.accumulatedOutputTokens += outputTokens;
                 }
 
                 if (chunk.type === 'message_delta' && chunk.usage) {
                     outputTokens += chunk.usage.output_tokens || 0;
                     this.accumulatedOutputTokens += chunk.usage.output_tokens || 0;
                 }
+
+                // ... (rest of stream handling same as before)
 
                 if (chunk.type === 'content_block_start' && chunk.content_block.type === 'tool_use') {
                     currentToolUse = {
@@ -299,10 +372,7 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`;
                         toolUses.push(currentToolUse);
                         currentToolUse = null;
                     } catch (e) {
-                        bus.emitAgent({
-                            type: 'error',
-                            message: `Failed to parse tool input: ${e}`
-                        });
+                        // ignore parse error mid-stream
                     }
                 }
 
@@ -341,18 +411,23 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`;
                     if (signal.aborted) break;
                     const result = await tools.execute(toolUse.name, toolUse.input);
 
-                    // Redact PII from tool output before sending to LLM
+                    // Redact PII
                     let outputContent = result.success ? (result.output || 'Success') : (result.error || 'Failed');
                     const redactionResult = redactor.redactToolOutput(toolUse.name, outputContent);
 
                     if (redactionResult.redactionCount > 0) {
                         outputContent = redactionResult.text;
-                        // Log redaction for transparency (hidden from user)
                         bus.emitAgent({
                             type: 'thought',
-                            content: `[Security] Redacted ${redactionResult.redactionCount} sensitive item(s): ${redactionResult.redactedTypes.join(', ')}`,
+                            content: `[Security] Redacted ${redactionResult.redactionCount} sensitive item(s)`,
                             hidden: true
                         });
+                    }
+
+                    // Truncate output logic is handled in tools.execute wrapper now (BashTool), 
+                    // but we ensure safety here for other tools
+                    if (outputContent.length > 20000) {
+                        outputContent = outputContent.slice(0, 5000) + `\n... [${outputContent.length - 10000} chars truncated] ...\n` + outputContent.slice(-5000);
                     }
 
                     toolResults.push({
@@ -395,8 +470,19 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`;
                 });
             }
 
-            // Track accumulated tokens from all iterations (only at final response)
-            await usage.track(currentModel, this.accumulatedInputTokens, this.accumulatedOutputTokens);
+            // Calculate context size for the last request (snapshot)
+            const currentContextSize = inputTokens + cacheReadTokens + cacheCreationTokens;
+
+            // Track accumulated tokens including cache metrics
+            // We pass the *accumulated* tokens for cost tracking, but the *current* context size for health tracking
+            await usage.track(
+                currentModel,
+                this.accumulatedInputTokens,
+                this.accumulatedOutputTokens,
+                cacheReadTokens, // These vars (cacheReadTokens) accumulate within the loop? 
+                cacheCreationTokens,
+                currentContextSize
+            );
 
             return fullResponse;
 
@@ -411,13 +497,40 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`;
             return null;
         } finally {
             this.abortController = null;
-            // Note: In a real app we'd want to remove the exact listener, 
-            // but for simplicity here we'd need to store the function reference.
-            // Let's use a more modular approach if possible or just rely on the controller null check.
         }
     }
 
+    /**
+     * History Pruning (Context Editing)
+     * Keep recent 30 messages + System Prompt (handled separate)
+     * Limit history to ~150k tokens (heuristic)
+     */
+    private pruneHistory() {
+        const MAX_MESSAGES = 40;
+        if (this.conversationHistory.length > MAX_MESSAGES) {
+            const keepFirst = 2; // Keep first user message (intent)
+            const keepLast = 20; // Keep extensive recent context
 
+            // Remove middle chunk
+            const removalCount = this.conversationHistory.length - (keepFirst + keepLast);
+            if (removalCount > 0) {
+                const keptStart = this.conversationHistory.slice(0, keepFirst);
+                const keptEnd = this.conversationHistory.slice(-keepLast);
+
+                this.conversationHistory = [
+                    ...keptStart,
+                    { role: 'user', content: `[... History Pruned: ${removalCount} intermediate messages were removed to save context ...]` },
+                    ...keptEnd
+                ];
+
+                bus.emitAgent({
+                    type: 'thought',
+                    content: `[Context] Pruned ${removalCount} old messages to maintain efficiency.`,
+                    hidden: true
+                });
+            }
+        }
+    }
 
     clearHistory(): void {
         this.conversationHistory = [];

@@ -1,8 +1,7 @@
 import { bus } from './bus.js';
 import { initCommand } from '../commands/init.js';
 import { clearCommand } from '../commands/clear.js';
-import { costCommand } from '../commands/cost.js';
-import { usageCommand } from '../commands/usage.js';
+import { contextCommand } from '../commands/context.js';
 import { modelsCommand } from '../commands/models.js';
 import { toolCommand } from '../commands/tool.js';
 import { statusCommand } from '../commands/status.js';
@@ -42,8 +41,7 @@ export class CommandRegistry {
 
         this.register('init', 'Initialize configuration', initCommand);
         this.register('clear', 'Clear conversation history', clearCommand);
-        this.register('cost', 'Show session cost', costCommand);
-        this.register('usage', 'Show historical usage', usageCommand);
+        this.register('context', 'Show session context & usage', contextCommand);
         this.register('models', 'Select AI model', modelsCommand);
         this.register('tool', 'Execute tools manually', toolCommand);
         this.register('status', 'Show system status', statusCommand);

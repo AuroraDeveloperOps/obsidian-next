@@ -294,13 +294,13 @@ Press `Esc` at any time to halt agent reasoning or tool execution.
 | `/mode` | Change execution mode |
 | `/models` | Select AI model |
 | `/status` | Display runtime state |
-| `/cost` | Show session usage cost |
+| `/context` | Analyze context usage & cost |
 | `/undo` | Revert file modifications |
 | `/diff` | View file diffs |
 | `/sandbox` | Toggle sandbox runtime |
 | `/clear` | Reset conversation |
 | `/doctor` | Run diagnostics |
-| `/resume` | Restore saved session |
+| `/resume` | Restore full session state |
 | `/exit` | Save session and exit |
 
 ---

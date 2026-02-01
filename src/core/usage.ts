@@ -8,30 +8,31 @@ const UsageSchema = z.object({
     totalRequests: z.number().default(0),
     totalInputTokens: z.number().default(0),
     totalOutputTokens: z.number().default(0),
+    // Cache metrics
+    totalCacheReadTokens: z.number().default(0),
+    totalCacheCreationTokens: z.number().default(0),
     totalCost: z.number().default(0),
 });
 
 export type UsageStats = z.infer<typeof UsageSchema>;
 
-const MODEL_PRICES: Record<string, { input: number; output: number }> = {
+const MODEL_PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
     // Claude 4.5 Family (2025-2026)
-    'claude-sonnet-4-5-20250929': { input: 3.00, output: 15.00 },
-    'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00 },
-    'claude-opus-4-5-20251101': { input: 5.00, output: 25.00 },
-    // Claude 3.5 Family (backward compatibility)
-    'claude-3-5-sonnet': { input: 3.00, output: 15.00 },
-    'claude-3-5-haiku': { input: 0.25, output: 1.25 },
-    'claude-3-haiku': { input: 0.25, output: 1.25 },
-    'claude-3-opus': { input: 15.00, output: 75.00 },
-    'claude-3-sonnet': { input: 3.00, output: 15.00 },
+    'claude-sonnet-4-5-20250929': { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+    'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00, cacheRead: 0.10, cacheWrite: 1.25 },
+    'claude-opus-4-5-20251101': { input: 5.00, output: 25.00, cacheRead: 0.50, cacheWrite: 6.25 },
+    // Claude 3.5 Family
+    'claude-3-5-sonnet': { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+    'claude-3-5-haiku': { input: 0.25, output: 1.25, cacheRead: 0.03, cacheWrite: 0.30 }, // Estimated
+    'claude-3-haiku': { input: 0.25, output: 1.25, cacheRead: 0.03, cacheWrite: 0.30 },
+    'claude-3-opus': { input: 15.00, output: 75.00, cacheRead: 1.50, cacheWrite: 18.75 }, // Estimated
+    'claude-3-sonnet': { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
 };
 
 const CONTEXT_WINDOW_SIZES: Record<string, number> = {
-    // Claude 4.5 Family
     'claude-sonnet-4-5-20250929': 200_000,
     'claude-haiku-4-5-20251001': 200_000,
     'claude-opus-4-5-20251101': 200_000,
-    // Legacy (Claude 3.5 Family)
     'claude-3-5-sonnet': 200_000,
     'claude-3-5-haiku': 200_000,
 };
@@ -42,8 +43,11 @@ export class UsageTracker {
     private sessionCost: number = 0;
     private sessionInputTokens: number = 0;
     private sessionOutputTokens: number = 0;
+    private sessionCacheReadTokens: number = 0;
+    private sessionCacheCreationTokens: number = 0;
     private sessionDuration: number = 0;
     private lastContextSize: number = 0;
+    private lastCacheRead: number = 0;
 
     constructor(customPath?: string) {
         this.usagePath = customPath || path.join(os.homedir(), '.obsidian', 'usage.json');
@@ -54,33 +58,54 @@ export class UsageTracker {
             const data = await fs.readFile(this.usagePath, 'utf-8');
             this.stats = UsageSchema.parse(JSON.parse(data));
         } catch {
-            // No history or invalid, start fresh
             await this.save();
         }
     }
 
-    async track(model: string, input: number, output: number) {
-        // Calculate cost
+    async track(model: string, input: number, output: number, cacheRead: number = 0, cacheCreation: number = 0, contextSize?: number) {
         let prices = MODEL_PRICES[model];
         if (!prices) {
-            // Attempt partial match
             const key = Object.keys(MODEL_PRICES).find(k => model.includes(k));
-            prices = key ? MODEL_PRICES[key] : { input: 0, output: 0 };
+            prices = key ? MODEL_PRICES[key] : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
         }
 
-        const cost = (input / 1_000_000 * prices.input) + (output / 1_000_000 * prices.output);
+        // Cost Calculation:
+        // Input tokens are standard input usage (non-cached).
+        // Cache Read tokens are cheaper.
+        // Cache Creation tokens are usually Input + a premium (or just treated as Input).
+        // Anthropic billing treats 'input' tokens as either 'base input', 'cache read', or 'cache creation'.
+        // Assuming 'input' arg passed here is the total input count reported by standard usage, we might need to split it if the API provides breakdown.
+        // However, usually API returns: input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens.
+        // And 'input_tokens' EXCLUDES the cache ones, or INCLUDES?
+        // Anthropic docs: usage.input_tokens is total? No.
+        // Usage: { input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 5, cache_read_input_tokens: 100 }
+
+        // We will assume arguments are distinct.
+
+        const costInput = (input / 1_000_000 * prices.input);
+        const costOutput = (output / 1_000_000 * prices.output);
+        const costCacheRead = (cacheRead / 1_000_000 * prices.cacheRead);
+        const costCacheWrite = (cacheCreation / 1_000_000 * prices.cacheWrite);
+
+        const totalReqCost = costInput + costOutput + costCacheRead + costCacheWrite;
 
         this.stats.totalRequests++;
         this.stats.totalInputTokens += input;
         this.stats.totalOutputTokens += output;
-        this.stats.totalCost += cost;
+        this.stats.totalCacheReadTokens += cacheRead;
+        this.stats.totalCacheCreationTokens += cacheCreation;
+        this.stats.totalCost += totalReqCost;
 
         // Session tracking
-        this.sessionCost += cost;
+        this.sessionCost += totalReqCost;
         this.sessionInputTokens += input;
         this.sessionOutputTokens += output;
+        this.sessionCacheReadTokens += cacheRead;
+        this.sessionCacheCreationTokens += cacheCreation;
 
-        this.lastContextSize = input; // Input tokens = context size for that request
+        // Use explicit context size if provided (correct for tool loops), otherwise fallback to sum
+        this.lastContextSize = contextSize !== undefined ? contextSize : (input + cacheRead + cacheCreation);
+        this.lastCacheRead = cacheRead;
 
         await this.save();
     }
@@ -93,7 +118,9 @@ export class UsageTracker {
         return {
             input: this.sessionInputTokens,
             output: this.sessionOutputTokens,
-            total: this.sessionInputTokens + this.sessionOutputTokens
+            cacheRead: this.sessionCacheReadTokens,
+            cacheCreation: this.sessionCacheCreationTokens,
+            total: this.sessionInputTokens + this.sessionOutputTokens + this.sessionCacheReadTokens + this.sessionCacheCreationTokens
         };
     }
 
@@ -106,8 +133,7 @@ export class UsageTracker {
     }
 
     getContextUsage(model: string) {
-        // Find best matching limit
-        let limit = 200_000; // Default safe
+        let limit = 200_000;
         if (CONTEXT_WINDOW_SIZES[model]) {
             limit = CONTEXT_WINDOW_SIZES[model];
         } else {
@@ -116,11 +142,13 @@ export class UsageTracker {
         }
 
         const used = this.lastContextSize;
+        const cached = this.lastCacheRead;
         const remaining = Math.max(0, limit - used);
         const percentUsed = (used / limit) * 100;
 
         return {
             used,
+            cached,
             limit,
             remaining,
             percentRemaining: 100 - percentUsed
@@ -140,6 +168,29 @@ export class UsageTracker {
         const dir = path.dirname(this.usagePath);
         await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(this.usagePath, JSON.stringify(this.stats, null, 2));
+    }
+
+    /**
+     * Restore session-specific stats from a saved session
+     */
+    restoreSessionState(stats: {
+        cost: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheCreationTokens: number;
+        duration: number;
+    }) {
+        this.sessionCost = stats.cost;
+        this.sessionInputTokens = stats.inputTokens;
+        this.sessionOutputTokens = stats.outputTokens;
+        this.sessionCacheReadTokens = stats.cacheReadTokens;
+        this.sessionCacheCreationTokens = stats.cacheCreationTokens;
+        this.sessionDuration = stats.duration;
+
+        // Restore context visualizer state (approximate)
+        this.lastContextSize = stats.inputTokens + stats.cacheReadTokens + stats.cacheCreationTokens;
+        this.lastCacheRead = stats.cacheReadTokens;
     }
 }
 

@@ -32,6 +32,11 @@ export interface SavedSession {
         totalOutputTokens: number;
         totalCost: number;
         sessionCost: number;
+        sessionInputTokens: number;
+        sessionOutputTokens: number;
+        sessionCacheReadTokens: number;
+        sessionCacheCreationTokens: number;
+        sessionDuration: number;
     };
 }
 
@@ -58,6 +63,7 @@ class SessionManager {
         const historyEvents = await history.load();
         const task = tasks.get();
         const stats = usage.getStats();
+        const sessionTokens = usage.getSessionTokens();
 
         const session: SavedSession = {
             id: sessionId,
@@ -72,6 +78,11 @@ class SessionManager {
                 totalOutputTokens: stats.totalOutputTokens,
                 totalCost: stats.totalCost,
                 sessionCost: usage.getSessionCost(),
+                sessionInputTokens: sessionTokens.input,
+                sessionOutputTokens: sessionTokens.output,
+                sessionCacheReadTokens: sessionTokens.cacheRead,
+                sessionCacheCreationTokens: sessionTokens.cacheCreation,
+                sessionDuration: usage.getSessionDuration(),
             },
         };
 
@@ -208,6 +219,37 @@ class SessionManager {
         }
 
         this.resetStartTime();
+
+        // 4. Restore Usage Stats
+        // Backward compatibility: use 0 if field is missing (old sessions)
+        usage.restoreSessionState({
+            cost: savedSession.stats.sessionCost || 0,
+            inputTokens: savedSession.stats.sessionInputTokens || 0,
+            outputTokens: savedSession.stats.sessionOutputTokens || 0,
+            cacheReadTokens: savedSession.stats.sessionCacheReadTokens || 0,
+            cacheCreationTokens: savedSession.stats.sessionCacheCreationTokens || 0,
+            duration: savedSession.stats.sessionDuration || 0
+        });
+
+        // Add restored duration to current start time logic
+        // Because resetStartTime sets startTime to NOW, we need to subtract the previous duration
+        // to make getDuration() return the correct accumulated time.
+        // Wait, UsageTracker tracks its own duration? No, usage.getSessionDuration() returns valid data now.
+        // But SessionManager has its own getDuration()?
+        // Let's check resetStartTime implementation
+
+        // Adjusted logic:
+        // If we restored 5 minutes of previous work.
+        // usage.sessionDuration = 5min.
+        // user works for 1 min.
+        // usage.getSessionDuration() = 5min.
+        // usage.addSessionDuration() method adds to it.
+
+        // BUT SessionManager tracks time via `Date.now() - this.startTime`.
+        // We should adjust `this.startTime` to reflect the previous duration.
+        const prevDuration = savedSession.stats.sessionDuration || 0;
+        this.startTime = Date.now() - prevDuration;
+
         return { success: true };
     }
 
