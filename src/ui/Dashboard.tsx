@@ -25,7 +25,11 @@ interface DashboardState {
     version: string;
 }
 
-export const Dashboard: React.FC = () => {
+interface DashboardProps {
+    isBusy?: boolean;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
     const [columns, setColumns] = useState(process.stdout.columns || 80);
     const [state, setState] = useState<DashboardState>({
         model: 'Loading...',
@@ -116,11 +120,18 @@ export const Dashboard: React.FC = () => {
 
     // Sprite Animation Loop
     useEffect(() => {
+        // Only run full animation when busy, or slow idle animation
+        const interval = isBusy ? 100 : 3000;
+
         const timer = setInterval(() => {
-            setFrame(f => (f + 1) % 30); // 30 frame cycle
-        }, 100);
+            setFrame(f => {
+                // If not busy, only occasionally glitch (e.g. at frame 0)
+                if (!isBusy) return 0; // Reset to 0 (stable) when not busy
+                return (f + 1) % 30;
+            });
+        }, interval);
         return () => clearInterval(timer);
-    }, []);
+    }, [isBusy]);
 
     // ... (rest of render)
 

@@ -460,7 +460,7 @@ export const Root = () => {
         <Box flexDirection="column" height="100%">
             {/* Header / Dashboard - Fixed Height */}
             <Box flexShrink={0}>
-                <Dashboard />
+                <Dashboard isBusy={isBusy} />
             </Box>
 
             {/* Active View Area */}
@@ -570,25 +570,16 @@ export const Root = () => {
                         );
                     })
                 )}
-                {/* Persistent Spinner when Busy but last event isn't animating */}
-                {isBusy && events.length > 0 && (() => {
-                    const lastEvent = events[events.length - 1];
-                    // If last event is NOT a thought (which animates itself) AND NOT a tool_start (which animates itself)
-                    // We need a persistent "Working..." indicator
-                    const isAnimating = lastEvent.type === 'thought' || lastEvent.type === 'tool_start';
-                    if (!isAnimating) {
-                        return (
-                            <Box marginTop={1} marginLeft={1}>
-                                <Text color="yellow"><Glitter /> Thinking...</Text>
-                            </Box>
-                        );
-                    }
-                    return null;
-                })()}
             </Box>
 
             {/* Input & Footer - Fixed Height at Bottom */}
             <Box flexDirection="column" flexShrink={0}>
+                {/* Persistent Thinking Indicator - Sticky at bottom */}
+                {isBusy && (
+                    <Box marginBottom={0} marginLeft={2}>
+                        <Text color="yellow"><Glitter /> Thinking...</Text>
+                    </Box>
+                )}
 
                 {/* Interactive Prompts */}
                 {/* ... prompts ... */}
