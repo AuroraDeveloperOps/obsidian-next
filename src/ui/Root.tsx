@@ -88,6 +88,8 @@ export const Root = () => {
                 model: cfg.model,
                 mode: context.getMode()
             });
+            // Force sync tasks just in case init finished after render
+            setTaskProgress(tasks.getProgress());
         };
 
         updateStats();
@@ -537,8 +539,8 @@ export const Root = () => {
                                     <Text backgroundColor="#1a1a2e" color="white">
                                         {isLast ? <Glitter /> : ' ⏺ '}
                                     </Text>
-                                    <Text backgroundColor="#1a1a2e" color="white" bold> {event.tool}</Text>
-                                    <Text backgroundColor="#1a1a2e" color="gray">({argsSummary}) </Text>
+                                    <Text backgroundColor="#1a1a2e" color="white" bold>{event.tool}</Text>
+                                    <Text backgroundColor="#1a1a2e" color="gray">({argsSummary.trim()}) </Text>
                                 </Box>
                             );
                         } else if (event.type === 'tool_result') {
@@ -705,6 +707,6 @@ export const Root = () => {
                     </Box>
                 )}
             </Box>
-        </Box>
+        </Box >
     );
 };

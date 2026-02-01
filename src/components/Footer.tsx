@@ -30,7 +30,7 @@ export const Footer: React.FC<FooterProps> = ({ mode, model, taskProgress }) => 
             {taskProgress && taskProgress !== 'No active task' && (
                 <Box flexDirection="row" marginTop={0}>
                     <Text color="cyan">
-                        Tasks ({taskProgress.split('[')[1].replace(']', '')} open) · <Text dimColor>ctrl+t to view</Text>
+                        Tasks ({taskProgress.match(/\[(.*?)\]/)?.[1] || '?'} open) · <Text dimColor>ctrl+t to view</Text>
                     </Text>
                 </Box>
             )}

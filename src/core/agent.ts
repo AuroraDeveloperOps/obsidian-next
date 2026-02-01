@@ -56,6 +56,14 @@ class Agent {
             // This prevents the agent from "remembering" stale tasks from previous runs
             await context.startNewSession();
             await history.clear();
+
+            // Also archive and clear stale tasks to ensure a fresh start
+            // (Unless resumed, tasks should match the fresh session)
+            await tasks.init(); // Load first to have something to archive
+            if (tasks.hasActiveTask()) {
+                await tasks.archive();
+                await tasks.clear();
+            }
         }
 
         await tasks.init();

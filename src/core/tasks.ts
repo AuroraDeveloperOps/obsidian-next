@@ -134,6 +134,18 @@ class TaskTracker {
         bus.emitAgent({ type: 'task_update', task: this.task });
     }
 
+    async archive(): Promise<void> {
+        if (!this.task) return;
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const archiveDir = path.join(process.cwd(), TASKS_DIR, 'archive');
+        await fs.mkdir(archiveDir, { recursive: true });
+
+        const archivePath = path.join(archiveDir, `tasks-${timestamp}.md`);
+        const content = this.serialize();
+        await fs.writeFile(archivePath, content);
+    }
+
     // Task management
     async create(title: string): Promise<Task> {
         const now = new Date().toISOString();
