@@ -4,14 +4,14 @@
 
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-![Release](https://img.shields.io/badge/Release-v0.4.1-blue)
+![Release](https://img.shields.io/badge/Release-v0.4.2-blue)
 ![Status](https://img.shields.io/badge/Status-Stable-green)
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
 
 > [!WARNING]
 > **Active Development**
-> This project is currently **Stable (v0.4.1 Release Candidate)**. Core architecture is frozen and audits are complete. Please report any edge-case issues to the issue tracker.
+> This project is currently **Stable (v0.4.2 Release Candidate)**. Core architecture is frozen and audits are complete. Please report any edge-case issues to the issue tracker.
 
 ---
 
@@ -30,40 +30,49 @@ Most AI coding assistants stream raw text and execute code blindly. Obsidian Nex
 
 The `workspace/` directory is a dedicated environment where **Polyoxy** is currently evaluating Obsidian Next.
 
-- **Status**: v0.4.1 (Stable Release Candidate)
+- **Status**: v0.4.2 (Stable Release Candidate)
 - **Benchmarks**: Safety and performance benchmarks are running.
 - **Evaluation Goal**: Stress-testing the Auditor and Session Persistence mechanisms.
 
-## Security Features (v0.4.1)
+## Security Features (v0.4.2)
 
 Obsidian Next implements **Zero Trust AI Automation** with the following security layers:
 
-### Implemented (v0.4.1-security)
+### Implemented (v0.4.2-security)
 
-1.  **Rotating Key System** [NEW]
+1.  **MCP Secure Injection** [NEW]
+    - **Keychain Integration**: MCP API keys migrated from plaintext to System Keychain
+    - **Secure Runtime Injection**: Keys injected via `secureEnv` only during active server connection
+    - **Multi-Account Support**: Scoped keys per service/account
+
+2.  **Local-First Architecture** [NEW]
+    - **Database Removal**: Eliminated external databases (Postgres/Redis) from attack surface
+    - **In-Memory Undo**: Sensitive history kept in RAM, not persisted to disk
+
+3.  **Rotating Key System**
     - Secure API key storage via macOS Keychain, Linux secret-tool, or encrypted file fallback
     - Machine-specific key derivation (AES-256-GCM)
     - Auto-rotation detection for long sessions
     - Never stores plaintext keys in config files
 
-2.  **PII Redaction Engine** [NEW]
+4.  **PII Redaction Engine**
     - Real-time redaction of sensitive data before sending to LLM
     - 14 built-in patterns: email, phone, SSN, credit cards, AWS keys, API tokens, passwords, private keys, JWT
     - Configurable per-pattern enable/disable
     - Allowlist support for specific values
 
-3.  **Audit Logging** [NEW]
+5.  **Audit Logging**
     - Complete audit trail of all command executions
     - File operation logging (read/write/edit/delete)
     - Approval decision tracking
     - JSON format for easy parsing, auto-rotation at 10MB
 
-4.  **Approval Enforcement** [FIXED]
+6.  **Approval Enforcement**
     - Commands requiring approval now properly block execution
     - Safe mode enforces approval for all write operations
     - No bypass possible through mode switching
 
-5.  **Sandbox Runtime**
+7.  **Sandbox Runtime**
     - OS-level isolation via `@anthropic-ai/sandbox-runtime`
     - Native fallbacks to `sandbox-exec` (macOS) and `firejail` (Linux)
 

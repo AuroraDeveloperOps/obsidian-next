@@ -82,7 +82,7 @@ type AgentEvent =
 
 ## 6. Architecture Specs
 - **Folder**: `obsidian/obsidian-next`
-- **Tech**: TypeScript, Ink, Redis (Queue), isolated-vm (Safety).
+- **Tech**: TypeScript, Ink, Node.js EventBus (Zero-Dep), Sandbox Runtime.
 - **Diff View**:
   - unified diff format with `+`/`-` indicators.
   - Interactive "Y/n" or "Select Lines" (future).

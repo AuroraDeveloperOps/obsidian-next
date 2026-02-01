@@ -5,12 +5,14 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { config } from './config.js';
+import { keyManager } from './keyManager.js';
 
 // Schema for .obsidian/mcp.json
 const MCPServerConfigSchema = z.object({
     command: z.string(),
     args: z.array(z.string()).default([]),
     env: z.record(z.string()).optional(),
+    secureEnv: z.array(z.string()).optional(), // List of env vars to load from KeyManager
     autoConnect: z.boolean().default(false),
 });
 
@@ -75,7 +77,19 @@ class MCPManager {
             // Sanitize environment variables (remove internal whitespace/newlines from copy-paste)
             const sanitizedEnv = serverConfig.env ? Object.fromEntries(
                 Object.entries(serverConfig.env).map(([k, v]) => [k, v.trim()])
-            ) : undefined;
+            ) : {};
+
+            // Inject secure keys from KeyManager
+            if (serverConfig.secureEnv) {
+                for (const envName of serverConfig.secureEnv) {
+                    const key = await keyManager.loadKey({ service: 'obsidian-mcp', account: envName });
+                    if (key) {
+                        sanitizedEnv[envName] = key;
+                    } else {
+                        console.warn(`[MCP] Missing secure key for ${envName} (server: ${name})`);
+                    }
+                }
+            }
 
             const transport = new StdioClientTransport({
                 command: serverConfig.command,

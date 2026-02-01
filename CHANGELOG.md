@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-02-01
+
+### Security Hardening
+- **MCP API Keychain**: Replaced plaintext `mcp.json` storage with System Keychain integration.
+  - Added `KeyManager` support for multi-account keys (e.g. `obsidian-mcp:context7`).
+  - `MCPManager` now securely injects keys at runtime via `secureEnv`.
+  - `MCPView` Setup screen now writes directly to Keychain.
+
+### Changed
+- **Dependency Cleanup**: Removed unused database drivers (`prisma`, `pg`, `ioredis`, `bullmq`) to enforce local-first architecture.
+- **Testing**: Added `verify-security.ts` script for keychain validation.
+- **Documentation**: Updated `README.md`, `PRD.md`, and `TOOLS.md` to reflect the removal of database dependencies and the new v0.4.2 security baseline.
+
 ## [0.4.1] - 2026-01-31
 
 ### Added

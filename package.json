@@ -1,6 +1,6 @@
 {
     "name": "@aurora-foundation/obsidian-next",
-    "version": "0.4.1",
+    "version": "0.4.2",
     "description": "Next-gen AI Agent CLI",
     "main": "dist/index.js",
     "type": "module",
@@ -44,14 +44,10 @@
         "@inkjs/ui": "^1.0.0",
         "@modelcontextprotocol/sdk": "^1.0.1",
         "@vscode/ripgrep": "^1.15.9",
-        "@prisma/client": "^6.1.0",
-        "bullmq": "^5.34.0",
         "chalk": "^5.3.0",
         "ink": "^4.4.1",
         "ink-spinner": "^5.0.0",
         "ink-text-input": "^5.0.1",
-        "ioredis": "^5.4.1",
-        "pg": "^8.13.1",
         "react": "^18.3.1",
         "zod": "^3.23.8"
     },
@@ -60,7 +56,6 @@
         "@types/react": "^18.3.3",
         "ink-testing-library": "^3.0.0",
         "pkg": "^5.8.1",
-        "prisma": "^6.1.0",
         "tsup": "^8.1.0",
         "typescript": "^5.5.3",
         "vitest": "^2.0.1"

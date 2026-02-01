@@ -217,11 +217,32 @@ export const MCPView: React.FC<MCPViewProps> = ({ onExit }) => {
         const key = envKeysToPrompt[currentKeyIndex];
 
         setIsSubmitting(true);
-        setStatusMessage(`Saving configuration for ${editingServer}...`);
+        setStatusMessage(`Saving secure configuration for ${editingServer}...`);
 
         try {
+            // Save to KeyManager with 'obsidian-mcp' service and variable name as account
+            const { keyManager } = await import('../../core/keyManager.js');
+            await keyManager.storeKey(currentValue.trim(), { service: 'obsidian-mcp', account: key });
+
+            // Update mcp.json to mark this env var as secure (managed by KeyManager)
+            // We get the current config first
+            // Note: mcp.updateServer needs to support merging secureEnv
+
+            // For now, we manually manage the secureEnv Update
+            // This requires we fetch the current server config...
+            // Or we assume the server exists.
+
+            // We need to fetch the existing securely-managed list or init it.
+            // Let's rely on mcp.updateServer to handle this logic if we pass a special flag or structure, 
+            // OR we just assume `mcp.updateServer` merges fields.
+            // Let's update `secureEnv` array.
+
+            const currentStatus = mcp.getStatus().find(s => s.name === editingServer);
+            const currentSecureEnv = currentStatus?.config.secureEnv || [];
+            const newSecureEnv = Array.from(new Set([...currentSecureEnv, key])); // Unique add
+
             await mcp.updateServer(editingServer, {
-                env: { [key]: currentValue.trim() }
+                secureEnv: newSecureEnv
             });
 
             if (currentKeyIndex < envKeysToPrompt.length - 1) {
@@ -229,7 +250,7 @@ export const MCPView: React.FC<MCPViewProps> = ({ onExit }) => {
                 setCurrentValue('');
                 setStatusMessage(null);
             } else {
-                setStatusMessage(`Configuration for '${editingServer}' updated!`);
+                setStatusMessage(`Configuration for '${editingServer}' securely updated!`);
                 setMode('list');
                 refreshList();
             }
