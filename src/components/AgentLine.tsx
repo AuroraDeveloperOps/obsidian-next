@@ -52,7 +52,10 @@ export const AgentLine: React.FC<AgentLineProps> = ({ content, isStreaming }) =>
     const hasMarkdown = content.includes('```') ||
         content.includes('# ') ||
         content.match(/^\s*[-*]\s/m) ||
-        content.includes('`');
+        content.includes('`') ||
+        content.includes('**') ||
+        content.includes('__') ||
+        (content.includes('*') && content.split('*').length > 2); // Simple heuristic for italics
 
     // Render with syntax highlighting if markdown present
     const renderedContent = hasMarkdown && !isProcessing

@@ -38,7 +38,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
         sessionCost: 0,
         workspace: process.cwd().split('/').slice(-2).join('/'), // Shortened path
         user: process.env.USER || 'User',
-        version: 'v0.4.1',
+        version: 'v0.4.2',
     });
 
     // Load initial state

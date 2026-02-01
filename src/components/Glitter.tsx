@@ -21,11 +21,13 @@ export const Glitter: React.FC<GlitterProps> = ({ children }) => {
     const glyph = FRAMES[frame];
 
     // Color interpolation logic based on frame intensity
-    // Center frames (index 4-6) are brightest/reddest
+    // Shimmer effect for children: cycle between gray and white
+    const shimmerColors = ['#555555', '#777777', '#999999', '#bbbbbb', '#dddddd', '#ffffff', '#dddddd', '#bbbbbb', '#999999', '#777777', '#555555'];
+    const shimmerColor = shimmerColors[frame % shimmerColors.length];
+
     let color = 'gray'; // Default dim
     if (frame === 2 || frame === 8) color = 'white';
-    if (frame === 3 || frame === 7) color = 'red';
-    if (frame >= 4 && frame <= 6) color = 'red'; // Bright Red (using bold + red for intensity)
+    if (frame >= 3 && frame <= 7) color = 'red';
 
     return (
         <Text>
@@ -33,7 +35,11 @@ export const Glitter: React.FC<GlitterProps> = ({ children }) => {
                 {glyph}
             </Text>
             {children ? <Text> </Text> : null}
-            {children}
+            {children ? (
+                <Text color={shimmerColor}>
+                    {children}
+                </Text>
+            ) : null}
         </Text>
     );
 };
