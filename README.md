@@ -5,7 +5,7 @@
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![npm version](https://img.shields.io/npm/v/@aurora-foundation/obsidian-next.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-![Release](https://img.shields.io/badge/Release-v0.4.2-blue)
+![Release](https://img.shields.io/badge/Release-v0.4.3-blue)
 ![Status](https://img.shields.io/badge/Status-Stable-green)
 
 **Obsidian Next** is a secure, structure-driven AI engineering runtime designed for terminal-native agent workflows.  
@@ -165,47 +165,6 @@ All agent activity is recorded:
 
 ---
 
-# Roadmap
-
-## MCP & Plugin Ecosystem (v0.5.x — Active)
-
-Focus on runtime extensibility and integration infrastructure.
-
-Planned components:
-
-- MCP Connection Manager  
-- `/mcp` command suite  
-- `/plugin` extensibility framework  
-- MCPMenu interactive configuration UI  
-- Pre-configured MCP server registry  
-- Expanded system prompt MCP orchestration  
-
----
-
-## Quality Assurance Initiative
-
-Full testing coverage expansion including:
-
-- Unit testing across all modules  
-- Integration testing matrix  
-- End-to-end runtime validation  
-
----
-
-## Hardware-Level Isolation
-
-Future hypervisor integration using:
-
-- Apple Virtualization Framework  
-- VM-backed agent execution environments  
-
----
-
-## Network Namespace Isolation
-
-Per-session isolated network environments providing strict outbound network controls.
-
----
 
 # Documentation
 
@@ -267,8 +226,11 @@ Then configure your MCP client (Claude Desktop or compatible runtime).
 
 ## First-Time Setup
 
+Launch the runtime and run the interactive initialization wizard.
+This process includes **PII-redacted API key input** for secure credential handling.
+
 ```bash
-npm start
+obsidian
 /init
 ```
 
