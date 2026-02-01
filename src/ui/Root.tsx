@@ -537,7 +537,7 @@ export const Root = () => {
                             content = (
                                 <Box key={i}>
                                     <Text backgroundColor="#1a1a2e" color="white">
-                                        {isLast ? <Glitter /> : ' ⏺ '}
+                                        ⏺
                                     </Text>
                                     <Text backgroundColor="#1a1a2e" color="white" bold>{event.tool}</Text>
                                     <Text backgroundColor="#1a1a2e" color="gray">({argsSummary.trim()}) </Text>
@@ -577,7 +577,7 @@ export const Root = () => {
                 {/* Persistent Thinking Indicator - Sticky at bottom */}
                 {isBusy && (
                     <Box marginBottom={0} marginLeft={2}>
-                        <Text color="yellow"><Glitter /> Thinking...</Text>
+                        <Glitter>Thinking...</Glitter>
                     </Box>
                 )}
 
