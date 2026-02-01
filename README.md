@@ -8,266 +8,362 @@
 ![Release](https://img.shields.io/badge/Release-v0.4.2-blue)
 ![Status](https://img.shields.io/badge/Status-Stable-green)
 
-**Obsidian Next** is a professional, structure-first AI agent interface for the terminal. Built by **Aurora Labs** to provide a rigorous, secure, and interactive environment for modern AI engineering.
+**Obsidian Next** is a secure, structure-driven AI engineering runtime designed for terminal-native agent workflows.  
+Developed by **Aurora Labs**, it provides deterministic execution, strict permission enforcement, and hardened automation tooling for modern AI-assisted development.
 
 > [!WARNING]
 > **Active Development**
-> This project is currently **Stable (v0.4.2 Release Candidate)**. Core architecture is frozen and audits are complete. Please report any edge-case issues to the issue tracker.
+> Obsidian Next is currently **Stable (v0.4.2 Release Candidate)**.  
+> Core architecture is frozen and security audits are complete.  
+> Report edge-case issues through the issue tracker.
 
 ---
 
-## Quick Start (npm)
+## Quick Start
 
-Get the latest stable release (v0.4.2) directly from npm:
+Install and launch the latest stable release:
 
 ```bash
-# Install globally
 npm install -g @aurora-foundation/obsidian-next
-
-# Launch the interface
 obsidian
 ```
 
 ---
 
-## How it Works
+## What Obsidian Next Is
 
-Obsidian Next is not just a chat interface; it's a **Command Center** for AI automation.
+Obsidian Next is a **terminal-native AI development runtime** designed to support secure agent-assisted engineering workflows.
 
-### 1. The Structure-First Engine
-Unlike raw streaming bots, Obsidian emits **Typed JSON Events**. This prevents "Markdown Slop" and ensures the UI remains perfectly synchronized with the agent's internal reasoning.
+It belongs to the emerging class of structured agent tooling alongside systems such as Claude Code and similar developer automation runtimes, but with a primary focus on:
 
-### 2. The Auditor (Safe-by-Default)
-Every tool call (Bash, Write, MCP) is pre-flighted by the **Auditor**. It checks permissions and catches dangerous operations *before* they touch your filesystem.
+- Deterministic execution models  
+- Typed agent communication  
+- Zero-trust security enforcement  
+- Local-first infrastructure design  
 
-### 3. MCP-Native Ecosystem
-Full integration with the **Model Context Protocol**. Obsidian can dynamically connect to external tools, databases, and APIs while maintaining local-first security.
-
----
-
-## Security Features (v0.4.2)
-
-Obsidian Next implements **Zero Trust AI Automation** with the following security layers:
-
-### Implemented (v0.4.2-security)
-
-1.  **MCP Secure Injection** [NEW]
-    - **Keychain Integration**: MCP API keys migrated from plaintext to System Keychain
-    - **Secure Runtime Injection**: Keys injected via `secureEnv` only during active server connection
-    - **Multi-Account Support**: Scoped keys per service/account
-
-2.  **Local-First Architecture** [NEW]
-    - **Database Removal**: Eliminated external databases (Postgres/Redis) from attack surface
-    - **In-Memory Undo**: Sensitive history kept in RAM, not persisted to disk
-
-3.  **Rotating Key System**
-    - Secure API key storage via macOS Keychain, Linux secret-tool, or encrypted file fallback
-    - Machine-specific key derivation (AES-256-GCM)
-    - Auto-rotation detection for long sessions
-    - Never stores plaintext keys in config files
-
-4.  **PII Redaction Engine**
-    - Real-time redaction of sensitive data before sending to LLM
-    - 14 built-in patterns: email, phone, SSN, credit cards, AWS keys, API tokens, passwords, private keys, JWT
-    - Configurable per-pattern enable/disable
-    - Allowlist support for specific values
-
-5.  **Audit Logging**
-    - Complete audit trail of all command executions
-    - File operation logging (read/write/edit/delete)
-    - Approval decision tracking
-    - JSON format for easy parsing, auto-rotation at 10MB
-
-6.  **Approval Enforcement**
-    - Commands requiring approval now properly block execution
-    - Safe mode enforces approval for all write operations
-    - No bypass possible through mode switching
-
-7.  **Sandbox Runtime**
-    - OS-level isolation via `@anthropic-ai/sandbox-runtime`
-    - Native fallbacks to `sandbox-exec` (macOS) and `firejail` (Linux)
-
-### Roadmap
-
-1.  **MCP & Plugin Ecosystem (Phase v0.5.x) [ACTIVE]**:
-    - **READY**: System stability verified. Now entering MCP implementation phase.
-    - **MCP Manager**: Core module for managing Model Context Protocol connections.
-    - **Commands**: `/mcp` for connection management and `/plugin` for extending functionality.
-    - **UI**: Interactive `MCPMenu` component for easy configuration.
-    - **Registry**: Preconfigured registry of useful MCP servers.
-    - **AI Integration**: Updated system prompts to leverage MCP capabilities.
-
-2.  **Quality Assurance**:
-    - **"Hella Testings"**: Comprehensive test coverage across all modules (Unit, Integration, E2E).
-
-3.  **Hardware-Level Sandboxing**:
-    - Integration with native OS hypervisors (Apple Virtualization Framework) for true VM isolation.
-
-4.  **Network Isolation**:
-    - Per-session network namespaces for complete network control.
-
-## Documentation Directory
-
-Fully detailed documentation is available in the **[docs/](docs/README.md)** directory:
-
-- **[MCP Ecosystem](docs/MCP_USER_GUIDE.md)**: Full guide to Model Context Protocol features. [NEW]
-- **[Architecture](docs/ARCHITECTURE.md)**: Supervisor-Agent Topology & Event Bus.
-- **[Agent Logic](docs/AGENT_ARCHITECTURE.md)**: Planning, Modes, and Execution.
-- **[Tools & Safety](docs/TOOLS.md)**: Reference for the 8 core tools and limits.
-- **[Design System](docs/CLI_DESIGN_SYSTEM.md)**: Visual guide to the terminal UI.
-- **[Sandboxing](docs/SANDBOX.md)**: Configuration for secure execution.
-- **[Git Workflow](docs/GIT_WORKFLOW.md)**: Versioning and contribution standards. [NEW]
+Obsidian Next is built for environments where AI agents must operate with predictable behavior, strict auditability, and strong operational safeguards.
 
 ---
 
-## Installation
+## Core Architecture
 
-### Primary Method (NPM)
+### Structure-First Execution Engine
 
-**Latest development build direct from Aurora Labs.**
-Recommended for quick evaluation only.
+Obsidian agents communicate using **typed JSON event streams** rather than raw text generation.
+
+This approach ensures:
+
+- Deterministic UI synchronization  
+- Reliable tool orchestration  
+- Reduced parsing ambiguity  
+- Stronger agent state tracking  
+
+The agent, runtime supervisor, and interface remain continuously synchronized through structured event messaging.
+
+---
+
+### Auditor Runtime Enforcement Layer
+
+All tool invocations are pre-flight validated by the **Auditor** before execution.
+
+The Auditor enforces:
+
+- Permission verification  
+- Destructive operation detection  
+- Execution mode restrictions  
+- Filesystem and network access validation  
+
+This prevents unsafe agent behavior before it can impact the host environment.
+
+---
+
+### MCP-Native Integration
+
+Obsidian Next integrates directly with the **Model Context Protocol (MCP)**, allowing agents to securely connect to:
+
+- External APIs  
+- Databases  
+- Tool ecosystems  
+- Remote compute services  
+
+Connections remain permission-scoped and follow a local-first execution philosophy.
+
+---
+
+# Security Model (v0.4.2)
+
+Obsidian Next implements a layered **Zero-Trust Automation Architecture**.
+
+## Implemented Security Controls
+
+### MCP Secure Credential Injection
+- System keychain credential storage  
+- Runtime-only credential injection using `secureEnv`  
+- Multi-account scoped credential isolation  
+
+---
+
+### Local-First Runtime Design
+- Removal of external database dependencies (Postgres / Redis)  
+- Sensitive undo history maintained in memory only  
+- Reduced persistent attack surface  
+
+---
+
+### Rotating Key Infrastructure
+- Platform-native keychain support  
+- AES-256-GCM encrypted fallback storage  
+- Machine-derived key protection  
+- Automatic rotation detection  
+- Zero plaintext credential storage  
+
+---
+
+### Real-Time PII Redaction Engine
+
+Intercepts sensitive data before LLM transmission.
+
+Includes detection for:
+
+- Email addresses  
+- Phone numbers  
+- Social Security numbers  
+- Credit card numbers  
+- API tokens  
+- AWS credentials  
+- Passwords  
+- Private keys  
+- JWT tokens  
+
+Fully configurable with allowlists and pattern-level toggles.
+
+---
+
+### Comprehensive Audit Logging
+
+All agent activity is recorded:
+
+- Tool execution history  
+- File operation logging  
+- Approval decision tracking  
+- Structured JSON log output  
+- Automatic log rotation at 10MB  
+
+---
+
+### Approval Enforcement Engine
+- Write operations blocked unless explicitly approved in Safe Mode  
+- Execution mode escalation protections  
+- Runtime gating for destructive operations  
+
+---
+
+### Sandbox Runtime Isolation
+- Native integration with `@anthropic-ai/sandbox-runtime`  
+- macOS fallback via `sandbox-exec`  
+- Linux fallback via `firejail`  
+
+---
+
+# Roadmap
+
+## MCP & Plugin Ecosystem (v0.5.x — Active)
+
+Focus on runtime extensibility and integration infrastructure.
+
+Planned components:
+
+- MCP Connection Manager  
+- `/mcp` command suite  
+- `/plugin` extensibility framework  
+- MCPMenu interactive configuration UI  
+- Pre-configured MCP server registry  
+- Expanded system prompt MCP orchestration  
+
+---
+
+## Quality Assurance Initiative
+
+Full testing coverage expansion including:
+
+- Unit testing across all modules  
+- Integration testing matrix  
+- End-to-end runtime validation  
+
+---
+
+## Hardware-Level Isolation
+
+Future hypervisor integration using:
+
+- Apple Virtualization Framework  
+- VM-backed agent execution environments  
+
+---
+
+## Network Namespace Isolation
+
+Per-session isolated network environments providing strict outbound network controls.
+
+---
+
+# Documentation
+
+Complete documentation is available in **[docs/](docs/README.md)**.
+
+### Core References
+- MCP Ecosystem Guide  
+- Architecture Overview  
+- Agent Execution Logic  
+- Tool & Safety Reference  
+- CLI Design System  
+- Sandboxing Configuration  
+- Git Workflow Standards  
+
+---
+
+# Installation
+
+## Primary Method (NPM)
 
 ```bash
 npm install -g @aurora-foundation/obsidian-next
 ```
 
-Or run it instantly without installation using `npx`:
+Instant execution:
 
 ```bash
 npx @aurora-foundation/obsidian-next
 ```
 
 > [!IMPORTANT]
-> **Privacy & Open Source Priority**
-> We prioritize private, local execution and open-source security. For high-security environments, we strongly recommend the **Development Setup** (cloning and building locally) to ensure a 100% private, audited solution. The NPM installation is provided as an "easy setup" but is not the recommended path for production or sensitive deployments.
+> For high-security or audited environments, cloning and building locally is recommended to maintain full supply-chain transparency.
 
-### Development Setup (From Source)
+---
 
-For contributors or those who want to run the latest development build:
+## Development Setup
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/auroradeveloperops/obsidian-next.git
 cd obsidian-next
 
-# 2. Install dependencies
 npm install
-
-# 3. Build
 npm run build
 ```
 
-### MCP Setup (Experimental)
+---
 
-Obsidian Next can be run as a Model Context Protocol (MCP) server.
-
-1.  Copy the example config:
-    ```bash
-    cp mcp-config.example.json mcp-config.json
-    ```
-2.  Configure your client (e.g., Claude Desktop) to point to the server.
-
-### Usage
+## MCP Server Mode (Experimental)
 
 ```bash
-# Initialize (stores API key securely, selects model)
+cp mcp-config.example.json mcp-config.json
+```
+
+Then configure your MCP client (Claude Desktop or compatible runtime).
+
+---
+
+# Usage
+
+## First-Time Setup
+
+```bash
 npm start
 /init
+```
 
-# Interrupt Generation
-# Press 'Escape' at any time to stop the agent's thought process or tool execution.
+## Environment Key Setup
 
-# Or set API key via environment
+```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
 npm start
 ```
 
-### Commands
+## Interrupt Execution
 
-| Command | Description |
-|---------|-------------|
-| `/init` | Initialize configuration with interactive setup |
-| `/settings` | Interactive settings menu (arrow keys + Enter) |
-| `/mode` | Set execution mode (auto/plan/safe) |
-| `Esc` | **Interrupt** current agent action immediately |
-| `/models` | Select AI model |
-| `/status` | Show system status |
-| `/cost` | Show session cost |
-| `/undo` | Undo file changes |
-| `/diff` | View recent file changes with line-level diffs |
-| `/sandbox` | Toggle sandbox mode |
-| `/clear` | Clear conversation (Prompted) |
-| `/doctor` | Run diagnostics |
-| `/resume` | Restore a saved session |
-| `/exit` | Save session and exit (Prompted) |
-
-### Settings Menu
-
-Access the interactive settings menu with `/settings`:
-
-```
-[ Settings ]      Mode: SAFE
-
-> Execution Mode          Current: safe
-  Security                PII, audit, sandbox
-  UI Preferences          Syntax, colors
-  Permissions             Allow/deny lists
-  Commands                Quick access
-  Close Settings
-
-Arrows: navigate | Enter: select | Esc: back | Shift+Tab: cycle mode
-```
-
-### Security Settings
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `security.piiRedaction` | `true` | Redact PII before sending to LLM |
-| `security.auditLogging` | `true` | Log all commands to audit.log |
-| `security.keyBackend` | `auto` | Key storage: auto/keychain/secret-tool/encrypted-file |
-
-### Execution Modes
-
-| Mode | Description |
-|------|-------------|
-| `safe` | (Default) Require approval for all write operations |
-| `plan` | Read-only planning, approve plan before execution |
-| `auto` | Execute all commands without confirmation |
-
-### Session Management
-
-Obsidian Next supports persistent sessions for long-running tasks:
-
-| Command | Description |
-|---------|-------------|
-| `npm start` | **Fresh Start**. Archives old tasks to `.obsidian/archive` and starts clean. |
-| `/resume` | List and restore a saved session (keeping context & tasks). |
-| `/resume --last` | Quickly restore the most recent session. |
-| `/exit` | Save session state and exit gracefully. |
-
-> [!NOTE]
-> **Fresh Session = Fresh State**. Running `npm start` creates a blank slate to prevent "zombie tasks" from confusing the agent. Use `/resume` if you want to continue where you left off.
-
-## References & Standards
-
-This project adheres to strict industry standards:
-
-- **[Keep a Changelog](https://keepachangelog.com/)**: Standardized formatting for version history.
-- **[Semantic Versioning](https://semver.org/)**: Predictable versioning.
-- **[Model Context Protocol](https://modelcontextprotocol.io/)**: Open standard for AI context exchange.
-- **[Anthropic Sandbox](https://github.com/anthropic-ai/sandbox-runtime)**: Secure runtime isolation.
-
-## Contributing
-
-We strictly enforce **Conventional Commits** and professional standards (no emojis in code).
-See **[CONTRIBUTING.md](CONTRIBUTING.md)** for branch naming conventions (`username-feature/description`).
-
-## Team
-
-**Obsidian Next** is maintained by **Aurora Labs**, the applied research division of the **Aurora Foundation**. We focus on building the next generation of zero-trust AI infrastructure, including strictly typed agent topologies and secure cognitive architectures.
+Press `Esc` at any time to halt agent reasoning or tool execution.
 
 ---
 
-## License
+# Command Reference
 
-Apache License 2.0 - See [LICENSE](LICENSE) for details.
+| Command | Purpose |
+|----------|------------|
+| `/init` | Interactive configuration |
+| `/settings` | Settings interface |
+| `/mode` | Change execution mode |
+| `/models` | Select AI model |
+| `/status` | Display runtime state |
+| `/cost` | Show session usage cost |
+| `/undo` | Revert file modifications |
+| `/diff` | View file diffs |
+| `/sandbox` | Toggle sandbox runtime |
+| `/clear` | Reset conversation |
+| `/doctor` | Run diagnostics |
+| `/resume` | Restore saved session |
+| `/exit` | Save session and exit |
+
+---
+
+# Execution Modes
+
+| Mode | Behavior |
+|-----------|-------------|
+| Safe | Approval required for write operations |
+| Plan | Read-only planning mode |
+| Auto | Fully autonomous execution |
+
+---
+
+# Session Lifecycle
+
+| Command | Behavior |
+|-------------|----------------|
+| `npm start` | Start fresh session |
+| `/resume` | Restore saved session |
+| `/resume --last` | Resume most recent session |
+| `/exit` | Persist session and exit |
+
+Fresh sessions intentionally prevent residual automation state from affecting new workflows.
+
+---
+
+# Standards & Compliance
+
+Obsidian Next adheres to:
+
+- Keep a Changelog  
+- Semantic Versioning  
+- Model Context Protocol  
+- Anthropic Sandbox Runtime  
+
+---
+
+# Contributing
+
+Professional standards are enforced:
+
+- Conventional commit format required  
+- Structured branch naming conventions  
+- Production-grade code review process  
+
+See **CONTRIBUTING.md**.
+
+---
+
+# Team
+
+Obsidian Next is developed by **Aurora Labs**, the applied research division of the **Aurora Foundation**.
+
+Aurora Labs focuses on:
+
+- Zero-trust AI infrastructure  
+- Typed agent execution frameworks  
+- Secure cognitive runtime environments  
+
+---
+
+# License
+
+Apache License 2.0  
+See LICENSE for full details.
