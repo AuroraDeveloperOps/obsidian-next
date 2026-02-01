@@ -8,7 +8,7 @@
 ![Release](https://img.shields.io/badge/Release-v0.4.2-blue)
 ![Status](https://img.shields.io/badge/Status-Stable-green)
 
-**Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
+**Obsidian Next** is a professional, structure-first AI agent interface for the terminal. Built by **Aurora Labs** to provide a rigorous, secure, and interactive environment for modern AI engineering.
 
 > [!WARNING]
 > **Active Development**
@@ -16,24 +16,34 @@
 
 ---
 
-## Why Obsidian Next?
+## Quick Start (npm)
 
-**Safer than "Whatever-Bot"**
+Get the latest stable release (v0.4.2) directly from npm:
 
-Most AI coding assistants stream raw text and execute code blindly. Obsidian Next takes a different approach:
+```bash
+# Install globally
+npm install -g @aurora-foundation/obsidian-next
 
-1.  **Structure Over Slop**: We don't stream raw Markdown. Agents emit **Typed JSON Events**, ensuring the UI is always in sync with the logic.
-2.  **The Auditor**: A built-in security layer that pre-flights every tool call. It catches dangerous commands *before* they run.
-3.  **Zero Hallucinated Ops**: Tools are strictly typed. If the Agent tries to call `deleteFile` (which doesn't exist), the system rejects it instantly.
-4.  **Sandbox Runtime**: Supports OS-level isolation via `@anthropic-ai/sandbox-runtime`, with native fallbacks to `sandbox-exec` (macOS) and `firejail` (Linux).
+# Launch the interface
+obsidian
+```
 
-## Workspace & Evaluation
+---
 
-The `workspace/` directory is a dedicated environment where **Polyoxy** is currently evaluating Obsidian Next.
+## How it Works
 
-- **Status**: v0.4.2 (Stable Release Candidate)
-- **Benchmarks**: Safety and performance benchmarks are running.
-- **Evaluation Goal**: Stress-testing the Auditor and Session Persistence mechanisms.
+Obsidian Next is not just a chat interface; it's a **Command Center** for AI automation.
+
+### 1. The Structure-First Engine
+Unlike raw streaming bots, Obsidian emits **Typed JSON Events**. This prevents "Markdown Slop" and ensures the UI remains perfectly synchronized with the agent's internal reasoning.
+
+### 2. The Auditor (Safe-by-Default)
+Every tool call (Bash, Write, MCP) is pre-flighted by the **Auditor**. It checks permissions and catches dangerous operations *before* they touch your filesystem.
+
+### 3. MCP-Native Ecosystem
+Full integration with the **Model Context Protocol**. Obsidian can dynamically connect to external tools, databases, and APIs while maintaining local-first security.
+
+---
 
 ## Security Features (v0.4.2)
 
