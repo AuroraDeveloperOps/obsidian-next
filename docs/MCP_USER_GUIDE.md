@@ -14,7 +14,7 @@ The **MCP Ecosystem** in Obsidian Next transforms the CLI from a static tool int
 ### A. The Interactive TUI (`/mcp`)
 For users who prefer manual control, the **MCP Manager** provides a visual interface.
 - **Command**: Type `/mcp` in the chat.
-- **Visuals**: See a live list of configured servers and their connection status (🟢/🔴).
+- **Visuals**: See a live list of configured servers and their connection status (`[Online]`/`[Offline]`).
 - **Controls**:
     - `a`: **Add** a new server manually (Command + Args).
     - `e`: **Edit** environment variables (e.g., API Keys).

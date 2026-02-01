@@ -15,13 +15,10 @@
     - **[Plan Mode]**: Only generate tasks/plans, no execution.
     - **[Auto-Accept]**: Execute trusted tools without confirmation (High Agency).
 
-## 2. The "Morphing" Spinner
-- **Requirement**: "Morphing box or circle" (from `cliexample.MD`).
-- **Implementation**: A high-fidelity ASCII animation sequence that cycles shapes:
-  `⠶` -> `⠲` -> `⠴` -> `⠘` (or similar) combined with "Creative Verbs":
-  - "Churning..."
-  - "Brewing..."
-  - "Cogitating..."
+## 2. Professional Loading State
+- **Requirement**: Standard, non-distracting activity indicator.
+- **Implementation**: A cyan braille spinner (`dots`) from `ink-spinner`.
+- **Status Text**: Clear, static status messages (e.g., "Processing...", "Generating plan...").
 
 ## 3. Structured Interaction
 The Agent must support a `Choice` tool that forces the UI to render a selectable list.
@@ -53,8 +50,7 @@ We must implement a `CommandRegistry` to handle these local-only ops.
 | `/init` | Initialize configuration. |
 | `/mode` | Set execution mode (auto/plan/safe). |
 | `/status`| Show system status. |
-| `/cost` | Session cost check. |
-| `/usage` | Historical usage report. |
+| `/context`| Analyze context usage & cost (10x10 Grid). |
 | `/doctor`| Debug connectivity. |
 | `/clear` | Clear context window. |
 | `/task` | Manage tasks. |

@@ -34,12 +34,13 @@ Red color (`#FF0000`) for user input area.
 > check the api status
 ```
 
-## 2. The Spinner ("The Morph")
-**Animation**: Custom frames in `AgentLine.tsx`
+## 2. The Spinner
+**Implementation**: `src/components/MorphSpinner.tsx`
+**Visual**: Cyan Braille Dots (`⠋`, `⠙`, `⠹`, `⠸`, `⠼`, `⠴`, `⠦`, `⠧`, `⠇`, `⠏`).
 **Status Text**:
 - `Processing...`
-- `Generating plan (read-only)...`
-- `Executing approved plan...`
+- `Generating plan...`
+- `Executing tools...`
 
 ## 3. Scenarios & Components
 
@@ -74,11 +75,10 @@ Uses `ApprovalPrompt` component. Shows diff of pending changes.
 ### 3.4. Footer (StatusBar)
 Always visible at the bottom (Ink `Box` with flex-between).
 ```
-[ default ] [ Context: 0 files ] [ Model: Claude 3.5 Sonnet ]   [ Cost: $0.04 ]
+[ default ] [ Context: 0.0k / 200k (0%) ] [ Model: Claude 4.5 Sonnet ]
 ```
 - **Mode**: "[ default ]" (White), "[ plan mode ]" (Yellow), "[ auto-accept ON ]" (Green).
-- **Context**: File count.
-- **Cost**: Session cost.
+- **Context**: Current usage / 200k limit (Percentage).
 
 ### 3.5. Text Input Prompts
 For masked input (API keys) and interactive setup (`TextInputPrompt.tsx`).

@@ -1,66 +1,79 @@
 # Git Workflow & Versioning Protocol
 
-This document establishes the strict versioning and commitment protocols for the **Obsidian Next** project. All contributors (human and AI) must adhere to these rules.
+This document establishes the **strict** versioning and logic constraints for the **Obsidian Next** project.
+All contributors (human and AI) must adhere to these rules without exception.
 
-## 1. Semantic Versioning
+## 1. Branching Strategy
 
-We adhere to **[Semantic Versioning 2.0.0](https://semver.org/)**.
+We utilize a **Feature Branch Workflow.**
 
-- **MAJOR** (`x.0.0`): Incompatible API changes.
-- **MINOR** (`0.x.0`): Backwards-compatible functionality.
-- **PATCH** (`0.0.x`): Backwards-compatible bug fixes.
+| Branch | Description | Access |
+|--------|-------------|--------|
+| `main` | Production-ready, stable code. Deployed to NPM. | Protected (PR Required) |
+| `feat/*` | Feature development. | Developer |
+| `fix/*` | Bug fixes. | Developer |
 
-### Release Channels
-- **Stable**: `vX.Y.Z` (e.g., `v0.4.0`)
-- **Pre-release**: `vX.Y.Z-beta.N` (e.g., `v0.4.1-beta.1`)
+### Naming Convention
 
-## 2. Conventional Commits
+**Format**: `username-type/description`
 
-We adhere to **[Conventional Commits 1.0.0](https://www.conventionalcommits.org/)**.
+| Segment | Allowed Values | Example |
+|---------|----------------|---------|
+| `username`| GitHub handle | `polyoxy` |
+| `type` | `feat`, `fix`, `chore`, `docs`, `refactor` | `feat` |
+| `description`| Kebab-case, short summary | `context-grid` |
+
+**Examples**:
+- `polyoxy-feat/context-grid` (Valid)
+- `jdoe-fix/spinner-alignment` (Valid)
+- `add-login` (Invaild: Missing username/type)
+- `polyoxy/new-feature` (Invalid: Missing type)
+
+---
+
+## 2. Commit Standards
+
+We strictly enforce **[Conventional Commits 1.0.0](https://www.conventionalcommits.org/)**.
 
 **Format**:
 ```text
 <type>(<scope>): <description>
 
 [optional body]
-
-[optional footer(s)]
 ```
 
-**Types**:
-- `feat`: A new feature
-- `fix`: A bug fix
-- `docs`: Documentation only changes
-- `style`: Changes that do not affect the meaning of the code (white-space, formatting, etc)
-- `refactor`: A code change that neither fixes a bug nor adds a feature
-- `perf`: A code change that improves performance
-- `test`: Adding missing tests or correcting existing tests
-- `chore`: Changes to the build process or auxiliary tools and libraries such as documentation generation
+### Types
+- `feat`: A new feature (correlates with MINOR).
+- `fix`: A bug fix (correlates with PATCH).
+- `docs`: Documentation only changes.
+- `chore`: Build process, deps, auxiliary tools.
+- `refactor`: Code change that neither fixes a bug nor adds a feature.
+- `test`: Adding missing tests or correcting existing tests.
+
+### Scopes
+- `core`: Core runtime logic (`src/core`).
+- `ui`: Terminal Interface (`src/ui`).
+- `mcp`: MCP Integration (`src/mcp`).
+- `docs`: Documentation files (`docs/`).
 
 **Examples**:
-- `feat(ui): add session menu view`
-- `fix(core): resolve session leak in agent init`
-- `docs: update roadmap for mcp phase`
+- `feat(core): implement 10x10 context grid` (Valid)
+- `fix(ui): correct usage view alignment` (Valid)
+- `added context grid` (Invalid format)
 
-## 3. Branching Strategy
+---
 
-- **`main`**: Production-ready code. Always stable.
-- **`develop`**: Integration branch for next release.
-- **`username-feature/description`**: Feature branches (e.g., `polyoxy-feat/mcp-manager`).
-- **`username-fix/description`**: Bug fix branches.
+## 3. Pull Request Protocol
 
-## 4. Workflows
+1.  **Atomic PRs**: One feature or fix per PR.
+2.  **Passes Tests**: `npm test` must be clean.
+3.  **No Dead Code**: Remove debug logs (`console.log`) and commented-out blocks.
+4.  **Documentation**: Update `README.md` and `docs/` if behavior changes.
 
-### 4.1. Committing Code
-Before committing, you MUST:
-1.  **Build**: Ensure `npm run build` passes.
-2.  **Lint/Test**: Ensure no regressions.
-3.  **Format**: Message must follow Conventional Commits.
+## 4. Release Process
 
-### 4.2. Releasing
-To cut a release:
-1.  **Bump Version**: Update `package.json`.
-2.  **Changelog**: Add entry to `CHANGELOG.md` following [Keep a Changelog](https://keepachangelog.com/).
-3.  **Build**: Verify production build (`npm run build`).
-4.  **Tag**: Git tag matching version (e.g., `v0.4.1`).
-5.  **Push**: Push commit and tags.
+1.  **Version Bump**: `npm version <major|minor|patch>`
+2.  **Changelog**: Update `CHANGELOG.md` with new version header.
+3.  **Build**: `npm run build`
+4.  **Publish**: `npm publish --access public`
+5.  **Tag**: `git push origin vX.Y.Z`

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-02-01
+
+### Added
+- **100x Context Architecture**:
+  - **High-Fidelity Grid**: 10x10 visualization (`⛁`) in `/context` and usage views.
+  - **200k Token Strategy**: Tiered warning (160k), pruning (180k), and hard stop (196k) limits.
+  - **Memory Manager**: Persistent session context tracking (`src/core/memory.ts`).
+- **Resume 2.0**:
+  - Full restoration of session costs, token usage, and context stats.
+  - Fixed sync issues where context appeared as 0.0k after resumption.
+
+### Changed
+- **Commands**: Deprecated `/cost` and `/usage` in favor of unified `/context` command.
+- **Documentation**: Updated all docs to reflect 'Claude 4.5' model baseline.
+
 ## [0.4.2] - 2026-02-01
 
 ### Security Hardening
@@ -169,7 +184,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Workspace**: Dedicated `workspace/` environment for Polyoxy benchmarking and evaluation.
-- **Documentation**: Comprehensive directory index at `docs/README.md`.
+- **Documentation**: Comprehensive directory index at `docs/INDEX.md`.
 - **MCP**: Experimental MCP configuration (`mcp-config.example.json`).
 
 ### Changed
