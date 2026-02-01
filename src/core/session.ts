@@ -16,6 +16,8 @@ import { context, AgentContext } from './context.js';
 import { history } from './history.js';
 import { tasks, Task } from './tasks.js';
 import { usage } from './usage.js';
+import { llm } from './llm.js';
+import Anthropic from '@anthropic-ai/sdk';
 
 const SESSIONS_DIR = path.join(os.homedir(), '.obsidian', 'sessions');
 
@@ -26,6 +28,7 @@ export interface SavedSession {
     workspace: string;
     context: AgentContext;
     history: AgentEvent[];
+    conversationHistory: Anthropic.MessageParam[]; // Actual LLM context
     task: Task | null;
     stats: {
         totalInputTokens: number;
@@ -72,6 +75,7 @@ class SessionManager {
             workspace: process.cwd(),
             context: ctx,
             history: historyEvents,
+            conversationHistory: llm.getHistorySnapshot(),
             task: task,
             stats: {
                 totalInputTokens: stats.totalInputTokens,
@@ -249,6 +253,11 @@ class SessionManager {
         // We should adjust `this.startTime` to reflect the previous duration.
         const prevDuration = savedSession.stats.sessionDuration || 0;
         this.startTime = Date.now() - prevDuration;
+
+        // 5. Restore LLM Conversation History
+        if (savedSession.conversationHistory) {
+            llm.restoreHistory(savedSession.conversationHistory);
+        }
 
         return { success: true };
     }

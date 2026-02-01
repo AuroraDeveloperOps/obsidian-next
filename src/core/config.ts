@@ -23,6 +23,9 @@ export const ConfigSchema = z.object({
         allowWrite: z.array(z.string()).default(['.', '/tmp']),
         denyWrite: z.array(z.string()).default(['.env', '.env.*', '*.key', '*.pem', '.git/config']),
     }).default({}),
+
+    // Context Management
+    summarizerModel: z.string().default('claude-haiku-4-5-20251001'),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -40,6 +43,7 @@ const DEFAULT_CONFIG: Config = {
         allowWrite: ['.', '/tmp'],
         denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config'],
     },
+    summarizerModel: 'claude-haiku-4-5-20251001',
 };
 
 export class ConfigManager {

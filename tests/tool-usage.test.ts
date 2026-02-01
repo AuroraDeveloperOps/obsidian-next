@@ -158,7 +158,7 @@ describe('Tool Usage Integration', () => {
             'function testFunction() {\n  return "hello";\n}\n'
         );
 
-        const prompt = `Search for "testFunction" in ${testDir}. Be brief.`;
+        const prompt = `Search for "testFunction" in ${testDir} using the grep tool. Be brief.`;
 
         console.log('    > Testing grep tool usage...');
         const response = await client.streamChat(prompt);

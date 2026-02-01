@@ -10,6 +10,24 @@ import { listRegistry } from './mcp-registry.js';
 
 const MAX_TOOL_ITERATIONS = 67;
 
+// Context Management Constants
+const CONTEXT = {
+    MAX_MESSAGES: 40,
+    KEEP_FIRST: 2,
+    KEEP_LAST: 15,
+    BUFFER: 5,
+    TOKEN_LIMIT_WARN: 0.80,
+    TOKEN_LIMIT_PRUNE: 0.90,
+    TOKEN_LIMIT_STOP: 0.98,
+    MAX_TOKENS_TOTAL: 200_000,
+};
+
+interface ToolUsePartial {
+    id: string;
+    name: string;
+    input: any;
+}
+
 export class LLMClient {
     private client: Anthropic | null = null;
     private lastConfig: any = null;
@@ -17,6 +35,8 @@ export class LLMClient {
     private toolIterations = 0;
     private accumulatedInputTokens = 0;
     private accumulatedOutputTokens = 0;
+    private accumulatedCacheReadTokens = 0;
+    private accumulatedCacheCreationTokens = 0;
     private abortController: AbortController | null = null;
 
     async initialize() {
@@ -120,13 +140,9 @@ export class LLMClient {
             let apiModel = modelMap[requestedModel] || requestedModel;
 
             // 200k Token Safety Strategy
-            // 1. Warn at 80% (160k)
-            // 2. Prune Aggressively at 90% (180k)
-            // 3. Hard Stop at 98% (196k)
-            const contextLimit = 200_000;
             const currentUsage = Math.max(this.accumulatedInputTokens, await usage.getContextUsage(apiModel).used); // Heuristic
 
-            if (currentUsage > contextLimit * 0.98) {
+            if (currentUsage > CONTEXT.MAX_TOKENS_TOTAL * CONTEXT.TOKEN_LIMIT_STOP) {
                 bus.emitAgent({
                     type: 'error',
                     message: `[SAFETY] Context limit reached (${(currentUsage / 1000).toFixed(1)}k). Please run /clear to reset.`
@@ -134,13 +150,13 @@ export class LLMClient {
                 return null;
             }
 
-            if (currentUsage > contextLimit * 0.90) {
+            if (currentUsage > CONTEXT.MAX_TOKENS_TOTAL * CONTEXT.TOKEN_LIMIT_PRUNE) {
                 bus.emitAgent({
                     type: 'thought',
                     content: `[SAFETY] CRITICAL CONTEXT LEVEL (${(currentUsage / 1000).toFixed(1)}k). Aggressive pruning engaged.`
                 });
-                this.pruneHistory(); // Trigger pruning
-            } else if (currentUsage > contextLimit * 0.80) {
+                await this.compressHistory(); // Trigger pruning
+            } else if (currentUsage > CONTEXT.MAX_TOKENS_TOTAL * CONTEXT.TOKEN_LIMIT_WARN) {
                 bus.emitAgent({
                     type: 'thought',
                     content: `[WARN] High context usage (${(currentUsage / 1000).toFixed(1)}k). Consider resetting soon.`
@@ -156,6 +172,8 @@ export class LLMClient {
                 // `usage` module handles the persistent tracking.
                 this.accumulatedInputTokens = 0;
                 this.accumulatedOutputTokens = 0;
+                this.accumulatedCacheReadTokens = 0;
+                this.accumulatedCacheCreationTokens = 0;
 
                 this.conversationHistory.push({
                     role: 'user',
@@ -202,7 +220,7 @@ export class LLMClient {
             const registryList = installableServers.map(r => `- ${r.name}: ${r.description} (run 'mcp_manage install ${r.name}')`).join('\n');
 
             // Prune history if too large (Context Editing)
-            this.pruneHistory();
+            await this.compressHistory();
 
             // Cache Control Strategy:
             // 1. System Prompt (static, huge) - Always cached
@@ -327,8 +345,8 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`,
 
             let fullResponse = '';
             let buffer = '';
-            let toolUses: any[] = [];
-            let currentToolUse: any = null;
+            let toolUses: ToolUsePartial[] = [];
+            let currentToolUse: ToolUsePartial | null = null;
 
             for await (const chunk of stream) {
                 if (chunk.type === 'message_start' && chunk.message && chunk.message.usage) {
@@ -337,9 +355,15 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`,
 
                     // Track Cache Metrics
                     // @ts-ignore - SDK types might trail API updates
-                    if (chunk.message.usage.cache_read_input_tokens) cacheReadTokens += chunk.message.usage.cache_read_input_tokens;
+                    if (chunk.message.usage.cache_read_input_tokens) {
+                        cacheReadTokens += chunk.message.usage.cache_read_input_tokens;
+                        this.accumulatedCacheReadTokens += chunk.message.usage.cache_read_input_tokens;
+                    }
                     // @ts-ignore
-                    if (chunk.message.usage.cache_creation_input_tokens) cacheCreationTokens += chunk.message.usage.cache_creation_input_tokens;
+                    if (chunk.message.usage.cache_creation_input_tokens) {
+                        cacheCreationTokens += chunk.message.usage.cache_creation_input_tokens;
+                        this.accumulatedCacheCreationTokens += chunk.message.usage.cache_creation_input_tokens;
+                    }
 
                     this.accumulatedInputTokens += inputTokens;
                     this.accumulatedOutputTokens += outputTokens;
@@ -471,7 +495,8 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`,
             }
 
             // Calculate context size for the last request (snapshot)
-            const currentContextSize = inputTokens + cacheReadTokens + cacheCreationTokens;
+            // inputTokens includes cacheCreation, so we only add cacheReadTokens
+            const currentContextSize = inputTokens + cacheReadTokens;
 
             // Track accumulated tokens including cache metrics
             // We pass the *accumulated* tokens for cost tracking, but the *current* context size for health tracking
@@ -479,8 +504,8 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`,
                 currentModel,
                 this.accumulatedInputTokens,
                 this.accumulatedOutputTokens,
-                cacheReadTokens, // These vars (cacheReadTokens) accumulate within the loop? 
-                cacheCreationTokens,
+                this.accumulatedCacheReadTokens,
+                this.accumulatedCacheCreationTokens,
                 currentContextSize
             );
 
@@ -505,13 +530,110 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`,
      * Keep recent 30 messages + System Prompt (handled separate)
      * Limit history to ~150k tokens (heuristic)
      */
-    private pruneHistory() {
-        const MAX_MESSAGES = 40;
-        if (this.conversationHistory.length > MAX_MESSAGES) {
-            const keepFirst = 2; // Keep first user message (intent)
-            const keepLast = 20; // Keep extensive recent context
+    /**
+     * Smart Context Management
+     * Uses summarization to compress older history instead of deleting it.
+     */
+    private async compressHistory() {
+        if (this.conversationHistory.length > CONTEXT.MAX_MESSAGES) {
+            // Only summarize/prune if we are well past the limit to avoid thrashing
+            if (this.conversationHistory.length < CONTEXT.MAX_MESSAGES + CONTEXT.BUFFER) return;
 
-            // Remove middle chunk
+            // Identify the block to summarize
+            const summarizeStart = CONTEXT.KEEP_FIRST;
+            const summarizeEnd = this.conversationHistory.length - CONTEXT.KEEP_LAST;
+            const messagesToSummarize = this.conversationHistory.slice(summarizeStart, summarizeEnd);
+
+            if (messagesToSummarize.length < 5) return; // Wait for a decent chunk
+
+            bus.emitAgent({
+                type: 'thought',
+                content: `[Context] Compressing ${messagesToSummarize.length} messages using ${this.lastConfig?.summarizerModel || 'Haiku'}...`,
+                hidden: true
+            });
+
+            try {
+                const summary = await this.summarizeBlock(messagesToSummarize);
+
+                // Construct new history
+                const keptStart = this.conversationHistory.slice(0, CONTEXT.KEEP_FIRST);
+                const keptEnd = this.conversationHistory.slice(summarizeEnd);
+
+                this.conversationHistory = [
+                    ...keptStart,
+                    {
+                        role: 'user',
+                        content: `[System: Context compressed. Previous conversation summary below.]\n<conversation_summary>\n${summary}\n</conversation_summary>`
+                    },
+                    ...keptEnd
+                ];
+
+                bus.emitAgent({
+                    type: 'thought',
+                    content: `[Context] Successfully compressed history.`,
+                    hidden: true
+                });
+            } catch (error) {
+                bus.emitAgent({
+                    type: 'error',
+                    message: `[Context] Summarization failed: ${error}. Falling back to standard pruning.`
+                });
+                // Fallback to delete-only if summarization fails
+                this.pruneHistoryFallback();
+            }
+        }
+    }
+
+    private async summarizeBlock(messages: Anthropic.MessageParam[]): Promise<string> {
+        if (!this.client) return "Summary unavailable.";
+
+        const summarizerModel = this.lastConfig?.summarizerModel || 'claude-haiku-4-5-20251001';
+
+        // Prepare messages for the summarizer
+        // We simple convert `tool_use` / `tool_result` to text representations to avoid complex tool definitions for the summarizer
+        const simplifiedMessages: Anthropic.MessageParam[] = messages.map(m => {
+            if (Array.isArray(m.content)) {
+                // Flatten content blocks to text
+                const textContent = m.content.map(b => {
+                    if (b.type === 'text') return b.text;
+                    if (b.type === 'tool_use') return `[Tool Use: ${b.name}]`;
+                    if (b.type === 'tool_result') return `[Tool Result: ${typeof b.content === 'string' ? b.content.slice(0, 500) + '...' : 'Data'}]`; // Truncate tool results heavily
+                    return '';
+                }).join('\n');
+                return { role: m.role, content: textContent };
+            }
+            return m;
+        });
+
+        const prompt = `Please summarize the following conversation segment. Focus on:
+1. Key user requests and intents.
+2. Important actions taken by the agent (tools used).
+3. Key occurrences of errors or successes.
+4. Any critical data/context that might be needed later.
+Be concise but comprehensive.
+
+CONVERSATION SEGMENT:
+${JSON.stringify(simplifiedMessages, null, 2)}
+`;
+
+        const response = await this.client.messages.create({
+            model: summarizerModel,
+            max_tokens: 1024,
+            messages: [{ role: 'user', content: prompt }],
+        });
+
+        if (response.content[0].type === 'text') {
+            return response.content[0].text;
+        }
+        return "Summary generation returned non-text content.";
+    }
+
+    private pruneHistoryFallback() {
+        // Original pruning logic (Moved here as fallback)
+        if (this.conversationHistory.length > CONTEXT.MAX_MESSAGES) {
+            const keepFirst = CONTEXT.KEEP_FIRST;
+            const keepLast = 20; // Keep slightly more for safety in fallback
+
             const removalCount = this.conversationHistory.length - (keepFirst + keepLast);
             if (removalCount > 0) {
                 const keptStart = this.conversationHistory.slice(0, keepFirst);
@@ -522,18 +644,33 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`,
                     { role: 'user', content: `[... History Pruned: ${removalCount} intermediate messages were removed to save context ...]` },
                     ...keptEnd
                 ];
-
-                bus.emitAgent({
-                    type: 'thought',
-                    content: `[Context] Pruned ${removalCount} old messages to maintain efficiency.`,
-                    hidden: true
-                });
             }
         }
     }
 
     clearHistory(): void {
         this.conversationHistory = [];
+    }
+
+    /**
+     * Get a snapshot of the current conversation history for persistence
+     */
+    getHistorySnapshot(): Anthropic.MessageParam[] {
+        return [...this.conversationHistory];
+    }
+
+    /**
+     * Restore conversation history from a saved session
+     */
+    restoreHistory(history: Anthropic.MessageParam[]) {
+        if (Array.isArray(history)) {
+            this.conversationHistory = history;
+            bus.emitAgent({
+                type: 'thought',
+                content: `[Context] Restored ${history.length} messages from saved session.`,
+                hidden: true
+            });
+        }
     }
 }
 

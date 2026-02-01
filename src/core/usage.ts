@@ -48,6 +48,7 @@ export class UsageTracker {
     private sessionDuration: number = 0;
     private lastContextSize: number = 0;
     private lastCacheRead: number = 0;
+    private lastCacheCreation: number = 0;
 
     constructor(customPath?: string) {
         this.usagePath = customPath || path.join(os.homedir(), '.obsidian', 'usage.json');
@@ -104,8 +105,10 @@ export class UsageTracker {
         this.sessionCacheCreationTokens += cacheCreation;
 
         // Use explicit context size if provided (correct for tool loops), otherwise fallback to sum
-        this.lastContextSize = contextSize !== undefined ? contextSize : (input + cacheRead + cacheCreation);
+        // Note: input usually includes cacheCreation, so we don't add cacheCreation here to avoid double counting if input is total.
+        this.lastContextSize = contextSize !== undefined ? contextSize : (input + cacheRead);
         this.lastCacheRead = cacheRead;
+        this.lastCacheCreation = cacheCreation;
 
         await this.save();
     }
@@ -142,7 +145,9 @@ export class UsageTracker {
         }
 
         const used = this.lastContextSize;
-        const cached = this.lastCacheRead;
+        // Approximation: System/Tools are either Read from cache OR Created in cache (on miss)
+        // This helps the UI showing "System/Tools" even on cache miss.
+        const cached = this.lastCacheRead + this.lastCacheCreation;
         const remaining = Math.max(0, limit - used);
         const percentUsed = (used / limit) * 100;
 
