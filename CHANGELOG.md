@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.1] - 2026-01-31
 
+### Added
+- **Interrupt System**: Press `Escape` key to immediately stop agent thought generation or tool execution.
+- **TUI Polish**:
+  - Darker code block backgrounds (`#151515`) for better contrast.
+  - "Glitter" animation for active thinking states.
+  - Removed emojis from test script outputs for cleaner logs.
+
 ### Fixed
+- **MCP Stability**:
+  - **Freeze Fix**: Force-kill transport processes (`SIGKILL`) on disconnect to prevent UI hangs.
+  - **API Key Audit**: Trim whitespace from environment variables and inputs to prevent auth errors.
 - **Sandbox**: Robust OS-level isolation fixes
   - Fixed syntax error in macOS `sandbox-exec` profile (`sys*` -> `syscall-unix`)
   - Improved runtime diagnostics and fallback recovery logic

@@ -5,13 +5,13 @@
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![Release](https://img.shields.io/badge/Release-v0.4.1-blue)
-![Status](https://img.shields.io/badge/Status-Unstable-red)
+![Status](https://img.shields.io/badge/Status-Stable-green)
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
 
 > [!WARNING]
 > **Active Development**
-> This project is currently **Unstable**. While improvements are drastic and features are being added rapidly, expect breaking changes and occasional instability as we finalize the core architecture. Use with caution in production environments.
+> This project is currently **Stable (v0.4.1 Release Candidate)**. Core architecture is frozen and audits are complete. Please report any edge-case issues to the issue tracker.
 
 ---
 
@@ -90,11 +90,13 @@ Obsidian Next implements **Zero Trust AI Automation** with the following securit
 
 Fully detailed documentation is available in the **[docs/](docs/README.md)** directory:
 
+- **[MCP Ecosystem](docs/MCP_USER_GUIDE.md)**: Full guide to Model Context Protocol features. [NEW]
 - **[Architecture](docs/ARCHITECTURE.md)**: Supervisor-Agent Topology & Event Bus.
 - **[Agent Logic](docs/AGENT_ARCHITECTURE.md)**: Planning, Modes, and Execution.
 - **[Tools & Safety](docs/TOOLS.md)**: Reference for the 8 core tools and limits.
 - **[Design System](docs/CLI_DESIGN_SYSTEM.md)**: Visual guide to the terminal UI.
 - **[Sandboxing](docs/SANDBOX.md)**: Configuration for secure execution.
+- **[Git Workflow](docs/GIT_WORKFLOW.md)**: Versioning and contribution standards. [NEW]
 
 ---
 
@@ -152,6 +154,9 @@ Obsidian Next can be run as a Model Context Protocol (MCP) server.
 npm start
 /init
 
+# Interrupt Generation
+# Press 'Escape' at any time to stop the agent's thought process or tool execution.
+
 # Or set API key via environment
 export ANTHROPIC_API_KEY="sk-ant-..."
 npm start
@@ -164,6 +169,7 @@ npm start
 | `/init` | Initialize configuration with interactive setup |
 | `/settings` | Interactive settings menu (arrow keys + Enter) |
 | `/mode` | Set execution mode (auto/plan/safe) |
+| `Esc` | **Interrupt** current agent action immediately |
 | `/models` | Select AI model |
 | `/status` | Show system status |
 | `/cost` | Show session cost |

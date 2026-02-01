@@ -18,6 +18,7 @@ import { HelpView } from './views/HelpView.js';
 import { UsageView } from './views/UsageView.js';
 import { TaskView } from './views/TaskView.js';
 import { SessionView } from './views/SessionView.js';
+import { MCPView } from './views/MCPView.js';
 import { SettingsMenu, MenuView } from '../components/SettingsMenu.js';
 
 import { history } from '../core/history.js';
@@ -67,7 +68,7 @@ export const Root = () => {
     const [stats, setStats] = useState({ cost: 0, model: 'Loading...', mode: 'safe' as 'auto' | 'plan' | 'safe' });
 
     // Active View State Machine
-    type ActiveView = 'chat' | 'settings' | 'doctor' | 'help' | 'usage' | 'task' | 'sessions';
+    type ActiveView = 'chat' | 'settings' | 'doctor' | 'help' | 'usage' | 'task' | 'sessions' | 'mcp';
     const [activeView, setActiveView] = useState<ActiveView>('chat');
     const [settingsTab, setSettingsTab] = useState<MenuView | undefined>();
 
@@ -277,6 +278,13 @@ export const Root = () => {
             return;
         }
 
+        // Global Interrupt - Escape
+        if (key.escape && isBusy) {
+            bus.emitUser({ type: 'user_interrupt' });
+            setIsBusy(false);
+            return;
+        }
+
         // Mode Toggle - Shift+Tab
         if (key.shift && key.tab) {
             cycleMode();
@@ -389,6 +397,11 @@ export const Root = () => {
             setInput('');
             return;
         }
+        if (value.trim() === '/mcp') {
+            setActiveView('mcp');
+            setInput('');
+            return;
+        }
 
         // Destructive Commands Interception
         if (value.trim() === '/clear') {
@@ -475,6 +488,8 @@ export const Root = () => {
                             bus.emitUser({ type: 'user_input', content: `/resume ${id}` });
                         }}
                     />
+                ) : activeView === 'mcp' ? (
+                    <MCPView onExit={() => setActiveView('chat')} />
                 ) : (
                     events.slice(-MAX_EVENTS).map((event: any, i) => {
                         let content = null;

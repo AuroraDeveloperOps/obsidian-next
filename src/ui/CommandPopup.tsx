@@ -20,6 +20,7 @@ export const COMMANDS = [
     { name: '/exit', desc: 'Save session and exit' },
     { name: '/resume', desc: 'Restore saved session' },
     { name: '/diff', desc: 'View file changes' },
+    { name: '/mcp', desc: 'Manage Model Context Protocol' },
 ];
 
 interface CommandPopupProps {

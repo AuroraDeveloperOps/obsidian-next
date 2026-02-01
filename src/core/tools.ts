@@ -17,6 +17,8 @@ import { settings } from './settings.js';
 import { auditLog } from './auditLog.js';
 import { diffManager } from './diff.js';
 import { redactor } from './redactor.js';
+import { mcp } from './mcp.js';
+import { getRegistryDefinition, listRegistry } from './mcp-registry.js';
 import { UserEvent } from '../events/types.js';
 
 const execAsync = promisify(exec);
@@ -93,6 +95,8 @@ export interface ToolResult {
 export interface Tool {
     name: string;
     description: string;
+    inputSchema: Record<string, any>;
+    requiredParams: string[];
     execute: (args: Record<string, any>) => Promise<ToolResult>;
 }
 
@@ -102,6 +106,13 @@ export interface Tool {
 export const BashTool: Tool = {
     name: 'bash',
     description: 'Execute shell commands in the workspace',
+    inputSchema: {
+        command: {
+            type: 'string',
+            description: 'The shell command to execute'
+        }
+    },
+    requiredParams: ['command'],
 
     async execute(args: Record<string, any>): Promise<ToolResult> {
         const command = args.command as string;
@@ -184,6 +195,13 @@ export const BashTool: Tool = {
 export const ReadTool: Tool = {
     name: 'read',
     description: 'Read file contents from the workspace',
+    inputSchema: {
+        path: {
+            type: 'string',
+            description: 'Path to the file to read (relative to workspace)'
+        }
+    },
+    requiredParams: ['path'],
 
     async execute(args: Record<string, any>): Promise<ToolResult> {
         const filePath = args.path as string;
@@ -250,6 +268,17 @@ export const ReadTool: Tool = {
 export const WriteTool: Tool = {
     name: 'write',
     description: 'Create new files in the workspace',
+    inputSchema: {
+        path: {
+            type: 'string',
+            description: 'Path where to create the new file'
+        },
+        content: {
+            type: 'string',
+            description: 'Content to write to the file'
+        }
+    },
+    requiredParams: ['path', 'content'],
 
     async execute(args: Record<string, any>): Promise<ToolResult> {
         const filePath = args.path as string;
@@ -318,6 +347,21 @@ export const WriteTool: Tool = {
 export const EditTool: Tool = {
     name: 'edit',
     description: 'Edit existing files using search and replace',
+    inputSchema: {
+        path: {
+            type: 'string',
+            description: 'Path to the file to edit'
+        },
+        search: {
+            type: 'string',
+            description: 'Text to search for (must match exactly)'
+        },
+        replace: {
+            type: 'string',
+            description: 'Text to replace with'
+        }
+    },
+    requiredParams: ['path', 'search', 'replace'],
 
     async execute(args: Record<string, any>): Promise<ToolResult> {
         const filePath = args.path as string;
@@ -429,6 +473,13 @@ function generateDiffPreview(search: string, replace: string): string {
 export const ListTool: Tool = {
     name: 'list',
     description: 'List files and directories in the workspace',
+    inputSchema: {
+        path: {
+            type: 'string',
+            description: 'Directory path to list (defaults to current directory)'
+        }
+    },
+    requiredParams: [],
 
     async execute(args: Record<string, any>): Promise<ToolResult> {
         const dirPath = args.path as string || '.';
@@ -482,6 +533,21 @@ export const ListTool: Tool = {
 export const GrepTool: Tool = {
     name: 'grep',
     description: 'Search for patterns in files using regex',
+    inputSchema: {
+        pattern: {
+            type: 'string',
+            description: 'Regex pattern to search for'
+        },
+        path: {
+            type: 'string',
+            description: 'Directory to search in (defaults to current directory)'
+        },
+        limit: {
+            type: 'number',
+            description: 'Maximum number of results (default: 50)'
+        }
+    },
+    requiredParams: ['pattern'],
 
     async execute(args: Record<string, any>): Promise<ToolResult> {
         const pattern = args.pattern as string;
@@ -590,6 +656,17 @@ async function searchDirectory(
 export const GlobTool: Tool = {
     name: 'glob',
     description: 'Find files matching a glob pattern (e.g., **/*.ts, src/**/*.tsx)',
+    inputSchema: {
+        pattern: {
+            type: 'string',
+            description: 'Glob pattern like **/*.ts or src/**/*.tsx'
+        },
+        path: {
+            type: 'string',
+            description: 'Base directory (defaults to current directory)'
+        }
+    },
+    requiredParams: ['pattern'],
 
     async execute(args: Record<string, any>): Promise<ToolResult> {
         const pattern = args.pattern as string;
@@ -682,6 +759,25 @@ async function globSearch(
 export const TaskTool: Tool = {
     name: 'task',
     description: 'Manage the active task list. actions: create, add_step, complete_step, fail_step, complete_task',
+    inputSchema: {
+        action: {
+            type: 'string',
+            description: 'Action to perform: create, add_step, complete_step, fail_step, complete_task'
+        },
+        title: {
+            type: 'string',
+            description: 'Title for new task (required for create)'
+        },
+        step: {
+            type: 'string',
+            description: 'Step description (required for add_step)'
+        },
+        step_index: {
+            type: 'number',
+            description: 'Index of step to complete/fail (required for step actions)'
+        }
+    },
+    requiredParams: ['action'],
 
     async execute(args: Record<string, any>): Promise<ToolResult> {
         const action = args.action as string;
@@ -734,6 +830,13 @@ export const TaskTool: Tool = {
 export const WebFetchTool: Tool = {
     name: 'web_fetch',
     description: 'Fetch content from a URL (for documentation, APIs, etc.)',
+    inputSchema: {
+        url: {
+            type: 'string',
+            description: 'URL to fetch content from'
+        }
+    },
+    requiredParams: ['url'],
 
     async execute(args: Record<string, any>): Promise<ToolResult> {
         const url = args.url as string;
@@ -816,6 +919,123 @@ export const WebFetchTool: Tool = {
 };
 
 /**
+ * MCP Management Tool - Allow Agent to manage its own tool servers
+ */
+export const MCPManagementTool: Tool = {
+    name: 'mcp_manage',
+    description: 'Manage MCP servers. actions: add, remove, install. Use "install" to easily add certified tools like "filesystem", "git", "research", or "context7".',
+    inputSchema: {
+        action: {
+            type: 'string',
+            description: 'Action to perform: add, remove, install'
+        },
+        name: {
+            type: 'string',
+            description: 'Name of the server (e.g. "filesystem", "research", "context7")'
+        },
+        command: {
+            type: 'string',
+            description: 'Command to execute (add only)'
+        },
+        args: {
+            type: 'string',
+            description: 'Args for command (add only)'
+        }
+    },
+    requiredParams: ['action', 'name'],
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const action = args.action as string;
+        const name = args.name as string;
+
+        if (action === 'install') {
+            const def = getRegistryDefinition(name);
+            if (!def) {
+                const available = listRegistry().map(r => r.name).join(', ');
+                return { success: false, error: `Unknown registry item '${name}'. Available: ${available}` };
+            }
+
+            // Idempotency: Check if already exists
+            const existing = mcp.getStatus().find(s => s.name === name);
+            if (existing && existing.connected) {
+                return { success: true, output: `MCP server '${name}' is already installed and connected.` };
+            }
+
+            try {
+                await mcp.addServer(name, {
+                    command: def.command,
+                    args: def.args,
+                    autoConnect: false,
+                    env: def.env
+                });
+                return { success: true, output: `Successfully installed and connected to certified MCP server '${name}' (${def.description})` };
+            } catch (e: any) {
+                return { success: false, error: `Failed to install server: ${e.message}` };
+            }
+        }
+
+        if (action === 'add') {
+            if (!args.command) return { success: false, error: 'Command is required for "add" action' };
+            const command = args.command as string;
+            const commandArgs = (args.args as string || '').split(' ').filter(a => a.length > 0);
+
+            try {
+                await mcp.addServer(name, {
+                    command,
+                    args: commandArgs,
+                    autoConnect: false
+                });
+                return { success: true, output: `Successfully added and connected to MCP server '${name}'` };
+            } catch (e: any) {
+                return { success: false, error: `Failed to add server: ${e.message}` };
+            }
+        }
+
+        if (action === 'remove') {
+            try {
+                await mcp.removeServer(name);
+                return { success: true, output: `Successfully removed MCP server '${name}'` };
+            } catch (e: any) {
+                return { success: false, error: `Failed to remove server: ${e.message}` };
+            }
+        }
+
+        if (action === 'connect') {
+            try {
+                const status = mcp.getStatus().find(s => s.name === name);
+                if (!status) return { success: false, error: `Server '${name}' not found in config` };
+                if (status.connected) return { success: true, output: `Server '${name}' is already connected` };
+
+                await mcp.connect(name, status.config);
+                return { success: true, output: `Successfully connected to MCP server '${name}'` };
+            } catch (e: any) {
+                return { success: false, error: `Failed to connect: ${e.message}` };
+            }
+        }
+
+        if (action === 'disconnect') {
+            try {
+                await mcp.disconnect(name);
+                return { success: true, output: `Successfully disconnected MCP server '${name}'` };
+            } catch (e: any) {
+                return { success: false, error: `Failed to disconnect: ${e.message}` };
+            }
+        }
+
+        if (action === 'status') {
+            const status = mcp.getStatus().find(s => s.name === name);
+            if (!status) return { success: false, error: `Server '${name}' not found` };
+            return {
+                success: true,
+                output: `Server: ${name}\nStatus: ${status.connected ? 'Connected' : 'Disconnected'}\nTools: ${status.capabilities ? 'Available' : 'N/A'}`
+            };
+        }
+
+        return { success: false, error: `Unknown action: ${action}` };
+    }
+};
+
+/**
  * Tool Registry - Manages available tools
  */
 export class ToolRegistry {
@@ -833,6 +1053,7 @@ export class ToolRegistry {
         this.register(GlobTool);
         this.register(TaskTool);
         this.register(WebFetchTool);
+        this.register(MCPManagementTool);
     }
 
     register(tool: Tool): void {
@@ -847,17 +1068,55 @@ export class ToolRegistry {
         return this.tools.get(name);
     }
 
-    list(): Tool[] {
-        return Array.from(this.tools.values());
+    async list(): Promise<Tool[]> {
+        const staticTools = Array.from(this.tools.values());
+
+        try {
+            const dynamicTools = await mcp.listTools();
+
+            // Adapt MCP tools to internal Tool interface
+            const mcpAdapters: Tool[] = dynamicTools.map((dt: any) => ({
+                name: `${dt.server}_${dt.name}`, // Namespace: server_toolname
+                description: `[MCP: ${dt.server}] ${dt.description || ''}`,
+                inputSchema: dt.inputSchema?.properties || {},
+                requiredParams: dt.inputSchema?.required || [],
+                execute: async (args: any) => {
+                    // Start tool event is handled by registry.execute wrapper
+                    // We just call the MCP manager
+                    const result = await mcp.callTool(dt.server, dt.name, args);
+
+                    if (result.isError) {
+                        return { success: false, error: 'MCP Tool Error' }; // generic error, result content usually has details?
+                        // MCP callTool returns CallToolResult which has content array.
+                        // We need to parse content.
+                    }
+
+                    // Parse MCP content result
+                    const output = result.content.map((c: any) => c.text).join('\n');
+                    return { success: !result.isError, output };
+                }
+            }));
+
+            return [...staticTools, ...mcpAdapters];
+        } catch (error) {
+            console.error('Failed to list MCP tools:', error);
+            return staticTools;
+        }
     }
 
     async execute(name: string, args: Record<string, any>): Promise<ToolResult> {
-        const tool = this.tools.get(name);
+        let tool = this.tools.get(name);
+
+        // If not a built-in tool, check if it's an MCP tool
+        if (!tool) {
+            const mcpTools = await this.list();
+            tool = mcpTools.find(t => t.name === name);
+        }
 
         if (!tool) {
             return {
                 success: false,
-                error: `Unknown tool: ${name}`
+                error: `Unknown tool: ${name}. Available: ${(await this.list()).map(t => t.name).join(', ')}`
             };
         }
 

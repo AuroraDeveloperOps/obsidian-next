@@ -51,5 +51,6 @@ export interface SessionSummary {
 export type UserEvent =
     | { type: "user_input"; content: string }
     | { type: "user_choice"; selectionId: string; context?: string }
+    | { type: "user_interrupt" }
     | { type: "approval_response"; approved: boolean; requestId: string }
     | { type: "text_input_response"; requestId: string; value: string; cancelled?: boolean };
