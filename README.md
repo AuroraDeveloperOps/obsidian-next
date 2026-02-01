@@ -3,6 +3,7 @@
 ![Obsidian Next](assets/obsidianboxes.png)
 
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
+![npm version](https://img.shields.io/npm/v/@aurora-foundation/obsidian-next.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![Release](https://img.shields.io/badge/Release-v0.4.2-blue)
 ![Status](https://img.shields.io/badge/Status-Stable-green)
