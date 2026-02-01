@@ -42,7 +42,7 @@ const BUILTIN_RULES: RedactionRule[] = [
     // Phone numbers (various formats) - must have separators to avoid false positives
     {
         name: 'phone',
-        pattern: /(\+?1[-.\s])?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/g,
+        pattern: /(\+?1[-.\s])?\(?\d{3}\)?[-.\s]\d{3,4}[-.\s]\d{4}\b/g,
         replacement: '[REDACTED:phone]',
         enabled: true,
         description: 'Phone numbers (US format with separators)',

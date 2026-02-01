@@ -13,6 +13,16 @@ export const ConfigSchema = z.object({
     language: z.string().default('en'),
     // Deprecated: apiKey should be managed by KeyManager, not stored in config
     apiKey: z.string().optional(),
+
+    // Sandbox Configuration
+    executionMode: z.enum(['local', 'sandbox']).default('local'),
+    sandbox: z.object({
+        allowedDomains: z.array(z.string()).default(['*.github.com', '*.npmjs.org', '*.npmjs.com', 'api.anthropic.com', 'registry.npmjs.org']),
+        deniedDomains: z.array(z.string()).default([]),
+        denyRead: z.array(z.string()).default(['~/.ssh', '~/.aws', '~/.config/gcloud', '~/.kube', '~/.gnupg']),
+        allowWrite: z.array(z.string()).default(['.', '/tmp']),
+        denyWrite: z.array(z.string()).default(['.env', '.env.*', '*.key', '*.pem', '.git/config']),
+    }).default({}),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -22,6 +32,14 @@ const DEFAULT_CONFIG: Config = {
     maxTokens: 8192,
     language: 'en',
     workspaceRoot: process.cwd(),
+    executionMode: 'local',
+    sandbox: {
+        allowedDomains: ['*.github.com', '*.npmjs.org', '*.npmjs.com', 'api.anthropic.com', 'registry.npmjs.org'],
+        deniedDomains: [],
+        denyRead: ['~/.ssh', '~/.aws', '~/.config/gcloud', '~/.kube', '~/.gnupg'],
+        allowWrite: ['.', '/tmp'],
+        denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config'],
+    },
 };
 
 export class ConfigManager {
@@ -54,6 +72,33 @@ export class ConfigManager {
             }
         } catch {
             // File missing or invalid, use defaults
+        }
+
+        // Cascade: Check for local .obsidian/config.json in CWD
+        try {
+            const localConfigPath = path.join(process.cwd(), '.obsidian', 'config.json');
+            // Only load if it's different from the global config path
+            if (localConfigPath !== this.configPath) {
+                const localData = await fs.readFile(localConfigPath, 'utf-8');
+                const localParsed = JSON.parse(localData);
+                // Merge local config on top of loaded (global/default) config
+                loadedConfig = { ...loadedConfig, ...localParsed };
+            }
+        } catch {
+            // Local config missing or invalid, ignore
+        }
+
+        // Always ensure workspaceRoot is current CWD unless specifically overridden by the MERGED config
+        // Actually, for safety/consistency, workspaceRoot should typically default to process.cwd()
+        // unless the user *really* managed to set it locally.
+        // But since we excluded it from global save, loadedConfig.workspaceRoot comes from:
+        // 1. DEFAULT_CONFIG (process.cwd())
+        // 2. Global Config (removed now, so falls back to default)
+        // 3. Local Config (if they set it there)
+
+        // Ensure it defaults to actual CWD if missing/empty to fix the "sticky" issue completely
+        if (!loadedConfig.workspaceRoot) {
+            loadedConfig.workspaceRoot = process.cwd();
         }
 
         const finalConfig = ConfigSchema.parse(loadedConfig);
@@ -105,7 +150,8 @@ export class ConfigManager {
         await fs.mkdir(dir, { recursive: true });
 
         // Never save apiKey to config file - use KeyManager instead
-        const { apiKey, ...safeConfig } = config;
+        // Never save workspaceRoot to global config - it should always be process.cwd() or set by local config
+        const { apiKey, workspaceRoot, ...safeConfig } = config;
 
         await fs.writeFile(this.configPath, JSON.stringify(safeConfig, null, 2));
         this.clearCache();

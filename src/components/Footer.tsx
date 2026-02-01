@@ -6,12 +6,13 @@ import { tasks } from '../core/tasks.js';
 interface FooterProps {
     mode: 'auto' | 'plan' | 'safe';
     model: string;
+    taskProgress?: string;
 }
 
-export const Footer: React.FC<FooterProps> = ({ mode, model }) => {
+export const Footer: React.FC<FooterProps> = ({ mode, model, taskProgress }) => {
     // Get real session stats
     const tokens = usage.getSessionTokens();
-    const taskProgress = tasks.getProgress();
+    // taskProgress is now passed as prop
 
     // Format tokens: "1.2k"
     const formatK = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n.toString();
@@ -26,10 +27,10 @@ export const Footer: React.FC<FooterProps> = ({ mode, model }) => {
             </Box>
 
             {/* Task Summary Line (if active) */}
-            {taskProgress !== 'No active task' && (
+            {taskProgress && taskProgress !== 'No active task' && (
                 <Box flexDirection="row" marginTop={0}>
                     <Text color="cyan">
-                        Tasks ({taskProgress.split('[')[1].replace(']', '')} open) · <Text dimColor>ctrl+t to view</Text>
+                        Tasks ({taskProgress.match(/\[(.*?)\]/)?.[1] || '?'} open) · <Text dimColor>ctrl+t to view</Text>
                     </Text>
                 </Box>
             )}

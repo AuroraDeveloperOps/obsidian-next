@@ -5,16 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-02-01
+
+### Security Hardening
+- **MCP API Keychain**: Replaced plaintext `mcp.json` storage with System Keychain integration.
+  - Added `KeyManager` support for multi-account keys (e.g. `obsidian-mcp:context7`).
+  - `MCPManager` now securely injects keys at runtime via `secureEnv`.
+  - `MCPView` Setup screen now writes directly to Keychain.
+
+### Changed
+- **Dependency Cleanup**: Removed unused database drivers (`prisma`, `pg`, `ioredis`, `bullmq`) to enforce local-first architecture.
+- **Testing**: Added `verify-security.ts` script for keychain validation.
+- **Documentation**: Updated `README.md`, `PRD.md`, and `TOOLS.md` to reflect the removal of database dependencies and the new v0.4.2 security baseline.
+
 ## [0.4.1] - 2026-01-31
 
+### Added
+- **Interrupt System**: Press `Escape` key to immediately stop agent thought generation or tool execution.
+- **TUI Polish**:
+  - Darker code block backgrounds (`#151515`) for better contrast.
+  - "Glitter" animation for active thinking states.
+  - Removed emojis from test script outputs for cleaner logs.
+
 ### Fixed
+- **MCP Stability**:
+  - **Freeze Fix**: Force-kill transport processes (`SIGKILL`) on disconnect to prevent UI hangs.
+  - **API Key Audit**: Trim whitespace from environment variables and inputs to prevent auth errors.
 - **Sandbox**: Robust OS-level isolation fixes
   - Fixed syntax error in macOS `sandbox-exec` profile (`sys*` -> `syscall-unix`)
   - Improved runtime diagnostics and fallback recovery logic
   - Integrated `@vscode/ripgrep` to ensure dependency availability
 
+- **Stability**: Critical Persistence Fixes
+  - **Session Leak**: Fixed `Agent.init` to properly wipe history on fresh starts, preventing "ghost" sessions.
+  - **Sticky Config**: Fixed `workspaceRoot` persisting locally; now correctly respects `process.cwd()` for global installs.
+  - **Production Save**: Fixed `Root.tsx` to properly await `session.save()` during UI exit.
+
 ### Added
+- **Session UI**: Interactive `/resume` menu
+  - Browse saved sessions with arrow keys
+  - Delete sessions with `D` or `Delete`
+  - Resume with `Enter`
 - **Dependencies**: Bundled `@vscode/ripgrep` to stabilize primary sandbox runtime
+
+### Changed
+- **Task System**: Enforced "Fresh Session" semantics. `npm start` now auto-archives old tasks to `.obsidian/archive`. Use `/resume` to keep active tasks.
+- **UI Design**: Aligned with "Obsidian Pro" specifications
+  - **Chat**: Optimized tool execution format (`⏺`) and bullet styling (`●`)
+  - **Footer**: Added live task progress indicator (`Tasks (x/y open)`)
+  - **Animation**: "Thinking..." indicator is now persistent and sticky at the bottom
+  - **Dashboard**: Sprite animation now pauses when agent is idle to reduce visual noise
+
 
 ## [0.3.1] - 2026-01-31
 

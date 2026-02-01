@@ -5,6 +5,7 @@
 Integration of Anthropic's `@anthropic-ai/sandbox-runtime` to provide multiple layers of isolation:
 - **Local Mode** (Default): Direct execution with auditor safety checks and prompt confirmation.
 - **Sandbox Mode** (Implemented): OS-level sandboxing with strict isolation.
+- **Robustness**: Bundles `@vscode/ripgrep` to ensure `rg` availability even in minimal environments.
 
 ## Execution Modes
 
@@ -45,6 +46,8 @@ Managed via `/sandbox` command or `.obsidian/config.json`.
     "allowWrite": ["."]
   }
 }
+
+> **Note**: The sandbox now enforces a **Strict Allowlist** policy by default. It denies read access to the User Home directory and only explicitly allows the Workspace, `/tmp`, and essential system paths (`/usr`, `/bin`, etc.).
 ```
 
 ## Usage

@@ -9,12 +9,20 @@
 
 ## Security Features
 
-### v0.3.0-security
+### v0.4.2-security
 
 This release implements comprehensive security hardening:
 
-#### 1. API Key Protection
+#### 1. MCP API Protection [NEW]
+- **Keychain Integration**: MCP API keys migrated from plaintext `mcp.json` to System Keychain
+- **Secure Runtime Injection**: Keys injected via `secureEnv` only during active server connection
+- **Multi-Account Support**: `KeyManager` handles scoped keys (e.g. `obsidian-mcp:service-a`)
 
+#### 2. Local-First Architecture [NEW]
+- **Database Removal**: Removed `prisma`, `pg`, `ioredis` to eliminate external attack surface
+- **In-Memory Undo**: Persistence logic moved to memory; no disk footprint for sensitive history
+
+#### 3. API Key Protection
 - **KeyManager** (`src/core/keyManager.ts`): Secure key storage
   - macOS Keychain integration
   - Linux secret-tool (libsecret) support
@@ -22,30 +30,26 @@ This release implements comprehensive security hardening:
   - Machine-specific key derivation
   - No plaintext keys in config files
 
-#### 2. PII Redaction
-
+#### 4. PII Redaction
 - **Redactor** (`src/core/redactor.ts`): Real-time data masking
   - Redacts sensitive data BEFORE sending to LLM
   - Patterns: email, phone, SSN, credit cards, API keys, passwords, JWT, private keys
   - Configurable via settings
 
-#### 3. Audit Logging
-
+#### 5. Audit Logging
 - **AuditLog** (`src/core/auditLog.ts`): Complete accountability
   - All command executions logged
   - File operations tracked
   - Approval decisions recorded
   - JSON format at `.obsidian/audit.log`
 
-#### 4. Command Approval
-
+#### 6. Command Approval
 - **Auditor** (`src/core/auditor.ts`): Pre-flight security
   - Blocked patterns (rm -rf /, fork bombs, curl|sh)
   - Approval-required patterns (git push --force, npm publish)
   - Safe mode enforces approval for all writes
 
-#### 5. Sandbox Isolation
-
+#### 7. Sandbox Isolation
 - **Sandbox** (`src/core/sandbox.ts`): OS-level isolation
   - Anthropic sandbox-runtime support
   - macOS sandbox-exec fallback
@@ -53,12 +57,12 @@ This release implements comprehensive security hardening:
 
 ## Dependency Audit
 
-Last audit: 2026-01-30
+Last audit: 2026-02-01
 
 ### Current Status
 
 ```
-6 moderate severity vulnerabilities
+0 critical, 0 high, 6 moderate severity vulnerabilities
 ```
 
 ### Analysis

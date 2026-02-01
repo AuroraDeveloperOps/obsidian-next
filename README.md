@@ -4,10 +4,14 @@
 
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-![Release](https://img.shields.io/badge/Release-v0.4.1-blue)
-![Status](https://img.shields.io/badge/Status-Pre--release-orange)
+![Release](https://img.shields.io/badge/Release-v0.4.2-blue)
+![Status](https://img.shields.io/badge/Status-Stable-green)
 
 **Obsidian Next** is a professional, structured, and secure AI agent interface for the terminal. Built by **Aurora Labs** (a division of the **Aurora Foundation**) with a "Structure-First" architecture for rigorous, interactive, and safe user experiences.
+
+> [!WARNING]
+> **Active Development**
+> This project is currently **Stable (v0.4.2 Release Candidate)**. Core architecture is frozen and audits are complete. Please report any edge-case issues to the issue tracker.
 
 ---
 
@@ -26,46 +30,56 @@ Most AI coding assistants stream raw text and execute code blindly. Obsidian Nex
 
 The `workspace/` directory is a dedicated environment where **Polyoxy** is currently evaluating Obsidian Next.
 
-- **Status**: Internal Evaluation / Pre-release.
-- **Benchmarks**: Comprehensive safety and performance benchmarks are running. Results will be published soon.
-- **Evaluation Goal**: The current workspace is used to stress-test the Auditor's ability to catch malicious patterns in a controlled environment.
+- **Status**: v0.4.2 (Stable Release Candidate)
+- **Benchmarks**: Safety and performance benchmarks are running.
+- **Evaluation Goal**: Stress-testing the Auditor and Session Persistence mechanisms.
 
-## Security Features (v0.4.1)
+## Security Features (v0.4.2)
 
 Obsidian Next implements **Zero Trust AI Automation** with the following security layers:
 
-### Implemented (v0.4.1-security)
+### Implemented (v0.4.2-security)
 
-1.  **Rotating Key System** [NEW]
+1.  **MCP Secure Injection** [NEW]
+    - **Keychain Integration**: MCP API keys migrated from plaintext to System Keychain
+    - **Secure Runtime Injection**: Keys injected via `secureEnv` only during active server connection
+    - **Multi-Account Support**: Scoped keys per service/account
+
+2.  **Local-First Architecture** [NEW]
+    - **Database Removal**: Eliminated external databases (Postgres/Redis) from attack surface
+    - **In-Memory Undo**: Sensitive history kept in RAM, not persisted to disk
+
+3.  **Rotating Key System**
     - Secure API key storage via macOS Keychain, Linux secret-tool, or encrypted file fallback
     - Machine-specific key derivation (AES-256-GCM)
     - Auto-rotation detection for long sessions
     - Never stores plaintext keys in config files
 
-2.  **PII Redaction Engine** [NEW]
+4.  **PII Redaction Engine**
     - Real-time redaction of sensitive data before sending to LLM
     - 14 built-in patterns: email, phone, SSN, credit cards, AWS keys, API tokens, passwords, private keys, JWT
     - Configurable per-pattern enable/disable
     - Allowlist support for specific values
 
-3.  **Audit Logging** [NEW]
+5.  **Audit Logging**
     - Complete audit trail of all command executions
     - File operation logging (read/write/edit/delete)
     - Approval decision tracking
     - JSON format for easy parsing, auto-rotation at 10MB
 
-4.  **Approval Enforcement** [FIXED]
+6.  **Approval Enforcement**
     - Commands requiring approval now properly block execution
     - Safe mode enforces approval for all write operations
     - No bypass possible through mode switching
 
-5.  **Sandbox Runtime**
+7.  **Sandbox Runtime**
     - OS-level isolation via `@anthropic-ai/sandbox-runtime`
     - Native fallbacks to `sandbox-exec` (macOS) and `firejail` (Linux)
 
 ### Roadmap
 
-1.  **MCP & Plugin Ecosystem (v0.4.x)**:
+1.  **MCP & Plugin Ecosystem (Phase v0.5.x) [ACTIVE]**:
+    - **READY**: System stability verified. Now entering MCP implementation phase.
     - **MCP Manager**: Core module for managing Model Context Protocol connections.
     - **Commands**: `/mcp` for connection management and `/plugin` for extending functionality.
     - **UI**: Interactive `MCPMenu` component for easy configuration.
@@ -85,11 +99,13 @@ Obsidian Next implements **Zero Trust AI Automation** with the following securit
 
 Fully detailed documentation is available in the **[docs/](docs/README.md)** directory:
 
+- **[MCP Ecosystem](docs/MCP_USER_GUIDE.md)**: Full guide to Model Context Protocol features. [NEW]
 - **[Architecture](docs/ARCHITECTURE.md)**: Supervisor-Agent Topology & Event Bus.
 - **[Agent Logic](docs/AGENT_ARCHITECTURE.md)**: Planning, Modes, and Execution.
 - **[Tools & Safety](docs/TOOLS.md)**: Reference for the 8 core tools and limits.
 - **[Design System](docs/CLI_DESIGN_SYSTEM.md)**: Visual guide to the terminal UI.
 - **[Sandboxing](docs/SANDBOX.md)**: Configuration for secure execution.
+- **[Git Workflow](docs/GIT_WORKFLOW.md)**: Versioning and contribution standards. [NEW]
 
 ---
 
@@ -147,6 +163,9 @@ Obsidian Next can be run as a Model Context Protocol (MCP) server.
 npm start
 /init
 
+# Interrupt Generation
+# Press 'Escape' at any time to stop the agent's thought process or tool execution.
+
 # Or set API key via environment
 export ANTHROPIC_API_KEY="sk-ant-..."
 npm start
@@ -159,6 +178,7 @@ npm start
 | `/init` | Initialize configuration with interactive setup |
 | `/settings` | Interactive settings menu (arrow keys + Enter) |
 | `/mode` | Set execution mode (auto/plan/safe) |
+| `Esc` | **Interrupt** current agent action immediately |
 | `/models` | Select AI model |
 | `/status` | Show system status |
 | `/cost` | Show session cost |
@@ -209,17 +229,13 @@ Obsidian Next supports persistent sessions for long-running tasks:
 
 | Command | Description |
 |---------|-------------|
-| `/exit` | Save session state and exit gracefully |
-| `/exit --force` | Exit even with pending tasks |
-| `/resume` | List all saved sessions |
-| `/resume <id>` | Restore a specific session |
-| `/resume --last` | Restore the most recent session |
+| `npm start` | **Fresh Start**. Archives old tasks to `.obsidian/archive` and starts clean. |
+| `/resume` | List and restore a saved session (keeping context & tasks). |
+| `/resume --last` | Quickly restore the most recent session. |
+| `/exit` | Save session state and exit gracefully. |
 
-Sessions preserve:
-- Conversation history and context
-- Current task progress
-- Working set of files
-- Cost tracking
+> [!NOTE]
+> **Fresh Session = Fresh State**. Running `npm start` creates a blank slate to prevent "zombie tasks" from confusing the agent. Use `/resume` if you want to continue where you left off.
 
 ## References & Standards
 

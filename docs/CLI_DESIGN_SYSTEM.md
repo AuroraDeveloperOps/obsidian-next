@@ -109,3 +109,19 @@ Duration:   1h 23m
 Session saved. Resume with: /resume abc123
 ==================================================
 ```
+
+### 3.7. Session View (Menu)
+Interactive TUI for managing saved sessions (`src/ui/views/SessionView.tsx`).
+
+```
+┌────────────────────────────────────────────────────────┐
+│ Saved Sessions                                         │
+├────────────────────────────────────────────────────────┤
+│ ID                   Date                     Task     │
+│ > ml2vm8fw...        1/31, 5:22 PM            Plan...  │
+│   k9s8d7f6...        1/30, 4:00 PM            Fix...   │
+│                                                        │
+├────────────────────────────────────────────────────────┤
+│ Enter to resume · D to delete · Esc to close           │
+└────────────────────────────────────────────────────────┘
+```

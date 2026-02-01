@@ -3,7 +3,6 @@
  * Uses Postgres for persistence, in-memory for speed
  */
 
-import { PrismaClient } from '@prisma/client';
 import fs from 'fs/promises';
 import path from 'path';
 import { bus } from './bus.js';
@@ -19,41 +18,12 @@ export interface Change {
 }
 
 class UndoManager {
-    private prisma: PrismaClient | null = null;
     private sessionId: string | null = null;
     private changes: Change[] = []; // In-memory stack for fast access
-    private dbEnabled = false;
 
     async init(sessionId: string): Promise<void> {
         this.sessionId = sessionId;
-
-        // Try to connect to Postgres
-        try {
-            this.prisma = new PrismaClient();
-            await this.prisma.$connect();
-            this.dbEnabled = true;
-
-            // Load recent changes from DB
-            const dbChanges = await this.prisma.fileChange.findMany({
-                where: { sessionId, undone: false },
-                orderBy: { createdAt: 'desc' },
-                take: 50,
-            });
-
-            this.changes = dbChanges.map(c => ({
-                id: c.id,
-                filePath: c.filePath,
-                operation: c.operation as Change['operation'],
-                beforeContent: c.beforeContent,
-                afterContent: c.afterContent,
-                timestamp: c.createdAt,
-                undone: c.undone,
-            }));
-        } catch {
-            // Postgres not available - use in-memory only
-            this.dbEnabled = false;
-            this.changes = [];
-        }
+        this.changes = [];
     }
 
     async recordChange(
@@ -76,24 +46,6 @@ class UndoManager {
 
         // Add to in-memory stack
         this.changes.unshift(change);
-
-        // Persist to DB if available
-        if (this.dbEnabled && this.prisma && this.sessionId) {
-            try {
-                await this.prisma.fileChange.create({
-                    data: {
-                        id,
-                        sessionId: this.sessionId,
-                        filePath: change.filePath,
-                        operation,
-                        beforeContent,
-                        afterContent,
-                    },
-                });
-            } catch {
-                // DB write failed, but in-memory is fine
-            }
-        }
 
         // Keep stack bounded
         if (this.changes.length > 100) {
@@ -144,13 +96,6 @@ class UndoManager {
                 // Mark as undone
                 change.undone = true;
 
-                // Update DB if available
-                if (this.dbEnabled && this.prisma) {
-                    await this.prisma.fileChange.update({
-                        where: { id: change.id },
-                        data: { undone: true },
-                    }).catch(() => {});
-                }
             } catch (error: any) {
                 results.push(`Failed: ${change.filePath} - ${error.message}`);
             }
@@ -167,9 +112,7 @@ class UndoManager {
     }
 
     async close(): Promise<void> {
-        if (this.prisma) {
-            await this.prisma.$disconnect();
-        }
+        // No DB to close
     }
 }
 

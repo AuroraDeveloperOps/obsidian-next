@@ -90,7 +90,7 @@ export class SandboxExecutor {
             const s = await settings.load();
 
             // Check if sandbox mode is requested via Config OR Settings
-            if ((cfg as any).executionMode === 'sandbox' || s.security.sandbox) {
+            if (cfg.executionMode === 'sandbox' || s.security.sandbox) {
                 this.mode = 'sandbox';
             } else {
                 this.mode = 'local';
@@ -98,7 +98,7 @@ export class SandboxExecutor {
 
             this.config = {
                 ...DEFAULT_SANDBOX_CONFIG,
-                ...((cfg as any).sandbox || {}),
+                ...(cfg.sandbox || {}),
             };
 
             if (this.mode !== 'sandbox') {
@@ -195,12 +195,19 @@ export class SandboxExecutor {
 (allow signal)
 (allow syscall-unix)
 (allow sysctl-read)
-(allow file-read*)
+(deny file-read* (subpath "${os.homedir()}"))
+(allow file-read* (subpath "${process.cwd()}"))
+(allow file-read* (subpath "/tmp"))
+(allow file-read* (subpath "/usr"))
+(allow file-read* (subpath "/bin"))
+(allow file-read* (subpath "/sbin"))
+(allow file-read* (subpath "/lib"))
+(allow file-read* (subpath "/private/var/run"))
+(allow file-read* (subpath "/Library/Preferences"))
+(allow file-read* (subpath "/dev"))
 (allow file-write* (subpath "/tmp"))
 (allow file-write* (subpath "${process.cwd()}"))
 (deny file-write* (literal "${process.cwd()}/.env"))
-(deny file-read* (subpath "${os.homedir()}/.ssh"))
-(deny file-read* (subpath "${os.homedir()}/.aws"))
 (allow network-outbound (remote tcp "*:80" "*:443"))
 (allow network*)
 (allow mach-lookup*)
@@ -220,8 +227,12 @@ export class SandboxExecutor {
             // We need to return a string that the shell will execute
             // The shell executes: sandbox-exec -f profilePath bash -c "command"
 
-            const escapedCommand = command.replace(/"/g, '\\"');
-            return `sandbox-exec -f ${profilePath} bash -c "${escapedCommand}"`;
+            // Escape single quotes for bash single-quoted string: ' -> '\''
+            const escapedCommand = command.replace(/'/g, "'\\''");
+
+            // Execute with bash -c '...' to prevent variable expansion inside the command
+            // Quote the profile path to handle spaces
+            return `sandbox-exec -f "${profilePath}" bash -c '${escapedCommand}'`;
         }
 
         if (platform === 'linux') {

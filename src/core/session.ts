@@ -146,6 +146,72 @@ class SessionManager {
     }
 
     /**
+     * Restore a saved session (Context, History, Tasks)
+     */
+    async restore(sessionId: string): Promise<{ success: boolean; error?: string }> {
+        const savedSession = await this.load(sessionId);
+        if (!savedSession) {
+            return { success: false, error: `Session ${sessionId} not found` };
+        }
+
+        // 1. Restore Context
+        const { context } = await import('./context.js');
+        await context.init();
+
+        // Clear current state first
+        await context.reset();
+
+        for (const file of savedSession.context.files_read) {
+            await context.trackRead(file);
+        }
+        for (const file of savedSession.context.files_modified) {
+            await context.trackModified(file);
+        }
+        if (savedSession.context.current_task) {
+            await context.setTask(savedSession.context.current_task);
+        }
+        if (savedSession.context.last_action) {
+            await context.setLastAction(savedSession.context.last_action);
+        }
+
+        // 2. Restore History
+        const { history } = await import('./history.js');
+        const { bus } = await import('./bus.js');
+
+        await history.clear();
+        bus.emitAgent({ type: 'clear_history' });
+
+        for (const event of savedSession.history) {
+            if (event.type === 'approval_request' || event.type === 'choice_request') continue;
+            bus.emitAgent(event);
+        }
+
+        // 3. Restore Task
+        const { tasks } = await import('./tasks.js');
+        if (savedSession.task) {
+            await tasks.init();
+            await tasks.create(savedSession.task.title);
+
+            for (const subtask of savedSession.task.subtasks) {
+                await tasks.addSubtask(subtask.text);
+                if (subtask.done) {
+                    const currentTask = tasks.get();
+                    if (currentTask) {
+                        await tasks.completeSubtask(currentTask.subtasks.length - 1);
+                    }
+                }
+            }
+            await tasks.setStatus(savedSession.task.status);
+            for (const ctx of savedSession.task.context) {
+                await tasks.addContext(ctx);
+            }
+        }
+
+        this.resetStartTime();
+        return { success: true };
+    }
+
+    /**
      * Generate session summary for shutdown
      */
     async getSummary(): Promise<SessionSummary> {

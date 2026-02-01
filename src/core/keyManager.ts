@@ -33,11 +33,11 @@ export interface KeyConfig {
 const ROTATION_CHECK_INTERVAL = 4 * 60 * 60 * 1000;
 
 // Service identifiers
-const SERVICE_NAME = 'obsidian-next';
-const ACCOUNT_NAME = 'anthropic-api-key';
+const DEFAULT_SERVICE = 'obsidian-next';
+const DEFAULT_ACCOUNT = 'anthropic-api-key';
 
 class KeyManager {
-    private currentKey: KeyConfig | null = null;
+    private keyCache: Map<string, KeyConfig> = new Map();
     private encryptedFilePath: string;
     private machineId: string | null = null;
 
@@ -45,49 +45,63 @@ class KeyManager {
         this.encryptedFilePath = path.join(os.homedir(), '.obsidian', '.keystore');
     }
 
+    private getCacheKey(service: string, account: string): string {
+        return `${service}:${account}`;
+    }
+
     /**
      * Load API key from the most secure available backend
      */
-    async loadKey(): Promise<string | null> {
-        // Check if current key is still valid (not too old)
-        if (this.currentKey && !this.shouldRotate()) {
-            return this.currentKey.key;
+    async loadKey(options: { service?: string, account?: string } = {}): Promise<string | null> {
+        const service = options.service || DEFAULT_SERVICE;
+        const account = options.account || DEFAULT_ACCOUNT;
+        const cacheKey = this.getCacheKey(service, account);
+
+        // Check cache
+        const cached = this.keyCache.get(cacheKey);
+        if (cached && !this.shouldRotate(cached)) {
+            return cached.key;
         }
 
         // Try backends in order of security preference
         let key: string | null = null;
         let backend: StorageBackend = 'env';
 
-        // 1. Try environment variable first (for CI/CD and explicit config)
-        key = process.env.ANTHROPIC_API_KEY || null;
+        // 1. Try environment variable first (only for default anthropic key)
+        // We don't generally map arbitrary env vars here, only the main one for now or if specifically requested(?)
+        // For now, keep env checked only for the main account to preserve behavior
+        if (account === DEFAULT_ACCOUNT) {
+            key = process.env.ANTHROPIC_API_KEY || null;
+        }
+
         if (key) {
             backend = 'env';
         }
 
         // 2. Try macOS Keychain
         if (!key && process.platform === 'darwin') {
-            key = await this.loadFromKeychain();
+            key = await this.loadFromKeychain(service, account);
             if (key) backend = 'keychain';
         }
 
         // 3. Try Linux secret-tool
         if (!key && process.platform === 'linux') {
-            key = await this.loadFromSecretTool();
+            key = await this.loadFromSecretTool(service, account);
             if (key) backend = 'secret-tool';
         }
 
         // 4. Try encrypted file fallback
         if (!key) {
-            key = await this.loadFromEncryptedFile();
+            key = await this.loadFromEncryptedFile(service, account);
             if (key) backend = 'encrypted-file';
         }
 
         if (key) {
-            this.currentKey = {
+            this.keyCache.set(cacheKey, {
                 key,
                 loadedAt: Date.now(),
                 backend,
-            };
+            });
         }
 
         return key;
@@ -96,31 +110,35 @@ class KeyManager {
     /**
      * Store API key in the most secure available backend
      */
-    async storeKey(key: string): Promise<{ success: boolean; backend: StorageBackend; error?: string }> {
+    async storeKey(key: string, options: { service?: string, account?: string } = {}): Promise<{ success: boolean; backend: StorageBackend; error?: string }> {
+        const service = options.service || DEFAULT_SERVICE;
+        const account = options.account || DEFAULT_ACCOUNT;
+        const cacheKey = this.getCacheKey(service, account);
+
         // Try backends in order of security preference
 
         // 1. Try macOS Keychain
         if (process.platform === 'darwin') {
-            const result = await this.storeInKeychain(key);
+            const result = await this.storeInKeychain(key, service, account);
             if (result.success) {
-                this.currentKey = { key, loadedAt: Date.now(), backend: 'keychain' };
+                this.keyCache.set(cacheKey, { key, loadedAt: Date.now(), backend: 'keychain' });
                 return { success: true, backend: 'keychain' };
             }
         }
 
         // 2. Try Linux secret-tool
         if (process.platform === 'linux') {
-            const result = await this.storeInSecretTool(key);
+            const result = await this.storeInSecretTool(key, service, account);
             if (result.success) {
-                this.currentKey = { key, loadedAt: Date.now(), backend: 'secret-tool' };
+                this.keyCache.set(cacheKey, { key, loadedAt: Date.now(), backend: 'secret-tool' });
                 return { success: true, backend: 'secret-tool' };
             }
         }
 
         // 3. Fall back to encrypted file
-        const result = await this.storeInEncryptedFile(key);
+        const result = await this.storeInEncryptedFile(key, service, account);
         if (result.success) {
-            this.currentKey = { key, loadedAt: Date.now(), backend: 'encrypted-file' };
+            this.keyCache.set(cacheKey, { key, loadedAt: Date.now(), backend: 'encrypted-file' });
             return { success: true, backend: 'encrypted-file' };
         }
 
@@ -130,57 +148,63 @@ class KeyManager {
     /**
      * Delete stored key from all backends
      */
-    async deleteKey(): Promise<void> {
+    async deleteKey(options: { service?: string, account?: string } = {}): Promise<void> {
+        const service = options.service || DEFAULT_SERVICE;
+        const account = options.account || DEFAULT_ACCOUNT;
+        const cacheKey = this.getCacheKey(service, account);
+
         // Clear from memory
-        this.currentKey = null;
+        this.keyCache.delete(cacheKey);
 
         // Delete from keychain
         if (process.platform === 'darwin') {
-            await this.deleteFromKeychain();
+            await this.deleteFromKeychain(service, account);
         }
 
         // Delete from secret-tool
         if (process.platform === 'linux') {
-            await this.deleteFromSecretTool();
+            await this.deleteFromSecretTool(service, account);
         }
 
-        // Delete encrypted file
-        try {
-            await fs.unlink(this.encryptedFilePath);
-        } catch {
-            // File may not exist
-        }
+        // Delete from encrypted file
+        // Note: Encrypted file currently stores ALL keys in one file, so we need to update it, not delete it
+        // Updated logic to remove just the key from the file object
+        await this.deleteFromEncryptedFile(service, account);
     }
 
     /**
      * Check if key should be rotated (for long-running sessions)
      */
-    shouldRotate(): boolean {
-        if (!this.currentKey) return true;
-        return Date.now() - this.currentKey.loadedAt > ROTATION_CHECK_INTERVAL;
+    shouldRotate(config: KeyConfig = this.keyCache.get(this.getCacheKey(DEFAULT_SERVICE, DEFAULT_ACCOUNT))!): boolean {
+        if (!config) return true;
+        return Date.now() - config.loadedAt > ROTATION_CHECK_INTERVAL;
     }
 
     /**
      * Force reload key from backend
      */
-    async refreshKey(): Promise<string | null> {
-        this.currentKey = null;
-        return this.loadKey();
+    async refreshKey(options: { service?: string, account?: string } = {}): Promise<string | null> {
+        const service = options.service || DEFAULT_SERVICE;
+        const account = options.account || DEFAULT_ACCOUNT;
+        this.keyCache.delete(this.getCacheKey(service, account));
+        return this.loadKey(options);
     }
 
     /**
      * Get current backend being used
      */
-    getBackend(): StorageBackend | null {
-        return this.currentKey?.backend || null;
+    getBackend(options: { service?: string, account?: string } = {}): StorageBackend | null {
+        const service = options.service || DEFAULT_SERVICE;
+        const account = options.account || DEFAULT_ACCOUNT;
+        return this.keyCache.get(this.getCacheKey(service, account))?.backend || null;
     }
 
     // ==================== macOS Keychain ====================
 
-    private async loadFromKeychain(): Promise<string | null> {
+    private async loadFromKeychain(service: string, account: string): Promise<string | null> {
         try {
             const { stdout } = await execAsync(
-                `security find-generic-password -s "${SERVICE_NAME}" -a "${ACCOUNT_NAME}" -w 2>/dev/null`
+                `security find-generic-password -s "${service}" -a "${account}" -w 2>/dev/null`
             );
             return stdout.trim() || null;
         } catch {
@@ -188,14 +212,14 @@ class KeyManager {
         }
     }
 
-    private async storeInKeychain(key: string): Promise<{ success: boolean; error?: string }> {
+    private async storeInKeychain(key: string, service: string, account: string): Promise<{ success: boolean; error?: string }> {
         try {
             // Delete existing entry first (if any)
-            await this.deleteFromKeychain();
+            await this.deleteFromKeychain(service, account);
 
             // Add new entry
             await execAsync(
-                `security add-generic-password -s "${SERVICE_NAME}" -a "${ACCOUNT_NAME}" -w "${key}" -U`
+                `security add-generic-password -s "${service}" -a "${account}" -w "${key}" -U`
             );
             return { success: true };
         } catch (error: any) {
@@ -203,10 +227,10 @@ class KeyManager {
         }
     }
 
-    private async deleteFromKeychain(): Promise<void> {
+    private async deleteFromKeychain(service: string, account: string): Promise<void> {
         try {
             await execAsync(
-                `security delete-generic-password -s "${SERVICE_NAME}" -a "${ACCOUNT_NAME}" 2>/dev/null`
+                `security delete-generic-password -s "${service}" -a "${account}" 2>/dev/null`
             );
         } catch {
             // Entry may not exist
@@ -215,10 +239,10 @@ class KeyManager {
 
     // ==================== Linux secret-tool ====================
 
-    private async loadFromSecretTool(): Promise<string | null> {
+    private async loadFromSecretTool(service: string, account: string): Promise<string | null> {
         try {
             const { stdout } = await execAsync(
-                `secret-tool lookup service "${SERVICE_NAME}" account "${ACCOUNT_NAME}" 2>/dev/null`
+                `secret-tool lookup service "${service}" account "${account}" 2>/dev/null`
             );
             return stdout.trim() || null;
         } catch {
@@ -226,11 +250,11 @@ class KeyManager {
         }
     }
 
-    private async storeInSecretTool(key: string): Promise<{ success: boolean; error?: string }> {
+    private async storeInSecretTool(key: string, service: string, account: string): Promise<{ success: boolean; error?: string }> {
         try {
             // secret-tool reads from stdin
             await execAsync(
-                `echo -n "${key}" | secret-tool store --label="Obsidian Next API Key" service "${SERVICE_NAME}" account "${ACCOUNT_NAME}"`
+                `echo -n "${key}" | secret-tool store --label="Obsidian Next API Key" service "${service}" account "${account}"`
             );
             return { success: true };
         } catch (error: any) {
@@ -238,10 +262,10 @@ class KeyManager {
         }
     }
 
-    private async deleteFromSecretTool(): Promise<void> {
+    private async deleteFromSecretTool(service: string, account: string): Promise<void> {
         try {
             await execAsync(
-                `secret-tool clear service "${SERVICE_NAME}" account "${ACCOUNT_NAME}" 2>/dev/null`
+                `secret-tool clear service "${service}" account "${account}" 2>/dev/null`
             );
         } catch {
             // Entry may not exist
@@ -290,11 +314,12 @@ class KeyManager {
         return crypto.pbkdf2Sync(machineId, 'obsidian-next-salt', 100000, 32, 'sha256');
     }
 
-    private async loadFromEncryptedFile(): Promise<string | null> {
+    private async loadFromEncryptedFile(service: string, account: string): Promise<string | null> {
         try {
             const encrypted = await fs.readFile(this.encryptedFilePath, 'utf-8');
             const data = JSON.parse(encrypted);
 
+            // Decrypt the blob
             const key = await this.deriveEncryptionKey();
             const iv = Buffer.from(data.iv, 'hex');
             const authTag = Buffer.from(data.tag, 'hex');
@@ -305,19 +330,56 @@ class KeyManager {
             let decrypted = decipher.update(data.encrypted, 'hex', 'utf-8');
             decrypted += decipher.final('utf-8');
 
-            return decrypted;
+            // The blob is now a JSON object of { [service:account]: apiKey }
+            // For backward compatibility, if it's a string, it's the old single key format
+            try {
+                const keyMap = JSON.parse(decrypted);
+                return keyMap[this.getCacheKey(service, account)] || null;
+            } catch {
+                // Legacy: Single key file
+                if (service === DEFAULT_SERVICE && account === DEFAULT_ACCOUNT) {
+                    return decrypted;
+                }
+                return null;
+            }
         } catch {
             return null;
         }
     }
 
-    private async storeInEncryptedFile(apiKey: string): Promise<{ success: boolean; error?: string }> {
+    private async storeInEncryptedFile(apiKey: string, service: string, account: string): Promise<{ success: boolean; error?: string }> {
         try {
             const key = await this.deriveEncryptionKey();
             const iv = crypto.randomBytes(16);
 
+            // Read existing data if possible to merge
+            let keyMap: Record<string, string> = {};
+            try {
+                // Try load existing
+                // Warning: recursive call potential if we were using public APIs, but we use internal helpers mostly. 
+                // We'll duplicate reading logic slightly to be safe/simple
+                const existingEncrypted = await fs.readFile(this.encryptedFilePath, 'utf-8');
+                const data = JSON.parse(existingEncrypted);
+                const exDecipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(data.iv, 'hex'));
+                exDecipher.setAuthTag(Buffer.from(data.tag, 'hex'));
+                let exDecrypted = exDecipher.update(data.encrypted, 'hex', 'utf-8');
+                exDecrypted += exDecipher.final('utf-8');
+                try {
+                    keyMap = JSON.parse(exDecrypted);
+                } catch {
+                    // Legacy was string
+                    keyMap[this.getCacheKey(DEFAULT_SERVICE, DEFAULT_ACCOUNT)] = exDecrypted;
+                }
+            } catch {
+                // No existing file
+            }
+
+            // Update map
+            keyMap[this.getCacheKey(service, account)] = apiKey;
+            const contentToEncrypt = JSON.stringify(keyMap);
+
             const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-            let encrypted = cipher.update(apiKey, 'utf-8', 'hex');
+            let encrypted = cipher.update(contentToEncrypt, 'utf-8', 'hex');
             encrypted += cipher.final('hex');
             const authTag = cipher.getAuthTag();
 
@@ -338,38 +400,87 @@ class KeyManager {
         }
     }
 
+    async deleteFromEncryptedFile(service: string, account: string): Promise<void> {
+        try {
+            const key = await this.deriveEncryptionKey();
+            // Read, decrypt, remove key, re-encrypt
+            const existingEncrypted = await fs.readFile(this.encryptedFilePath, 'utf-8');
+            const data = JSON.parse(existingEncrypted);
+            const exDecipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(data.iv, 'hex'));
+            exDecipher.setAuthTag(Buffer.from(data.tag, 'hex'));
+            let exDecrypted = exDecipher.update(data.encrypted, 'hex', 'utf-8');
+            exDecrypted += exDecipher.final('utf-8');
+
+            let keyMap: Record<string, string> = {};
+            try {
+                keyMap = JSON.parse(exDecrypted);
+            } catch {
+                if (service === DEFAULT_SERVICE && account === DEFAULT_ACCOUNT) {
+                    // Deleting the only key from legacy
+                    await fs.unlink(this.encryptedFilePath);
+                    return;
+                }
+            }
+
+            delete keyMap[this.getCacheKey(service, account)];
+
+            if (Object.keys(keyMap).length === 0) {
+                await fs.unlink(this.encryptedFilePath);
+                return;
+            }
+
+            // Re-encrypt
+            const iv = crypto.randomBytes(16);
+            const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+            let encrypted = cipher.update(JSON.stringify(keyMap), 'utf-8', 'hex');
+            encrypted += cipher.final('hex');
+            const authTag = cipher.getAuthTag();
+
+            const newData = {
+                encrypted,
+                iv: iv.toString('hex'),
+                tag: authTag.toString('hex'),
+                version: 2, // Upgraded version
+            };
+
+            await fs.writeFile(this.encryptedFilePath, JSON.stringify(newData), { mode: 0o600 });
+
+        } catch {
+            // Ignore
+        }
+    }
+
     /**
      * Clear key from memory (call when done with sensitive operations)
      */
     clearFromMemory(): void {
-        if (this.currentKey) {
-            // Overwrite the key string in memory before clearing reference
-            // Note: This is best-effort in JavaScript due to garbage collection
-            this.currentKey = null;
-        }
+        this.keyCache.clear();
     }
 
     /**
      * Check if key exists in any backend (without loading it)
      */
-    async hasKey(): Promise<boolean> {
-        // Check env first
-        if (process.env.ANTHROPIC_API_KEY) return true;
+    async hasKey(options: { service?: string, account?: string } = {}): Promise<boolean> {
+        const service = options.service || DEFAULT_SERVICE;
+        const account = options.account || DEFAULT_ACCOUNT;
+
+        // Check env first (default only)
+        if (account === DEFAULT_ACCOUNT && process.env.ANTHROPIC_API_KEY) return true;
 
         // Check keychain
         if (process.platform === 'darwin') {
-            const key = await this.loadFromKeychain();
+            const key = await this.loadFromKeychain(service, account);
             if (key) return true;
         }
 
         // Check secret-tool
         if (process.platform === 'linux') {
-            const key = await this.loadFromSecretTool();
+            const key = await this.loadFromSecretTool(service, account);
             if (key) return true;
         }
 
         // Check encrypted file
-        const key = await this.loadFromEncryptedFile();
+        const key = await this.loadFromEncryptedFile(service, account);
         return !!key;
     }
 
@@ -378,14 +489,15 @@ class KeyManager {
      * Returns true if migration was successful
      */
     async migrateFromEnv(): Promise<{ migrated: boolean; backend?: StorageBackend; error?: string }> {
-        const envKey = process.env.ANTHROPIC_API_KEY;
+        const envKey = process.env.ANTHROPIC_API_KEY; // Only migrating default key
 
         if (!envKey) {
             return { migrated: false, error: 'No ANTHROPIC_API_KEY found in environment' };
         }
 
         // Check if already stored in secure backend
-        if (this.currentKey && this.currentKey.backend !== 'env') {
+        const cached = this.keyCache.get(this.getCacheKey(DEFAULT_SERVICE, DEFAULT_ACCOUNT));
+        if (cached && cached.backend !== 'env') {
             return { migrated: false, error: 'Key already in secure storage' };
         }
 

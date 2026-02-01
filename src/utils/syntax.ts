@@ -165,8 +165,12 @@ export function renderMarkdown(content: string): string {
                 // Code block with background
                 output.push(chalk.bgGray.black(' ' + (seg.lang || 'code') + ' '));
                 const highlighted = highlightCodeBlock(seg.content, seg.lang);
+                // Background color for the code block content
+                const bgCode = chalk.bgHex('#151515');
                 for (const line of highlighted.split('\n')) {
-                    output.push('  ' + line);
+                    // We need to apply the background to the whole line including padding
+                    // Since highlight returns ansi codes, we wrap it
+                    output.push(bgCode('  ' + line + '  '));
                 }
                 break;
 

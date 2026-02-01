@@ -69,10 +69,13 @@ describe('Tool Usage Integration', () => {
     function skipIfBillingError(): boolean {
         const errors = events.filter(e => e.type === 'error');
         const hasBillingError = errors.some(e =>
-            'message' in e && e.message.includes('credit balance')
+            'message' in e && (
+                e.message.includes('credit balance') ||
+                e.message.includes('Missing API key')
+            )
         );
         if (hasBillingError) {
-            console.log('    > Skipping: API credits required');
+            console.log('    > Skipping: API key missing or credits required');
             return true;
         }
         return false;
@@ -258,7 +261,10 @@ describe('Tool Safety Limits', () => {
         // If not, it might be a billing issue or the model didn't use rm
         const errors = events.filter(e => e.type === 'error');
         const hasBillingError = errors.some(e =>
-            'message' in e && e.message.includes('credit balance')
+            'message' in e && (
+                e.message.includes('credit balance') ||
+                e.message.includes('Missing API key')
+            )
         );
 
         if (!hasBillingError) {

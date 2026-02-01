@@ -5,8 +5,10 @@ import { usage } from './usage.js';
 import { tools } from './tools.js';
 import { redactor } from './redactor.js';
 import { keyManager, detectEnvFile } from './keyManager.js';
+import { mcp } from './mcp.js';
+import { listRegistry } from './mcp-registry.js';
 
-const MAX_TOOL_ITERATIONS = 10;
+const MAX_TOOL_ITERATIONS = 67;
 
 export class LLMClient {
     private client: Anthropic | null = null;
@@ -15,6 +17,7 @@ export class LLMClient {
     private toolIterations = 0;
     private accumulatedInputTokens = 0;
     private accumulatedOutputTokens = 0;
+    private abortController: AbortController | null = null;
 
     async initialize() {
         const cfg = await config.load();
@@ -97,7 +100,7 @@ export class LLMClient {
         return false;
     }
 
-    async streamChat(userMessage: string) {
+    async streamChat(userMessage: string): Promise<string | null> {
         if (!this.client) {
             const initialized = await this.initialize();
             if (!initialized || !this.client) return null;
@@ -140,35 +143,90 @@ export class LLMClient {
             }
 
             // Define available tools for Claude
-            const toolDefinitions = tools.list().map(tool => ({
+            // Define available tools for Claude
+            const availableTools = await tools.list();
+
+            const toolDefinitions = availableTools.map(tool => ({
                 name: tool.name,
                 description: tool.description,
                 input_schema: {
                     type: 'object',
-                    properties: this.getToolSchema(tool.name),
-                    required: this.getRequiredParams(tool.name)
+                    properties: tool.inputSchema,
+                    required: tool.requiredParams
                 }
             }));
 
-            // Generate tool list dynamically from registry
-            const toolList = tools.list()
-                .map(t => `- ${t.name}: ${t.description}`)
-                .join('\n');
+            // Categorize MCP Capabilities for Perfect Awareness
+            const mcpStatus = mcp.getStatus();
+            const activeServers = mcpStatus.filter(s => s.connected).map(s => s.name);
+            const offlineServers = mcpStatus.filter(s => !s.connected).map(s => s.name);
+            const registry = listRegistry();
+            const installableServers = registry.filter(r => !mcpStatus.find(s => s.name === r.name));
 
-            const systemPrompt = `You are a CLI coding agent. You have tools. Use them.
+            const activeList = availableTools.map(t => `- ${t.name}: ${t.description}`).join('\n');
+            const offlineList = offlineServers.map(n => {
+                const def = registry.find(r => r.name === n);
+                return `- ${n}: ${def?.description || 'Configured server'} (run 'mcp_manage connect ${n}' to use)`;
+            }).join('\n');
+            const registryList = installableServers.map(r => `- ${r.name}: ${r.description} (run 'mcp_manage install ${r.name}')`).join('\n');
 
-Available: ${tools.list().map(t => t.name).join(', ')}
+            const systemPrompt = `You are an expert coding agent called Obsidian.
+Your persona is friendly but serious, professional, and hyper-focused on code quality, security, and best practices.
 
-- Dont explain. Just do it.
-- No markdown. No ** or \` or #. Plain text.
-- Read files before editing.
-- Grep to find code. Read to understand. Edit to change.
-- One thought, then act. No preamble.
-- If asked to do something, do it. Dont ask for confirmation.
-- Errors: fix them, dont apologize.
-- Never read node_modules or .git.
+CORE DIRECTIVES:
+1. EXPLORE FIRST: Never assume the state of the codebase. Use list and grep to explore. Read files completely before editing.
+2. CODE QUALITY:
+   - Write strict, type-safe TypeScript. Avoid any.
+   - Prefer modular, functional code.
+   - properly handle errors. Don't swallow exceptions.
+3. TOOL MASTERY:
+   - EDIT: precision is key. Use unique context strings. If an edit fails, READ the file again to find unique context.
+   - BASH: Use valid commands. Don't use interactive commands (vim, nano).
+   - MCP: usage is encouraged. You have access to a dynamic set of tools.
+   - Lifecycle: If a tool you need is from an OFFLINE server, you MUST use mcp_manage connect before using its tools.
+4. DOCUMENTATION PRIORITY:
+   - For library documentation, Next.js/React best practices, or API references, ALWAYS prioritize context7 tools.
+   - Do not rely on internal training data for documentation if a certified source is available.
+5. COMMUNICATION:
+   - Be concise. One thought, then act.
+   - STRICTLY FORBIDDEN: Do not use ANY Markdown formatting symbols in your thought process. 
+   - No **bold**, no *italics*, no # headers, no [links], no \`code\`.
+   - Use ONLY plain text for thoughts.
+6. SECURITY:
+   - Never output API keys or secrets.
+   - Don't read outside the workspace unless necessary (system paths).
 
-cwd: ${process.cwd()}`;
+WORKFLOW:
+1. Analyze: Understand the request.
+2. Explore: Find relevant files (ls, find, grep).
+3. Read: Load content (read).
+4. Plan: Decide on changes.
+5. Act: Execute changes (edit, write, mcp_manage).
+6. Verify: Check your work (diff, lint, test).
+
+Current Working Directory: ${process.cwd()}
+
+CAPABILITIES:
+
+Active (Ready to use):
+${activeList}
+
+${offlineList ? `Offline (Configured but disconnected):\n${offlineList}\n` : ''}
+${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`;
+
+            this.abortController = new AbortController();
+            const signal = this.abortController.signal;
+
+            const interruptHandler = () => {
+                if (this.abortController) {
+                    this.abortController.abort();
+                    bus.emitAgent({ type: 'thought', content: '[Stop] Interrupted by user.' });
+                }
+            };
+
+            bus.on('user', (e: any) => {
+                if (e.type === 'user_interrupt') interruptHandler();
+            });
 
             const createMessage = async (model: string) => {
                 return await this.client!.messages.create({
@@ -176,9 +234,9 @@ cwd: ${process.cwd()}`;
                     max_tokens: this.lastConfig?.maxTokens || 8192,
                     system: systemPrompt,
                     messages: [...this.conversationHistory],
-                    tools: toolDefinitions,
+                    tools: toolDefinitions as Anthropic.Tool[], // Cast to satisfy SDK types
                     stream: true,
-                });
+                }, { signal });
             };
 
             let stream;
@@ -280,6 +338,7 @@ cwd: ${process.cwd()}`;
                 const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
                 for (const toolUse of toolUses) {
+                    if (signal.aborted) break;
                     const result = await tools.execute(toolUse.name, toolUse.input);
 
                     // Redact PII from tool output before sending to LLM
@@ -342,108 +401,23 @@ cwd: ${process.cwd()}`;
             return fullResponse;
 
         } catch (error: any) {
+            if (error.name === 'AbortError' || error.type === 'aborted') {
+                return null;
+            }
             bus.emitAgent({
                 type: 'error',
                 message: `LLM Error: ${error.message}`
             });
             return null;
+        } finally {
+            this.abortController = null;
+            // Note: In a real app we'd want to remove the exact listener, 
+            // but for simplicity here we'd need to store the function reference.
+            // Let's use a more modular approach if possible or just rely on the controller null check.
         }
     }
 
-    private getToolSchema(toolName: string): Record<string, any> {
-        // Define JSON schemas for each tool's parameters
-        const schemas: Record<string, any> = {
-            bash: {
-                command: {
-                    type: 'string',
-                    description: 'The shell command to execute'
-                }
-            },
-            read: {
-                path: {
-                    type: 'string',
-                    description: 'Path to the file to read (relative to workspace)'
-                }
-            },
-            write: {
-                path: {
-                    type: 'string',
-                    description: 'Path where to create the new file'
-                },
-                content: {
-                    type: 'string',
-                    description: 'Content to write to the file'
-                }
-            },
-            edit: {
-                path: {
-                    type: 'string',
-                    description: 'Path to the file to edit'
-                },
-                search: {
-                    type: 'string',
-                    description: 'Text to search for (must match exactly)'
-                },
-                replace: {
-                    type: 'string',
-                    description: 'Text to replace with'
-                }
-            },
-            list: {
-                path: {
-                    type: 'string',
-                    description: 'Directory path to list (defaults to current directory)'
-                }
-            },
-            grep: {
-                pattern: {
-                    type: 'string',
-                    description: 'Regex pattern to search for'
-                },
-                path: {
-                    type: 'string',
-                    description: 'Directory to search in (defaults to current directory)'
-                },
-                limit: {
-                    type: 'number',
-                    description: 'Maximum number of results (default: 50)'
-                }
-            },
-            glob: {
-                pattern: {
-                    type: 'string',
-                    description: 'Glob pattern like **/*.ts or src/**/*.tsx'
-                },
-                path: {
-                    type: 'string',
-                    description: 'Base directory (defaults to current directory)'
-                }
-            },
-            web_fetch: {
-                url: {
-                    type: 'string',
-                    description: 'URL to fetch content from'
-                }
-            }
-        };
 
-        return schemas[toolName] || {};
-    }
-
-    private getRequiredParams(toolName: string): string[] {
-        const required: Record<string, string[]> = {
-            bash: ['command'],
-            read: ['path'],
-            write: ['path', 'content'],
-            edit: ['path', 'search', 'replace'],
-            list: [],
-            grep: ['pattern'],
-            glob: ['pattern'],
-            web_fetch: ['url']
-        };
-
-        return required[toolName] || [];
-    }
 
     clearHistory(): void {
         this.conversationHistory = [];

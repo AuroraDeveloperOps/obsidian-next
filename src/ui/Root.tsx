@@ -17,6 +17,8 @@ import { DoctorView } from './views/DoctorView.js';
 import { HelpView } from './views/HelpView.js';
 import { UsageView } from './views/UsageView.js';
 import { TaskView } from './views/TaskView.js';
+import { SessionView } from './views/SessionView.js';
+import { MCPView } from './views/MCPView.js';
 import { SettingsMenu, MenuView } from '../components/SettingsMenu.js';
 
 import { history } from '../core/history.js';
@@ -24,6 +26,8 @@ import { usage } from '../core/usage.js';
 import { config } from '../core/config.js';
 import { context } from '../core/context.js';
 import { agent } from '../core/agent.js';
+import { tasks } from '../core/tasks.js';
+import { session } from '../core/session.js';
 import { highlightJson } from '../utils/highlight.js';
 
 // Pending prompt types
@@ -57,15 +61,18 @@ export const Root = () => {
     const [events, setEvents] = useState<AgentEvent[]>([]);
     const [input, setInput] = useState('');
     const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
+    const [taskProgress, setTaskProgress] = useState(tasks.getProgress());
     const { exit } = useApp();
 
     // State for footer data
     const [stats, setStats] = useState({ cost: 0, model: 'Loading...', mode: 'safe' as 'auto' | 'plan' | 'safe' });
 
     // Active View State Machine
-    type ActiveView = 'chat' | 'settings' | 'doctor' | 'help' | 'usage' | 'task';
+    type ActiveView = 'chat' | 'settings' | 'doctor' | 'help' | 'usage' | 'task' | 'sessions' | 'mcp';
     const [activeView, setActiveView] = useState<ActiveView>('chat');
     const [settingsTab, setSettingsTab] = useState<MenuView | undefined>();
+
+    const [isBusy, setIsBusy] = useState(false);
 
     // Handle prompt resolution
     const handlePromptResolve = useCallback(() => {
@@ -81,6 +88,8 @@ export const Root = () => {
                 model: cfg.model,
                 mode: context.getMode()
             });
+            // Force sync tasks just in case init finished after render
+            setTaskProgress(tasks.getProgress());
         };
 
         updateStats();
@@ -124,11 +133,25 @@ export const Root = () => {
 
             // Handle shutdown - exit after rendering final messages
             if (event.type === 'shutdown_complete') {
+                setIsBusy(false);
                 // Delay exit to allow final render
                 setTimeout(() => {
                     exit();
                 }, 200);
                 return;
+            }
+
+            // Stop busy state on done/error
+            if (event.type === 'done' || event.type === 'error') {
+                setIsBusy(false);
+            }
+            // Keep busy state for tool_start, thought, tool_result
+            else if (event.type === 'tool_start' || event.type === 'thought') {
+                setIsBusy(true);
+            }
+            // Update task progress
+            else if (event.type === 'task_update') {
+                setTaskProgress(tasks.getProgress());
             }
 
             // Handle interactive prompts
@@ -179,6 +202,7 @@ export const Root = () => {
         const userHandler = (event: any) => {
             if (event.type === 'user_input') {
                 setEvents(prev => [...prev, { type: 'user_input', content: event.content } as any]);
+                setIsBusy(true); // User input starts the busy state
             }
         };
 
@@ -221,11 +245,17 @@ export const Root = () => {
     const handleExit = useCallback(async () => {
         bus.emitAgent({
             type: 'thought',
-            content: 'Archiving session and shutting down...',
+            content: 'Saving session and shutting down...',
         });
 
-        // Archive the current session for safe keeping
-        await history.archive(events);
+        // Save the full session state (Context, History, Tasks)
+        // This allows /resume to work correctly
+        try {
+            const { sessionId } = await session.save();
+            bus.emitAgent({ type: 'thought', content: `Session saved: ${sessionId}` });
+        } catch (err) {
+            bus.emitAgent({ type: 'error', message: `Failed to save session: ${err}` });
+        }
 
         // Clear the active history file so next boot is fresh
         await history.clear();
@@ -235,7 +265,7 @@ export const Root = () => {
         setTimeout(() => {
             exit();
         }, 800);
-    }, [events, exit]);
+    }, [exit]);
 
     useInput((input, key) => {
         // Graceful Exit - Ctrl+C
@@ -247,6 +277,13 @@ export const Root = () => {
                 // Force exit if stuck or in other views
                 exit();
             }
+            return;
+        }
+
+        // Global Interrupt - Escape
+        if (key.escape && isBusy) {
+            bus.emitUser({ type: 'user_interrupt' });
+            setIsBusy(false);
             return;
         }
 
@@ -333,6 +370,11 @@ export const Root = () => {
             setInput('');
             return;
         }
+        if (value.trim() === '/resume' || value.trim() === '/sessions') {
+            setActiveView('sessions');
+            setInput('');
+            return;
+        }
         if (value.trim() === '/sandbox') {
             setSettingsTab('security');
             setActiveView('settings');
@@ -354,6 +396,11 @@ export const Root = () => {
         if (value.trim() === '/config') {
             setSettingsTab('categories');
             setActiveView('settings');
+            setInput('');
+            return;
+        }
+        if (value.trim() === '/mcp') {
+            setActiveView('mcp');
             setInput('');
             return;
         }
@@ -413,7 +460,7 @@ export const Root = () => {
         <Box flexDirection="column" height="100%">
             {/* Header / Dashboard - Fixed Height */}
             <Box flexShrink={0}>
-                <Dashboard />
+                <Dashboard isBusy={isBusy} />
             </Box>
 
             {/* Active View Area */}
@@ -428,6 +475,23 @@ export const Root = () => {
                     <UsageView onClose={() => setActiveView('chat')} />
                 ) : activeView === 'task' ? (
                     <TaskView onClose={() => setActiveView('chat')} />
+                ) : activeView === 'sessions' ? (
+                    <SessionView
+                        onClose={() => setActiveView('chat')}
+                        onResume={async (id) => {
+                            // Trigger resume via agent event
+                            // We need to tell the agent to restart/reload with this session
+                            // For now, let's just emit a command or handle it.
+                            // Actually, switching sessions at runtime is tricky.
+                            // Easier: Exit and tell user to run with flag?
+                            // OR: Agent supports re-init.
+                            // Let's try to re-init.
+                            setActiveView('chat');
+                            bus.emitUser({ type: 'user_input', content: `/resume ${id}` });
+                        }}
+                    />
+                ) : activeView === 'mcp' ? (
+                    <MCPView onExit={() => setActiveView('chat')} />
                 ) : (
                     events.slice(-MAX_EVENTS).map((event: any, i) => {
                         let content = null;
@@ -473,10 +537,10 @@ export const Root = () => {
                             content = (
                                 <Box key={i}>
                                     <Text backgroundColor="#1a1a2e" color="white">
-                                        {isLast ? <Glitter /> : ' ⏺ '}
+                                        ⏺
                                     </Text>
-                                    <Text backgroundColor="#1a1a2e" color="white" bold> {event.tool}</Text>
-                                    <Text backgroundColor="#1a1a2e" color="gray">({argsSummary}) </Text>
+                                    <Text backgroundColor="#1a1a2e" color="white" bold>{event.tool}</Text>
+                                    <Text backgroundColor="#1a1a2e" color="gray">({argsSummary.trim()}) </Text>
                                 </Box>
                             );
                         } else if (event.type === 'tool_result') {
@@ -510,6 +574,12 @@ export const Root = () => {
 
             {/* Input & Footer - Fixed Height at Bottom */}
             <Box flexDirection="column" flexShrink={0}>
+                {/* Persistent Thinking Indicator - Sticky at bottom */}
+                {isBusy && (
+                    <Box marginBottom={0} marginLeft={2}>
+                        <Glitter>Thinking...</Glitter>
+                    </Box>
+                )}
 
                 {/* Interactive Prompts */}
                 {/* ... prompts ... */}
@@ -550,7 +620,7 @@ export const Root = () => {
 
                 {/* Footer Stats Area */}
                 <Box paddingX={0} marginBottom={0} marginTop={0}>
-                    <Footer mode={stats.mode} model={stats.model} />
+                    <Footer mode={stats.mode} model={stats.model} taskProgress={taskProgress} />
                 </Box>
 
                 {/* Input Area (disabled when prompt is active) */}
@@ -628,6 +698,6 @@ export const Root = () => {
                     </Box>
                 )}
             </Box>
-        </Box>
+        </Box >
     );
 };

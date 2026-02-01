@@ -25,7 +25,11 @@ interface DashboardState {
     version: string;
 }
 
-export const Dashboard: React.FC = () => {
+interface DashboardProps {
+    isBusy?: boolean;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
     const [columns, setColumns] = useState(process.stdout.columns || 80);
     const [state, setState] = useState<DashboardState>({
         model: 'Loading...',
@@ -34,7 +38,7 @@ export const Dashboard: React.FC = () => {
         sessionCost: 0,
         workspace: process.cwd().split('/').slice(-2).join('/'), // Shortened path
         user: process.env.USER || 'User',
-        version: 'v0.4.1',
+        version: 'v0.4.2',
     });
 
     // Load initial state
@@ -116,11 +120,18 @@ export const Dashboard: React.FC = () => {
 
     // Sprite Animation Loop
     useEffect(() => {
+        // Only run full animation when busy, or slow idle animation
+        const interval = isBusy ? 100 : 3000;
+
         const timer = setInterval(() => {
-            setFrame(f => (f + 1) % 30); // 30 frame cycle
-        }, 100);
+            setFrame(f => {
+                // If not busy, only occasionally glitch (e.g. at frame 0)
+                if (!isBusy) return 0; // Reset to 0 (stable) when not busy
+                return (f + 1) % 30;
+            });
+        }, interval);
         return () => clearInterval(timer);
-    }, []);
+    }, [isBusy]);
 
     // ... (rest of render)
 
@@ -201,19 +212,20 @@ export const Dashboard: React.FC = () => {
                 <Box flexDirection="column" width={rightWidth} paddingLeft={isNarrow ? 0 : 1}>
 
                     {/* Tips */}
-                    <Box flexDirection="column" marginBottom={1}>
-                        <Text bold color="white">Tips for getting started</Text>
+                    <Box flexDirection="column" marginBottom={0}>
+                        <Text>Tips for getting started</Text>
                         <Text>✔ Run <Text color="cyan">/init</Text> to configure settings</Text>
                         <Text>✔ <Text color="cyan">Shift+Tab</Text> to toggle modes ({state.mode})</Text>
                     </Box>
 
-                    {/* Separator */}
-                    <Box marginY={0} borderStyle="single" borderTop={false} borderBottom={true} borderLeft={false} borderRight={false} borderColor={borderColor} width="100%">
+                    {/* Separator - Dashed line to match mock */}
+                    <Box marginY={1}>
+                        <Text color="gray">────────────────────────────────────────────────────────</Text>
                     </Box>
 
-                    {/* Recent Activity (Placeholder for now) */}
-                    <Box flexDirection="column" marginTop={1}>
-                        <Text bold color="white">Recent activity</Text>
+                    {/* Recent Activity */}
+                    <Box flexDirection="column">
+                        <Text>Recent activity</Text>
                         <Text dimColor>No recent activity</Text>
                     </Box>
                 </Box>

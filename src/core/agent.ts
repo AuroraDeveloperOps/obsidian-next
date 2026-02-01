@@ -13,6 +13,9 @@ import { undo } from './undo.js';
 import { redactor } from './redactor.js';
 import { auditLog } from './auditLog.js';
 import { usage } from './usage.js';
+import { mcp } from './mcp.js';
+
+import { history } from './history.js';
 
 export interface AgentPlan {
     task: string;
@@ -32,15 +35,45 @@ class Agent {
         this.sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     }
 
-    async init(): Promise<void> {
+    async init(resumeSessionId?: string): Promise<void> {
         if (this.initialized) return;
         await context.init();
+        await mcp.init();
+
+        if (resumeSessionId) {
+            const { session } = await import('./session.js');
+            const result = await session.restore(resumeSessionId);
+            if (!result.success) {
+                bus.emitAgent({ type: 'error', message: `Failed to resume session: ${result.error}` });
+                // Fallback to new session
+                await context.startNewSession();
+                await history.clear();
+            } else {
+                bus.emitAgent({ type: 'thought', content: `Resumed session: ${resumeSessionId}` });
+            }
+        } else {
+            // Start a fresh session (archives old one)
+            // This prevents the agent from "remembering" stale tasks from previous runs
+            await context.startNewSession();
+            await history.clear();
+
+            // Also archive and clear stale tasks to ensure a fresh start
+            // (Unless resumed, tasks should match the fresh session)
+            await tasks.init(); // Load first to have something to archive
+            if (tasks.hasActiveTask()) {
+                await tasks.archive();
+                await tasks.clear();
+            }
+        }
+
         await tasks.init();
         // Initialize undo system with session ID for change tracking
         await undo.init(this.sessionId);
         // Initialize audit logging with session ID
         auditLog.setSessionId(this.sessionId);
         await auditLog.init();
+        // Disable aggressive PII redaction by default as it interferes with dev API keys/tokens
+        redactor.setEnabled(false);
         this.initialized = true;
     }
 
@@ -176,6 +209,12 @@ APPROVAL: <yes if destructive, no otherwise>`;
         const { plan, originalInput } = this.pendingPlan;
         this.pendingPlan = null;
 
+        // Auto-create task and steps
+        await tools.execute('task', { action: 'create', title: plan.task });
+        for (const step of plan.steps) {
+            await tools.execute('task', { action: 'add_step', step });
+        }
+
         await this.executePlan(plan, originalInput);
     }
 
@@ -195,7 +234,11 @@ ORIGINAL REQUEST: ${originalInput}
 PLAN:
 ${this.formatPlan(plan)}
 
-Execute each step carefully. Use available tools as needed.`;
+Execute each step carefully. Use available tools as needed.
+
+IMPORTANT:
+1. You have an active task. You MUST use the 'task' tool to mark steps as done (action: 'complete_step', step_index: <index>) immediately after completing them to keep the user informed.
+2. Do NOT create 'summary' files (e.g., SUMMARY.md, START_HERE.txt) to report completion. Report results directly in the final chat message. Keep the workspace clean.`;
 
         try {
             const response = await llm.streamChat(executionPrompt);

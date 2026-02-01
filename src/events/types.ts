@@ -30,7 +30,10 @@ export type AgentEvent =
     // 5. Session Management
     | { type: "shutdown_request" }
     | { type: "session_saved"; sessionId: string; path: string }
-    | { type: "shutdown_complete"; summary: SessionSummary };
+    | { type: "shutdown_complete"; summary: SessionSummary }
+
+    // 6. Task Management
+    | { type: "task_update"; task: any | null }; // Using 'any' to avoid circular dependency with tasks.ts, or simpler: import type { Task } from '../core/tasks';
 
 /**
  * Session summary for graceful shutdown
@@ -48,5 +51,6 @@ export interface SessionSummary {
 export type UserEvent =
     | { type: "user_input"; content: string }
     | { type: "user_choice"; selectionId: string; context?: string }
+    | { type: "user_interrupt" }
     | { type: "approval_response"; approved: boolean; requestId: string }
     | { type: "text_input_response"; requestId: string; value: string; cancelled?: boolean };
