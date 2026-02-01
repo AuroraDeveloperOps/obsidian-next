@@ -220,17 +220,13 @@ Obsidian Next supports persistent sessions for long-running tasks:
 
 | Command | Description |
 |---------|-------------|
-| `/exit` | Save session state and exit gracefully |
-| `/exit --force` | Exit even with pending tasks |
-| `/resume` | List all saved sessions |
-| `/resume <id>` | Restore a specific session |
-| `/resume --last` | Restore the most recent session |
+| `npm start` | **Fresh Start**. Archives old tasks to `.obsidian/archive` and starts clean. |
+| `/resume` | List and restore a saved session (keeping context & tasks). |
+| `/resume --last` | Quickly restore the most recent session. |
+| `/exit` | Save session state and exit gracefully. |
 
-Sessions preserve:
-- Conversation history and context
-- Current task progress
-- Working set of files
-- Cost tracking
+> [!NOTE]
+> **Fresh Session = Fresh State**. Running `npm start` creates a blank slate to prevent "zombie tasks" from confusing the agent. Use `/resume` if you want to continue where you left off.
 
 ## References & Standards
 

@@ -27,7 +27,8 @@ For users who prefer manual control, the **MCP Manager** provides a visual inter
 When you install a "Certified" server that requires an API key (like `context7` or `research`), the TUI will automatically jump to a **Setup** screen. 
 1.  **Install**: Press `Enter` in the Store.
 2.  **Setup**: The TUI prompts: `CONTEXT7_API_KEY: `.
-3.  **Active**: Type your key, hit `Enter`, and you're ready to connect!
+3.  **Active**: Type your key (it will be securely masked as `******`), hit `Enter`, and you're ready to connect!
+    > **Note**: Your key is securely stored in `mcp.json` and redacted from logs.
 
 ### B. The Agentic Flow ("Natural Language")
 This is the true power of the ecosystem. You don't need to manage servers yourself.
@@ -47,6 +48,7 @@ The central brain that:
 - Manages the persistence file: `.obsidian/mcp.json`.
 - Handles connection lifecycles (stdio transport).
 - Proxies tool execution requests to the appropriate server.
+- **Safety**: Enforces connection timeouts (5s) to prevent UI freezes if a server hangs.
 
 ### 2. Registry (`src/core/mcp-registry.ts`)
 A certified catalog of known-good servers.

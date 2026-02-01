@@ -35,6 +35,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Resume with `Enter`
 - **Dependencies**: Bundled `@vscode/ripgrep` to stabilize primary sandbox runtime
 
+### Changed
+- **Task System**: Enforced "Fresh Session" semantics. `npm start` now auto-archives old tasks to `.obsidian/archive`. Use `/resume` to keep active tasks.
+- **UI Design**: Aligned with "Obsidian Pro" specifications
+  - **Chat**: Optimized tool execution format (`⏺`) and bullet styling (`●`)
+  - **Footer**: Added live task progress indicator (`Tasks (x/y open)`)
+  - **Animation**: "Thinking..." indicator is now persistent and sticky at the bottom
+  - **Dashboard**: Sprite animation now pauses when agent is idle to reduce visual noise
+
+
 ## [0.3.1] - 2026-01-31
 
 ### Added
