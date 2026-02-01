@@ -45,7 +45,7 @@ graph TD
 
 ### 100x Context Architecture
 - **High-Fidelity Tracking**: 10x10 visualization grid (`⛁`) providing precise, token-level insight into context window usage.
-- **Adaptive Pruning**: Proactive token management strategies (Warn @ 80%, Prune @ 90%, Hard Stop @ 98%).
+- **Semantic Summarization**: Intelligently compresses "middle" history using cheaper models (Haiku) to retain unlimited effective memory.
 - **Resume 2.0**: Full session state restoration, preserving execution history, costs, and working memory across restarts.
 
 ### Structure-First Engineering

@@ -8,6 +8,7 @@ Welcome to the comprehensive documentation for **Obsidian Next**.
 - **[Architecture](ARCHITECTURE.md)**: Deep dive into the Supervisor-Agent topology, Event Bus, and Directory Structure.
 - **[Agent Logic](AGENT_ARCHITECTURE.md)**: Understanding Modes (Auto/Plan/Safe) and the Execution Loop.
 - **[CLI Design System](CLI_DESIGN_SYSTEM.md)**: Visual standards, symbols, and UI component reference.
+- **[Smart Context](CONTEXT.md)**: Deep dive into 100x context, summarization logic, and memory architecture.
 
 ## Tooling & Safety
 
