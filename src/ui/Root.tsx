@@ -335,9 +335,9 @@ export const Root = () => {
         }, 800);
     }, [exit]);
 
-    useInput((input, key) => {
+    useInput((inputChar, key) => {
         // Graceful Exit - Ctrl+C
-        if (input === '\x03' || (key.ctrl && input === 'c')) {
+        if (inputChar === '\x03' || (key.ctrl && inputChar === 'c')) {
             // Prevent multiple triggers
             if (activeView === 'chat' && pendingPrompt === null) {
                 handleExit();
@@ -355,41 +355,50 @@ export const Root = () => {
             return;
         }
 
-        // Mode Toggle - Shift+Tab
-        if (key.shift && key.tab) {
+        // Escape to close popup without executing
+        if (key.escape && matches.length > 0) {
+            setInput('');
+            return;
+        }
+
+        // Mode Toggle - Shift+Tab (only when not in popup)
+        if (key.shift && key.tab && matches.length === 0) {
             cycleMode();
             return;
         }
 
+        // Popup navigation - only when popup is visible
         if (matches.length === 0) return;
 
         if (key.upArrow) {
             setSelectedIndex(prev => (prev > 0 ? prev - 1 : matches.length - 1));
+            return;
         }
 
         if (key.downArrow) {
             setSelectedIndex(prev => (prev < matches.length - 1 ? prev + 1 : 0));
+            return;
         }
 
-        if (key.return || key.tab) {
-            // Handle Selection
+        // Tab to autocomplete without executing
+        if (key.tab && !key.shift) {
             const selected = matches[selectedIndex];
-
-            if (selected) {
-                // Determine if we should execute immediately (Enter) or just autofill (Tab)
-                // User requested "straight tap" -> Instant execution on Enter
-                if (key.return) {
-                    setInput(selected.name);
-                    handleSubmit(selected.name);
-                    return;
-                }
-
-                // For Tab, just autofill and let user edit if needed
-                if (input !== selected.name) {
-                    setInput(selected.name);
-                    setInputKey(prev => prev + 1); // Force remount to fix cursor position
-                }
+            if (selected && input !== selected.name) {
+                setInput(selected.name);
+                setInputKey(prev => prev + 1);
             }
+            return;
+        }
+
+        // Enter to execute selected command
+        if (key.return) {
+            const selected = matches[selectedIndex];
+            if (selected) {
+                // Clear input first, then execute - prevents double-display
+                setInput('');
+                handleSubmit(selected.name);
+            }
+            return;
         }
     });
     // --------------- POPUP LOGIC END ---------------
@@ -399,9 +408,9 @@ export const Root = () => {
     const handleSubmit = (value: string) => {
         if (!value.trim()) return;
 
-        // Debounce double-submissions (TextInput + popup useInput conflict)
+        // Debounce double-submissions
         const now = Date.now();
-        if (now - lastSubmitTime.current < 250) return;
+        if (now - lastSubmitTime.current < 150) return;
         lastSubmitTime.current = now;
 
         const trimmed = value.trim();
@@ -427,20 +436,12 @@ export const Root = () => {
             return;
         }
 
-        // 2. Echo handling: Only echo if NOT a known UI/View command that doesn't need it
-        // Check if it's a command
+        // 2. Determine if this is a view command (silent - no echo)
         const matchingCommand = COMMANDS.find(c => c.name === trimmed);
         const silent = matchingCommand?.isView || false;
 
-        // RACE CONDITION FIX with Debugging
-        if (matches.length > 0 && value !== matches[selectedIndex]?.name) {
-            const selected = matches[selectedIndex];
-            if (selected && selected.name.startsWith(value) && selected.name !== value) {
-                return;
-            }
-        }
-
-        bus.emitUser({ type: 'user_input', content: value, silent });
+        // 3. Emit the user input and clear
+        bus.emitUser({ type: 'user_input', content: trimmed, silent });
         setInput('');
     };
 

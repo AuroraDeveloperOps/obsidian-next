@@ -69,6 +69,10 @@ export const contextCommand: CommandHandler = async (_args) => {
     const p = (val: number) => (val / LIMIT * 100).toFixed(1) + '%';
     const k = (val: number) => (val / 1000).toFixed(1) + 'k';
 
+    // Get cache performance metrics
+    const cacheStats = usage.getCacheHitRate();
+    const sessionTokens = usage.getSessionTokens();
+
     const legend = [
         `   ${chalk.bold('Estimated usage by category')}`,
         `   ${chalk.cyan('⛁ System/Tools:')}  ${k(cachedTokens).padStart(5)} tokens (${p(cachedTokens)})`,
@@ -78,8 +82,10 @@ export const contextCommand: CommandHandler = async (_args) => {
         ``,
         `   ${chalk.bold('Context Usage')}`,
         `   ${chalk.bold(model)} · ${k(ctxUsage.used)}/${k(LIMIT)} tokens (${p(ctxUsage.used)})`,
-        ``, // Spacer
-        `   ${chalk.gray('Session Cost:')} $${sessionCost.toFixed(4)}`
+        ``,
+        `   ${chalk.bold('Cache Performance')}`,
+        `   ${chalk.green('Hit Rate:')} ${cacheStats.hitRate.toFixed(1)}% (${k(cacheStats.totalCached)} cached of ${k(cacheStats.totalInput)})`,
+        `   ${chalk.gray('Session Cost:')} ${chalk.green('$' + sessionCost.toFixed(4))}`
     ];
 
     // Combine Grid and Legend

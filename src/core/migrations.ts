@@ -59,6 +59,46 @@ export class MigrationManager {
 
                 bus.emitAgent({ type: 'thought', content: '[Migration] Memos table updated successfully.', hidden: true });
             }
+        },
+        {
+            version: 2,
+            description: 'Add cache token tracking columns to usage_stats',
+            up: (db: Database) => {
+                const tableInfo = db.prepare("PRAGMA table_info(usage_stats)").all() as any[];
+                const hasCacheRead = tableInfo.some(col => col.name === 'cache_read_tokens');
+                const hasCacheCreation = tableInfo.some(col => col.name === 'cache_creation_tokens');
+
+                if (!hasCacheRead) {
+                    db.exec('ALTER TABLE usage_stats ADD COLUMN cache_read_tokens INTEGER DEFAULT 0');
+                }
+                if (!hasCacheCreation) {
+                    db.exec('ALTER TABLE usage_stats ADD COLUMN cache_creation_tokens INTEGER DEFAULT 0');
+                }
+
+                bus.emitAgent({ type: 'thought', content: '[Migration] Added cache token columns to usage_stats.', hidden: true });
+            }
+        },
+        {
+            version: 3,
+            description: 'Add session permissions tracking table',
+            up: (db: Database) => {
+                db.exec(`
+                    CREATE TABLE IF NOT EXISTS session_permissions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id TEXT NOT NULL,
+                        permission_type TEXT NOT NULL, -- 'tool', 'path', 'command'
+                        permission_key TEXT NOT NULL, -- tool name, path pattern, or command pattern
+                        allowed INTEGER NOT NULL DEFAULT 1, -- 1 = allowed, 0 = denied
+                        scope TEXT NOT NULL DEFAULT 'session', -- 'session' or 'persistent'
+                        bypass_sandbox INTEGER DEFAULT 0,
+                        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+                        UNIQUE(session_id, permission_type, permission_key)
+                    );
+                `);
+                db.exec('CREATE INDEX IF NOT EXISTS idx_session_permissions ON session_permissions(session_id, permission_type);');
+
+                bus.emitAgent({ type: 'thought', content: '[Migration] Added session_permissions table.', hidden: true });
+            }
         }
     ];
 

@@ -31,38 +31,37 @@ export const CommandPopup = ({ matches, selectedIndex }: CommandPopupProps) => {
     if (matches.length === 0) return null;
 
     // Scrolling Window Logic
-    const WINDOW_SIZE = 4;
-    // Calculate the start index to ensure selectedIndex is always visible
-    // If selectedIndex is 0, start is 0
-    // If selectedIndex is 3 (4th item), start is 0
-    // If selectedIndex is 4 (5th item), start is 1
+    const WINDOW_SIZE = 5;
     let startIndex = 0;
     if (selectedIndex >= WINDOW_SIZE) {
         startIndex = selectedIndex - WINDOW_SIZE + 1;
     }
 
-    // Ensure we don't scroll past the end unnecessarily (though simple offset works too)
     const visibleMatches = matches.slice(startIndex, startIndex + WINDOW_SIZE);
+    const hasMore = startIndex + WINDOW_SIZE < matches.length;
+    const hasLess = startIndex > 0;
 
     return (
         <Box
             flexDirection="column"
             paddingX={0}
+            marginTop={0}
             marginBottom={0}
             width="100%"
         >
+            {/* Scroll up indicator */}
+            {hasLess && (
+                <Text color="gray" dimColor>  ↑ {startIndex} more</Text>
+            )}
 
             {visibleMatches.map((cmd, i) => {
-                // The actual index in the full list
                 const actualIndex = startIndex + i;
                 const isSelected = actualIndex === selectedIndex;
 
                 return (
                     <Box key={cmd.name} flexDirection="row">
-                        <Box minWidth={12}>
-                            <Text
-                                color={isSelected ? 'red' : 'gray'}
-                            >
+                        <Box minWidth={14}>
+                            <Text color={isSelected ? 'red' : 'gray'}>
                                 {isSelected ? '> ' : '  '}
                             </Text>
                             <Text
@@ -72,14 +71,22 @@ export const CommandPopup = ({ matches, selectedIndex }: CommandPopupProps) => {
                                 {cmd.name}
                             </Text>
                         </Box>
-                        <Text color="gray">  {cmd.desc}</Text>
+                        <Text color="gray">{cmd.desc}</Text>
                     </Box>
                 );
             })}
 
-            {startIndex + WINDOW_SIZE < matches.length && (
-                <Text color="gray" dimColor>  ↓ ...</Text>
+            {/* Scroll down indicator */}
+            {hasMore && (
+                <Text color="gray" dimColor>  ↓ {matches.length - startIndex - WINDOW_SIZE} more</Text>
             )}
+
+            {/* Navigation hints */}
+            <Box marginTop={0}>
+                <Text color="gray" dimColor>
+                    ↑↓ navigate  Enter execute  Tab complete  Esc cancel
+                </Text>
+            </Box>
         </Box>
     );
 };

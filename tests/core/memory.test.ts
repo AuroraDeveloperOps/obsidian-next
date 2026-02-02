@@ -191,7 +191,7 @@ describe('MemoryManager', () => {
 
             const context = await memory.getUserContext();
 
-            expect(context).toContain('User Context from Memory');
+            expect(context).toContain('[RECALL]');
             expect(context).toContain('name');
         });
     });

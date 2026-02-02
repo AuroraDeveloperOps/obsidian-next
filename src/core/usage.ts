@@ -66,13 +66,13 @@ export class UsageTracker {
         const costCacheWrite = (cacheCreation / 1_000_000 * prices.cacheWrite);
         const totalReqCost = costInput + costOutput + costCacheRead + costCacheWrite;
 
-        // DB Insert
+        // DB Insert with cache token tracking
         try {
-            const currentSessionId = context.get().session_id; // Dynamic fetch to avoid storage loop
+            const currentSessionId = context.get().session_id;
             db.getDb().prepare(`
-                INSERT INTO usage_stats (session_id, model, input_tokens, output_tokens, cost, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `).run(currentSessionId, model, input, output, totalReqCost, Date.now());
+                INSERT INTO usage_stats (session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(currentSessionId, model, input, output, cacheRead, cacheCreation, totalReqCost, Date.now());
         } catch (e) {
             console.error('Failed to log usage to DB:', e);
         }
@@ -140,29 +140,42 @@ export class UsageTracker {
     }
 
     getStats(): UsageStats {
-        // Query aggregate stats from DB
+        // Query aggregate stats from DB including cache tokens
         try {
             const result = db.getDb().prepare(`
-                SELECT 
+                SELECT
                     SUM(input_tokens) as totalInputTokens,
                     SUM(output_tokens) as totalOutputTokens,
+                    COALESCE(SUM(cache_read_tokens), 0) as totalCacheReadTokens,
+                    COALESCE(SUM(cache_creation_tokens), 0) as totalCacheCreationTokens,
                     SUM(cost) as totalCost,
-                    COUNT(*) as totalRequests
+                    COUNT(*) as totalRequests,
+                    COUNT(DISTINCT session_id) as totalSessions
                 FROM usage_stats
             `).get() as any;
 
             return {
-                totalSessions: 0, // Need to count distinct session_ids
+                totalSessions: result.totalSessions || 0,
                 totalRequests: result.totalRequests || 0,
                 totalInputTokens: result.totalInputTokens || 0,
                 totalOutputTokens: result.totalOutputTokens || 0,
-                totalCacheReadTokens: 0, // TODO: Add column if needed
-                totalCacheCreationTokens: 0,
+                totalCacheReadTokens: result.totalCacheReadTokens || 0,
+                totalCacheCreationTokens: result.totalCacheCreationTokens || 0,
                 totalCost: result.totalCost || 0,
             };
         } catch (e) {
             return UsageSchema.parse({});
         }
+    }
+
+    /**
+     * Get cache hit rate for current session
+     */
+    getCacheHitRate(): { hitRate: number; totalCached: number; totalInput: number } {
+        const totalCached = this.sessionCacheReadTokens;
+        const totalInput = this.sessionInputTokens + this.sessionCacheReadTokens + this.sessionCacheCreationTokens;
+        const hitRate = totalInput > 0 ? (totalCached / totalInput) * 100 : 0;
+        return { hitRate, totalCached, totalInput };
     }
 
     restoreSessionState(stats: {

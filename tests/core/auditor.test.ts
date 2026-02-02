@@ -16,6 +16,7 @@ vi.mock('../../src/core/settings.js', () => ({
         load: vi.fn(() => Promise.resolve({ mode: 'safe' })),
         isAllowed: vi.fn(() => Promise.resolve(false)),
         isDenied: vi.fn(() => Promise.resolve(false)),
+        isSessionAuthorized: vi.fn(() => Promise.resolve(false)),
     },
 }));
 

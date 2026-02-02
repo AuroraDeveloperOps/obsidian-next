@@ -10,12 +10,15 @@ interface ApprovalPromptProps {
 }
 
 /**
- * ApprovalPrompt - Interactive yes/no confirmation for sensitive operations
+ * ApprovalPrompt - Clear permission dialog for sensitive operations
  *
- * Used for:
- * - Destructive file operations
- * - Dangerous shell commands
- * - External API calls
+ * Options:
+ * - (y) Allow Once: Execute this command once, ask again next time
+ * - (a) Allow Always: Remember this command, never ask again
+ * - (n) Deny Once: Block this command, but allow future requests
+ * - (d) Deny Always: Block this command and all future attempts
+ * - (s) Allow + Skip Sandbox: Execute without security sandbox (session only)
+ * - (b) Allow + Skip Sandbox (Always): Execute without sandbox, remember choice
  */
 export const ApprovalPrompt: React.FC<ApprovalPromptProps> = ({
     requestId,
@@ -43,33 +46,35 @@ export const ApprovalPrompt: React.FC<ApprovalPromptProps> = ({
     useInput((input, key) => {
         if (resolved) return;
 
-        // Y/y or Enter = approve for session
-        if (input.toLowerCase() === 'y' || (key.return && !key.shift)) {
+        const lowerInput = input.toLowerCase();
+
+        // Y/y or Enter = Allow this once
+        if (lowerInput === 'y' || (key.return && !key.shift)) {
             handleApproval(true, 'session');
         }
 
-        // A/a = always approve (persistent)
-        if (input.toLowerCase() === 'a') {
+        // A/a = Allow always (remember this permission)
+        if (lowerInput === 'a') {
             handleApproval(true, 'persistent');
         }
 
-        // S/s = approve and bypass for session
-        if (input.toLowerCase() === 's') {
+        // S/s = Allow + skip sandbox (session only)
+        if (lowerInput === 's') {
             handleApproval(true, 'session', true);
         }
 
-        // B/b = approve and bypass (persistent)
-        if (input.toLowerCase() === 'b') {
+        // B/b = Allow + skip sandbox (remember)
+        if (lowerInput === 'b') {
             handleApproval(true, 'persistent', true);
         }
 
-        // N/n or Escape = deny for session
-        if (input.toLowerCase() === 'n' || key.escape) {
+        // N/n or Escape = Deny this once
+        if (lowerInput === 'n' || key.escape) {
             handleApproval(false, 'session');
         }
 
-        // D/d = always deny (persistent)
-        if (input.toLowerCase() === 'd') {
+        // D/d = Deny always (block permanently)
+        if (lowerInput === 'd') {
             handleApproval(false, 'persistent');
         }
     });
@@ -78,17 +83,39 @@ export const ApprovalPrompt: React.FC<ApprovalPromptProps> = ({
         return null;
     }
 
+    // Parse context to extract command and reason
+    const lines = context.split('\n');
+    const commandLine = lines.find(l => l.startsWith('Command:'));
+    const reasonLine = lines.find(l => l.startsWith('Reason:'));
+    const command = commandLine ? commandLine.replace('Command:', '').trim() : context;
+    const reason = reasonLine ? reasonLine.replace('Reason:', '').trim() : null;
+
     return (
         <Box
             flexDirection="column"
             paddingX={0}
             marginY={1}
         >
-            {/* Context with Alert Icon */}
-            <Box marginBottom={0}>
-                <Text color="red" bold>[ ! ] </Text>
-                <Text color="white" bold>{context}</Text>
+            {/* Header */}
+            <Box marginBottom={1}>
+                <Text color="yellow" bold>[PERMISSION REQUIRED]</Text>
             </Box>
+
+            {/* Command Display */}
+            <Box flexDirection="column" marginBottom={1}>
+                <Text color="gray">Command: </Text>
+                <Box marginLeft={2}>
+                    <Text color="cyan" bold>{command}</Text>
+                </Box>
+            </Box>
+
+            {/* Reason (if available) */}
+            {reason && (
+                <Box marginBottom={1}>
+                    <Text color="gray">Reason: </Text>
+                    <Text color="white">{reason}</Text>
+                </Box>
+            )}
 
             {/* Diff Preview (if provided) */}
             {diff && (
@@ -96,41 +123,60 @@ export const ApprovalPrompt: React.FC<ApprovalPromptProps> = ({
                     flexDirection="column"
                     paddingX={0}
                     marginBottom={1}
-                    marginTop={1}
                 >
-                    {diff.split('\n').slice(0, 10).map((line, i) => (
-                        <Text
-                            key={i}
-                            color={
-                                line.startsWith('+') ? 'green' :
-                                    line.startsWith('-') ? 'red' :
-                                        'gray'
-                            }
-                        >
-                            {line}
-                        </Text>
-                    ))}
-                    {diff.split('\n').length > 10 && (
-                        <Text color="gray" dimColor>... ({diff.split('\n').length - 10} more lines)</Text>
-                    )}
+                    <Text color="gray" dimColor>Changes:</Text>
+                    <Box flexDirection="column" marginLeft={2}>
+                        {diff.split('\n').slice(0, 10).map((line, i) => (
+                            <Text
+                                key={i}
+                                color={
+                                    line.startsWith('+') ? 'green' :
+                                        line.startsWith('-') ? 'red' :
+                                            'gray'
+                                }
+                            >
+                                {line}
+                            </Text>
+                        ))}
+                        {diff.split('\n').length > 10 && (
+                            <Text color="gray" dimColor>... ({diff.split('\n').length - 10} more lines)</Text>
+                        )}
+                    </Box>
                 </Box>
             )}
 
-            {/* Inline Confirmation */}
-            <Box marginTop={diff ? 0 : 1}>
-                <Text color="gray">      </Text>
-                <Text color="red" bold>(y)</Text>
-                <Text color="gray"> Yes </Text>
-                <Text color="red" bold>(s)</Text>
-                <Text color="gray"> Yes (Bypass) </Text>
-                <Text color="red" bold>(a)</Text>
-                <Text color="gray"> Always </Text>
-                <Text color="red" bold>(b)</Text>
-                <Text color="gray"> Always (Bypass) </Text>
-                <Text color="red" bold>(n)</Text>
-                <Text color="gray"> No </Text>
-                <Text color="red" bold>(d)</Text>
-                <Text color="gray"> Never</Text>
+            {/* Clear Action Options */}
+            <Box flexDirection="column" marginTop={1}>
+                <Text color="gray" dimColor>Choose an action:</Text>
+                <Box marginLeft={2} flexDirection="column">
+                    <Box>
+                        <Text color="green" bold>(y)</Text>
+                        <Text color="white"> Allow Once</Text>
+                        <Text color="gray" dimColor>        - Run this command now</Text>
+                    </Box>
+                    <Box>
+                        <Text color="green" bold>(a)</Text>
+                        <Text color="white"> Allow Always</Text>
+                        <Text color="gray" dimColor>      - Remember and auto-approve</Text>
+                    </Box>
+                    <Box>
+                        <Text color="red" bold>(n)</Text>
+                        <Text color="white"> Deny Once</Text>
+                        <Text color="gray" dimColor>        - Block this time only</Text>
+                    </Box>
+                    <Box>
+                        <Text color="red" bold>(d)</Text>
+                        <Text color="white"> Deny Always</Text>
+                        <Text color="gray" dimColor>       - Block permanently</Text>
+                    </Box>
+                </Box>
+                <Box marginLeft={2} marginTop={1}>
+                    <Text color="gray" dimColor>Advanced: </Text>
+                    <Text color="yellow" bold>(s)</Text>
+                    <Text color="gray" dimColor> Allow + No Sandbox  </Text>
+                    <Text color="yellow" bold>(b)</Text>
+                    <Text color="gray" dimColor> Always + No Sandbox</Text>
+                </Box>
             </Box>
         </Box>
     );

@@ -62,6 +62,11 @@ bus.on('user', (event: UserEvent) => {
 
 /**
  * Request user approval for a command
+ *
+ * Displays a clear, actionable permission prompt to the user with:
+ * - The exact command to be executed
+ * - Why approval is needed
+ * - Clear action options
  */
 async function requestApproval(command: string, reason: string): Promise<{ approved: boolean; scope: 'session' | 'persistent'; bypass?: boolean }> {
     const requestId = `approval_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -72,17 +77,23 @@ async function requestApproval(command: string, reason: string): Promise<{ appro
             pendingApprovals.delete(requestId);
             bus.emitAgent({
                 type: 'error',
-                message: 'Approval request timed out. Command denied.'
+                message: 'No response received. Command blocked for safety.'
             });
             resolve({ approved: false, scope: 'session' });
         }, APPROVAL_TIMEOUT);
 
         pendingApprovals.set(requestId, { resolve, timeout });
 
+        // Format context clearly
+        const context = [
+            `Command: ${command}`,
+            `Reason: ${reason}`,
+        ].join('\n');
+
         bus.emitAgent({
             type: 'approval_request',
             requestId,
-            context: `Command: ${command}\nReason: ${reason}`,
+            context,
         });
     });
 }

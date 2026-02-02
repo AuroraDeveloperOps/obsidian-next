@@ -196,7 +196,7 @@ class SettingsManager {
         await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(this.settingsPath, JSON.stringify(validated, null, 2));
 
-        this.cached = validated;
+        this.cache = validated;
     }
 
     async get<K extends keyof Settings>(key: K): Promise<Settings[K]> {

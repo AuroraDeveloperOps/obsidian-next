@@ -227,11 +227,17 @@ export class LLMClient {
 
             // Load user context from memory for personalization
             let userContext = '';
+            let memoryAvailable = true;
             try {
                 const { memory } = await import('./memory.js');
                 userContext = await memory.getUserContext();
-            } catch {
-                // Memory not available, continue without it
+            } catch (e) {
+                memoryAvailable = false;
+                bus.emitAgent({
+                    type: 'thought',
+                    content: '[WARN] Memory system unavailable. Personalization disabled.',
+                    hidden: true
+                });
             }
 
             // Cache Control Strategy:
