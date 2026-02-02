@@ -78,8 +78,9 @@ class Agent {
         // Initialize audit logging with session ID
         auditLog.setSessionId(this.sessionId);
         await auditLog.init();
-        // Disable aggressive PII redaction by default as it interferes with dev API keys/tokens
-        redactor.setEnabled(false);
+        // Enable PII redaction by default for security (can be disabled in settings)
+        const s = await (await import('./settings.js')).settings.load();
+        redactor.setEnabled(s.security.piiRedaction);
         this.initialized = true;
     }
 
@@ -88,13 +89,27 @@ class Agent {
 
         const mode = context.getMode();
 
+        // Analyze task complexity
+        const { complexity, suggestPlanMode } = this.analyzeTaskComplexity(input);
+
         // Update task if this looks like a new task
         if (this.isNewTask(input)) {
             await tasks.create(this.extractTaskTitle(input));
             await context.setTask(tasks.getProgress());
         }
 
-        bus.emitAgent({ type: 'thought', content: `[${mode}] Processing...` });
+        // Log mode and complexity for transparency
+        const complexityLabel = complexity === 'complex' ? 'complex task' : complexity === 'moderate' ? 'moderate task' : 'simple task';
+        bus.emitAgent({ type: 'thought', content: `[${mode}] ${complexityLabel}` });
+
+        // Suggest plan mode for complex tasks (embedded in the prompt enhancement)
+        if (suggestPlanMode && mode !== 'plan') {
+            bus.emitAgent({
+                type: 'thought',
+                content: '[TIP] Complex task detected. Consider switching to plan mode (Shift+Tab) for better results.',
+                hidden: false
+            });
+        }
 
         if (mode === 'plan') {
             await this.runPlanMode(input);
@@ -108,6 +123,51 @@ class Agent {
         const actionWords = ['create', 'add', 'implement', 'fix', 'update', 'refactor', 'build', 'make', 'write'];
         const lower = input.toLowerCase();
         return input.length > 20 && actionWords.some(w => lower.includes(w));
+    }
+
+    /**
+     * Analyze task complexity to suggest mode transitions
+     */
+    private analyzeTaskComplexity(input: string): { complexity: 'simple' | 'moderate' | 'complex'; suggestPlanMode: boolean } {
+        const lower = input.toLowerCase();
+
+        // Complexity indicators
+        const complexIndicators = [
+            'refactor', 'migrate', 'overhaul', 'redesign', 'architect',
+            'multiple files', 'across the codebase', 'all of', 'entire',
+            'integrate', 'replace all', 'comprehensive', 'full',
+        ];
+
+        const moderateIndicators = [
+            'add feature', 'implement', 'create', 'build', 'setup',
+            'configure', 'update', 'modify', 'change',
+        ];
+
+        const simpleIndicators = [
+            'fix', 'typo', 'rename', 'delete', 'remove', 'quick',
+            'small', 'minor', 'simple', 'just', 'only',
+        ];
+
+        // Count multi-step patterns
+        const hasMultiStep = /\b(and|then|also|after that|next)\b/gi.test(input);
+        const wordCount = input.split(/\s+/).length;
+
+        // Determine complexity
+        let complexity: 'simple' | 'moderate' | 'complex' = 'simple';
+
+        if (complexIndicators.some(i => lower.includes(i)) || (hasMultiStep && wordCount > 30)) {
+            complexity = 'complex';
+        } else if (moderateIndicators.some(i => lower.includes(i)) || wordCount > 15) {
+            complexity = 'moderate';
+        } else if (simpleIndicators.some(i => lower.includes(i))) {
+            complexity = 'simple';
+        }
+
+        // Suggest plan mode for complex tasks when not already in plan mode
+        const currentMode = context.getMode();
+        const suggestPlanMode = complexity === 'complex' && currentMode !== 'plan';
+
+        return { complexity, suggestPlanMode };
     }
 
     private extractTaskTitle(input: string): string {
