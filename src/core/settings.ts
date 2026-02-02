@@ -27,6 +27,8 @@ export const SettingsSchema = z.object({
     permissions: z.object({
         // Patterns always allowed without prompt: "tool:pattern"
         allow: z.array(z.string()).default([]),
+        // Patterns allowed without prompt AND without sandbox
+        allowUnsandboxed: z.array(z.string()).default([]),
         // Patterns always blocked
         deny: z.array(z.string()).default([]),
     }).default({}),
@@ -63,6 +65,7 @@ const DEFAULT_SETTINGS: Settings = {
     },
     permissions: {
         allow: [],  // Empty - user builds their own allow list
+        allowUnsandboxed: [],
         deny: [],
     },
     security: {
@@ -80,14 +83,17 @@ const DEFAULT_SETTINGS: Settings = {
 
 class SettingsManager {
     private settingsPath: string;
-    private cached: Settings | null = null;
+    private cache: Settings | null = null;
+    private sessionAllow = new Set<string>();
+    private sessionUnsandboxed = new Set<string>();
+    private sessionDeny = new Set<string>();
 
     constructor() {
         this.settingsPath = path.join(process.cwd(), SETTINGS_DIR, SETTINGS_FILE);
     }
 
     async load(): Promise<Settings> {
-        if (this.cached) return this.cached;
+        if (this.cache) return this.cache;
         return this.reload();
     }
 
@@ -95,13 +101,13 @@ class SettingsManager {
         try {
             const data = await fs.readFile(this.settingsPath, 'utf-8');
             const parsed = JSON.parse(data);
-            this.cached = SettingsSchema.parse({ ...DEFAULT_SETTINGS, ...parsed });
+            this.cache = SettingsSchema.parse({ ...DEFAULT_SETTINGS, ...parsed });
         } catch {
             // File doesn't exist - create it with defaults
-            this.cached = DEFAULT_SETTINGS;
+            this.cache = DEFAULT_SETTINGS;
             await this.save(DEFAULT_SETTINGS);
         }
-        return this.cached;
+        return this.cache;
     }
 
     /**
@@ -115,6 +121,41 @@ class SettingsManager {
         if (!s.permissions.allow.includes(pattern)) {
             s.permissions.allow.push(pattern);
             await this.save({ permissions: s.permissions });
+        }
+    }
+
+    /**
+     * Add a permission to the unsandboxed allow list
+     */
+    async addUnsandboxedPermission(tool: string, command: string): Promise<void> {
+        const s = await this.load();
+        const pattern = `${tool}:${command}`;
+
+        if (!s.permissions.allowUnsandboxed.includes(pattern)) {
+            s.permissions.allowUnsandboxed.push(pattern);
+            // Also ensure it's in the regular allow list for consistency
+            if (!s.permissions.allow.includes(pattern)) {
+                s.permissions.allow.push(pattern);
+            }
+            await this.save({ permissions: s.permissions });
+        }
+    }
+
+    /**
+     * Add a permission to the session-only allow/deny list
+     */
+    async addSessionPermission(tool: string, command: string, approved: boolean, bypass: boolean = false): Promise<void> {
+        const pattern = `${tool}:${command}`;
+        if (approved) {
+            this.sessionAllow.add(pattern);
+            this.sessionDeny.delete(pattern);
+            if (bypass) {
+                this.sessionUnsandboxed.add(pattern);
+            }
+        } else {
+            this.sessionDeny.add(pattern);
+            this.sessionAllow.delete(pattern);
+            this.sessionUnsandboxed.delete(pattern);
         }
     }
 
@@ -168,11 +209,25 @@ class SettingsManager {
     }
 
     /**
-     * Check if a tool:command pattern is allowed
+     * Check if a tool:command pattern is authorized for THIS SESSION only
+     */
+    async isSessionAuthorized(tool: string, command: string): Promise<boolean> {
+        const pattern = `${tool}:${command}`;
+        return this.sessionAllow.has(pattern);
+    }
+
+    /**
+     * Check if a tool:command pattern is allowed (session or persistent)
      */
     async isAllowed(tool: string, command: string): Promise<boolean> {
-        const s = await this.load();
         const pattern = `${tool}:${command}`;
+
+        // Check session allow first
+        if (this.sessionAllow.has(pattern)) {
+            return true;
+        }
+
+        const s = await this.load();
 
         // Check deny list first (deny takes precedence)
         for (const deny of s.permissions.deny) {
@@ -193,11 +248,37 @@ class SettingsManager {
     }
 
     /**
+     * Check if a tool:command pattern is allowed to bypass sandbox
+     */
+    async isUnsandboxed(tool: string, command: string): Promise<boolean> {
+        const pattern = `${tool}:${command}`;
+
+        if (this.sessionUnsandboxed.has(pattern)) {
+            return true;
+        }
+
+        const s = await this.load();
+
+        for (const allow of s.permissions.allowUnsandboxed) {
+            if (this.matchPattern(pattern, allow)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Check if a tool:command pattern is explicitly denied
      */
     async isDenied(tool: string, command: string): Promise<boolean> {
-        const s = await this.load();
         const pattern = `${tool}:${command}`;
+
+        // Check session deny first
+        if (this.sessionDeny.has(pattern)) {
+            return true;
+        }
+
+        const s = await this.load();
 
         for (const deny of s.permissions.deny) {
             if (this.matchPattern(pattern, deny)) {
@@ -219,7 +300,7 @@ class SettingsManager {
     }
 
     clearCache(): void {
-        this.cached = null;
+        this.cache = null;
     }
 
     getPath(): string {

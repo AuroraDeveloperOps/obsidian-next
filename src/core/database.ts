@@ -101,6 +101,7 @@ export class DatabaseManager {
                 session_id TEXT,
                 cron_expression TEXT, -- e.g. "0 9 * * *"
                 command TEXT, -- "summarize_day"
+                params TEXT, -- JSON parameters
                 last_run_at INTEGER,
                 active INTEGER DEFAULT 1
             );
@@ -176,6 +177,16 @@ export class DatabaseManager {
             CREATE INDEX IF NOT EXISTS idx_audit_log_session
                 ON audit_log(session_id, timestamp);
         `);
+
+        // Migration: Add params column to scheduled_tasks if it doesn't exist
+        try {
+            const columns = this.db.pragma('table_info(scheduled_tasks)') as any[];
+            if (!columns.find(c => c.name === 'params')) {
+                this.db.exec('ALTER TABLE scheduled_tasks ADD COLUMN params TEXT');
+            }
+        } catch (e) {
+            console.error('Failed to run manual migration for scheduled_tasks:', e);
+        }
     }
 
     public getDb(): Database.Database {

@@ -177,22 +177,21 @@ export class MemoryManager {
                 return '';
             }
 
-            const lines: string[] = ['[User Context from Memory]'];
+            const lines: string[] = ['[RECALL]'];
 
             if (prefs.length > 0) {
-                lines.push('User Preferences:');
-                for (const p of prefs.slice(0, 10)) {
-                    lines.push(`- ${p.key}: ${p.content}`);
+                for (const p of prefs.slice(0, 5)) {
+                    lines.push(`${p.key}: ${p.content}`);
                 }
             }
 
             if (facts.length > 0) {
-                lines.push('Project Facts:');
                 for (const f of facts.slice(0, 10)) {
-                    lines.push(`- ${f.key}: ${f.content}`);
+                    lines.push(`${f.key}: ${f.content}`);
                 }
             }
 
+            if (lines.length === 1) return '';
             return lines.join('\n');
         } catch (e) {
             return '';

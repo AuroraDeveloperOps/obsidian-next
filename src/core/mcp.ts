@@ -100,7 +100,7 @@ class MCPManager {
             const client = new Client(
                 {
                     name: 'obsidian-next-client',
-                    version: '0.4.2',
+                    version: '0.4.5',
                 },
                 {
                     capabilities: {

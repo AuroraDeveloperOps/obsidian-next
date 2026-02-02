@@ -62,7 +62,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         sessionCost: 0,
         workspace: process.cwd().split('/').slice(-2).join('/'), // Shortened path
         user: process.env.USER || 'User',
-        version: 'v0.4.2',
+        version: 'v...',
     });
 
     // Load initial state
@@ -71,6 +71,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             const cfg = await config.load();
             const s = await settings.load();
             const hasKey = await keyManager.hasKey();
+            const ver = await config.getVersion();
 
             setState(prev => ({
                 ...prev,
@@ -78,6 +79,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 mode: s.mode,
                 keyStatus: hasKey ? 'valid' : 'missing',
                 sessionCost: usage.getSessionCost(),
+                version: ver.startsWith('v') ? ver : `v${ver}`
             }));
         };
 

@@ -170,7 +170,7 @@ export const Root = () => {
             // Handle shutdown - exit after rendering final messages
             // Handle thinking/busy state
             const completionTypes: string[] = ['done', 'error', 'command_executed', 'shutdown_complete'];
-            const startTypes: string[] = ['tool_start', 'thought'];
+            const startTypes: string[] = ['tool_start'];
 
             if (completionTypes.includes(event.type)) {
                 setIsBusy(false);

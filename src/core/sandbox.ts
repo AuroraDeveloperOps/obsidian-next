@@ -156,13 +156,13 @@ export class SandboxExecutor {
     /**
      * Wrap a command with sandbox protection
      */
-    async wrapCommand(command: string): Promise<string> {
+    async wrapCommand(command: string, bypass: boolean = false): Promise<string> {
         if (!this.initialized) {
             await this.initialize();
         }
 
-        // Local mode - return command as-is
-        if (this.mode === 'local') {
+        // Local mode or explicit bypass - return command as-is
+        if (this.mode === 'local' || bypass) {
             return command;
         }
 

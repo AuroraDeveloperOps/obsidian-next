@@ -44,7 +44,7 @@ function truncateOutput(output: string, maxLength: number = MAX_OUTPUT_LENGTH): 
 
 // Pending approval requests
 const pendingApprovals = new Map<string, {
-    resolve: (approved: boolean) => void;
+    resolve: (result: { approved: boolean; scope: 'session' | 'persistent'; bypass?: boolean }) => void;
     timeout: NodeJS.Timeout;
 }>();
 
@@ -55,7 +55,7 @@ bus.on('user', (event: UserEvent) => {
         if (pending) {
             clearTimeout(pending.timeout);
             pendingApprovals.delete(event.requestId);
-            pending.resolve(event.approved);
+            pending.resolve({ approved: event.approved, scope: event.scope, bypass: event.bypass });
         }
     }
 });
@@ -63,7 +63,7 @@ bus.on('user', (event: UserEvent) => {
 /**
  * Request user approval for a command
  */
-async function requestApproval(command: string, reason: string): Promise<boolean> {
+async function requestApproval(command: string, reason: string): Promise<{ approved: boolean; scope: 'session' | 'persistent'; bypass?: boolean }> {
     const requestId = `approval_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     return new Promise((resolve) => {
@@ -74,7 +74,7 @@ async function requestApproval(command: string, reason: string): Promise<boolean
                 type: 'error',
                 message: 'Approval request timed out. Command denied.'
             });
-            resolve(false);
+            resolve({ approved: false, scope: 'session' });
         }, APPROVAL_TIMEOUT);
 
         pendingApprovals.set(requestId, { resolve, timeout });
@@ -139,29 +139,39 @@ export const BashTool: Tool = {
         if (!audit.approved && audit.requiresApproval) {
             await auditLog.logApproval('requested', command, audit.reason);
 
-            const approved = await requestApproval(command, audit.reason || 'Potentially dangerous operation');
+            const { approved, scope, bypass } = await requestApproval(command, audit.reason || 'Potentially dangerous operation');
 
-            if (!approved) {
-                // Save denial and log it
-                await settings.addDeniedPermission('bash', command);
+            if (approved) {
+                if (scope === 'persistent') {
+                    if (bypass) {
+                        await settings.addUnsandboxedPermission('bash', command);
+                    } else {
+                        await settings.addAllowedPermission('bash', command);
+                    }
+                } else {
+                    await settings.addSessionPermission('bash', command, true, bypass);
+                }
+                await auditLog.logApproval('granted', command, bypass ? 'Bypass enabled' : undefined);
+            } else {
+                if (scope === 'persistent') {
+                    await settings.addDeniedPermission('bash', command);
+                } else {
+                    await settings.addSessionPermission('bash', command, false);
+                }
                 await auditLog.logApproval('denied', command);
                 return {
                     success: false,
                     error: 'Command rejected by user'
                 };
             }
-
-            // Save approval for future (user said yes) and log it
-            await settings.addAllowedPermission('bash', command);
-            await auditLog.logApproval('granted', command);
         }
 
-        // Auto-approved commands (in allow list) skip confirmation
-        // audit.approved && audit.autoApproved === true means pre-approved
+        // Check if this command should bypass sandbox
+        const bypassSandbox = await settings.isUnsandboxed('bash', command);
 
         try {
             // Wrap command with sandbox if enabled
-            const execCommand = await sandbox.wrapCommand(command);
+            const execCommand = await sandbox.wrapCommand(command, bypassSandbox);
 
             const { stdout, stderr } = await execAsync(execCommand, {
                 cwd: process.cwd(),
@@ -1246,11 +1256,11 @@ export const ScheduleTool: Tool = {
         },
         ability: {
             type: 'string',
-            description: 'Name of the ability to execute. Available: "system:bash" (run shell cmd), "system:echo", "system:summary", "system:heartbeat"'
+            description: 'Name of the ability to execute. Available: "system:bash", "system:echo", "system:notify" (sound + alert), "system:summary", "system:heartbeat"'
         },
         params: {
             type: 'string',
-            description: 'JSON string of parameters. For system:bash, use {"command": "..."}'
+            description: 'JSON string of parameters. For system:notify, use {"title": "...", "message": "..."}. For system:bash, use {"command": "..."}'
         }
     },
     requiredParams: ['cron', 'ability'],

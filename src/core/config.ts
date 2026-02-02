@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { fileURLToPath } from 'url';
 import { z } from 'zod';
 
 // NOTE: API keys are managed exclusively by KeyManager (src/core/keyManager.ts)
@@ -172,6 +173,34 @@ export class ConfigManager {
 
     getPath(): string {
         return this.configPath;
+    }
+
+    /**
+     * Dynamically get the project version from package.json
+     */
+    async getVersion(): Promise<string> {
+        try {
+            const selfPath = fileURLToPath(import.meta.url);
+            let currentDir = path.dirname(selfPath);
+
+            // Search upwards for package.json
+            for (let i = 0; i < 5; i++) {
+                const pkgPath = path.join(currentDir, 'package.json');
+                try {
+                    const data = await fs.readFile(pkgPath, 'utf-8');
+                    const pkg = JSON.parse(data);
+                    if (pkg.name === '@aurora-foundation/obsidian-next') {
+                        return pkg.version;
+                    }
+                } catch {
+                    // Not in this dir, go up
+                }
+                currentDir = path.dirname(currentDir);
+            }
+            return '0.4.5'; // Fallback
+        } catch {
+            return '0.4.5';
+        }
     }
 }
 

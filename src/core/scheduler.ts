@@ -43,12 +43,13 @@ export class Scheduler {
         if (this.isRunning) return;
         this.isRunning = true;
 
-        // Check every 60 seconds
-        this.timer = setInterval(() => this.tick(), 60000);
+        // Run immediately on start
+        this.tick().catch(err => console.error('[Scheduler] Initial tick failed:', err));
 
-        // Run immediately on start to catch missed tasks? 
-        // No, let's wait for first tick to avoid startup storm
-        bus.emitAgent({ type: 'thought', content: '[Scheduler] Started background task monitor' });
+        // Check every 10 seconds for better precision
+        this.timer = setInterval(() => this.tick(), 10000);
+
+        bus.emitAgent({ type: 'thought', content: '[Obsidian] Started background task monitor [Active Heartbeat]' });
     }
 
     public stop() {
@@ -98,14 +99,14 @@ export class Scheduler {
             cron_expression: cronExpression,
             command: abilityName,
             params: JSON.stringify(params),
-            last_run_at: 0,
+            last_run_at: Date.now(),
             active: 1
         };
 
         db.getDb().prepare(`
-            INSERT INTO scheduled_tasks (id, session_id, cron_expression, command, last_run_at, active)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `).run(task.id, task.session_id, task.cron_expression, task.command, task.last_run_at, task.active);
+            INSERT INTO scheduled_tasks (id, session_id, cron_expression, command, params, last_run_at, active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(task.id, task.session_id, task.cron_expression, task.command, task.params, task.last_run_at, task.active);
 
         bus.emitAgent({ type: 'thought', content: `[Scheduler] Scheduled ${abilityName} (${cronExpression})` });
 
@@ -138,26 +139,22 @@ export class Scheduler {
         const tasks = this.listTasks();
         const now = Date.now();
 
+        // Heartbeat for debugging
+        // console.log(`[Scheduler] Heartbeat tick at ${new Date().toLocaleTimeString()} | Active Tasks: ${tasks.length}`);
+
         for (const task of tasks) {
             try {
+                // If last_run_at is 0, we use a baseline of 1 minute ago to avoid skipping 
+                // but also prevent it from thinking it's due for 50 years of catchup
+                const baseline = task.last_run_at || (now - 61000);
+
                 const interval = parseExpression(task.cron_expression, {
-                    currentDate: task.last_run_at || 0
+                    currentDate: baseline
                 });
-
-                // Check if it's due
-                // We check if the NEXT scheduled run after the LAST run is <= NOW
-                // Example: Last run 9:00. Cron: hourly. Next: 10:00. Now: 10:01. -> Run!
-
-                // Special case: If never run (0), run immediately? 
-                // Usually yes, or based on cron. 
-                // If last_run_at is 0, parseExpression might default to now.
-
-                // Let's use a safer check:
-                // Get next occurrence from last_run_at (exclusive)
-                // If that occurrence is in the past (<= now), we execute.
 
                 const nextRun = interval.next().getTime();
 
+                // Execute if the next scheduled run is in the past or right now
                 if (nextRun <= now) {
                     await this.executeTask(task);
                 }
@@ -190,11 +187,6 @@ export class Scheduler {
 
             await ability(params);
 
-            // Update last_run_at
-            db.getDb().prepare(`
-                UPDATE scheduled_tasks SET last_run_at = ? WHERE id = ?
-            `).run(Date.now(), task.id);
-
             bus.emitAgent({
                 type: 'scheduler_task_completed',
                 taskId: task.id
@@ -205,6 +197,11 @@ export class Scheduler {
             await auditLog.logSystemEvent('scheduler_error', { taskId: task.id, error: error.message });
 
             bus.emitAgent({ type: 'scheduler_task_failed', taskId: task.id, error: error.message });
+        } finally {
+            // Update last_run_at REGARDLESS of success to avoid refiring loops
+            db.getDb().prepare(`
+                UPDATE scheduled_tasks SET last_run_at = ? WHERE id = ?
+            `).run(Date.now(), task.id);
         }
     }
 }
