@@ -38,6 +38,7 @@ export class LLMClient {
     private accumulatedCacheReadTokens = 0;
     private accumulatedCacheCreationTokens = 0;
     private abortController: AbortController | null = null;
+    private currentInterruptHandler: ((e: any) => void) | null = null;
 
     async initialize() {
         const cfg = await config.load();
@@ -142,7 +143,7 @@ export class LLMClient {
             let apiModel = modelMap[requestedModel] || requestedModel;
 
             // 200k Token Safety Strategy
-            const currentUsage = Math.max(this.accumulatedInputTokens, await usage.getContextUsage(apiModel).used); // Heuristic
+            const currentUsage = Math.max(this.accumulatedInputTokens, usage.getContextUsage(apiModel).used); // Heuristic
 
             if (currentUsage > CONTEXT.MAX_TOKENS_TOTAL * CONTEXT.TOKEN_LIMIT_STOP) {
                 bus.emitAgent({
@@ -224,6 +225,15 @@ export class LLMClient {
             // Prune history if too large (Context Editing)
             await this.compressHistory();
 
+            // Load user context from memory for personalization
+            let userContext = '';
+            try {
+                const { memory } = await import('./memory.js');
+                userContext = await memory.getUserContext();
+            } catch {
+                // Memory not available, continue without it
+            }
+
             // Cache Control Strategy:
             // 1. System Prompt (static, huge) - Always cached
             // 2. Tool Definitions (static, huge) - Always cached
@@ -267,30 +277,37 @@ WORKFLOW:
 6. Verify: Check your work (diff, lint, test).
 
 Current Working Directory: ${process.cwd()}
-
+${userContext ? `\n${userContext}\n` : ''}
 CAPABILITIES:
 
 Active (Ready to use):
 ${activeList}
 
 ${offlineList ? `Offline (Configured but disconnected):\n${offlineList}\n` : ''}
-${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`,
+${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}
+MEMORY:
+- Use the 'memory' tool to store important user information (name, preferences, project facts).
+- When the user shares personal info (name, preferences), store it immediately using memory tool.
+- Recall stored memories to personalize interactions.`,
                 cache_control: { type: 'ephemeral' }
             };
 
             this.abortController = new AbortController();
             const signal = this.abortController.signal;
 
-            const interruptHandler = () => {
-                if (this.abortController) {
+            // Clean up any existing interrupt handler before creating new one
+            if (this.currentInterruptHandler) {
+                bus.off('user', this.currentInterruptHandler);
+            }
+
+            this.currentInterruptHandler = (e: any) => {
+                if (e.type === 'user_interrupt' && this.abortController) {
                     this.abortController.abort();
                     bus.emitAgent({ type: 'thought', content: '[Stop] Interrupted by user.' });
                 }
             };
 
-            bus.on('user', (e: any) => {
-                if (e.type === 'user_interrupt') interruptHandler();
-            });
+            bus.on('user', this.currentInterruptHandler);
 
             // Apply caching to the last message if it's a checkpoint
             // We set a checkpoint every 5 turns (interactions)
@@ -527,6 +544,11 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`,
             return null;
         } finally {
             this.abortController = null;
+            // Clean up interrupt listener
+            if (this.currentInterruptHandler) {
+                bus.off('user', this.currentInterruptHandler);
+                this.currentInterruptHandler = null;
+            }
         }
     }
 

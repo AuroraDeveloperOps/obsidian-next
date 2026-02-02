@@ -49,6 +49,16 @@ Fetch content from URLs.
 - **Parameters**: `url` (string)
 - **Safety**: Blocks local/private IP ranges. 10s timeout. strip HTML tags.
 
+### memory
+Store and recall long-term memories.
+- **Actions**:
+  - `store`: Save a fact (requires `type`, `key`, `content`).
+  - `recall`: Retrieve by key (requires `key`).
+  - `search`: Semantic search (requires `query`).
+  - `list`: List all by type (requires `type`).
+  - `forget`: Delete a memory (requires `key`).
+- **Types**: `user_preference`, `project_fact`, `decision_log`, `learned_pattern`.
+
 ## Usage
 
 ### Manual Tool Execution

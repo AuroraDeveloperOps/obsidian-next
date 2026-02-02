@@ -5,7 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.4] - 2026-02-01
+## [0.4.5] - 2026-02-02
+
+### Added
+- **SQLite State Overhaul**: 
+  - Migrated all session, task, usage, and memory state to a centralized **SQLite Database** (`.obsidian/state.db`).
+  - Implemented **Migration Manager** (`src/core/migrations.ts`) to handle safe schema updates.
+  - Added structured `memos` table for long-term "Handoff" context.
+- **Memory Tooling**: 
+  - Enhanced `memory` tool with `store`, `recall`, `search`, `list`, and `forget` actions.
+  - Integrated persistent memory into the LLM system prompt for deep personalization across sessions.
+- **Stability**: Added `Migration 1` to fix legacy schema issues in the `memos` table.
+
+### Changed
+- **Architecture**: Unified the core data layer. `src/core/database.ts` now orchestrates all persistent state.
+- **Documentation**: Comprehensive update of `docs/ARCHITECTURE.md`, `docs/CONTEXT.md`, and `docs/TOOLS.md` for the SQLite era.
 
 ### Fixed
 - **Usage Tracking**: Fixed "System/Tools" usage display showing `0.0k` on cache misses. Now strictly tracks creation tokens to ensure accurate visibility.

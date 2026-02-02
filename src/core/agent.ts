@@ -215,10 +215,14 @@ APPROVAL: <yes if destructive, no otherwise>`;
         const { plan, originalInput } = this.pendingPlan;
         this.pendingPlan = null;
 
-        // Auto-create task and steps
-        await tools.execute('task', { action: 'create', title: plan.task });
-        for (const step of plan.steps) {
-            await tools.execute('task', { action: 'add_step', step });
+        // Auto-create task and steps (only if plan has a valid task title)
+        if (plan.task && plan.task.trim()) {
+            await tools.execute('task', { action: 'create', title: plan.task });
+            for (const step of plan.steps) {
+                if (step && step.trim()) {
+                    await tools.execute('task', { action: 'add_step', step });
+                }
+            }
         }
 
         await this.executePlan(plan, originalInput);
@@ -276,22 +280,32 @@ IMPORTANT:
         };
 
         for (const line of lines) {
-            if (line.startsWith('TASK:')) {
-                plan.task = line.slice(5).trim();
-            } else if (line.match(/^\d+\./)) {
-                plan.steps.push(line.replace(/^\d+\.\s*/, '').trim());
-            } else if (line.startsWith('FILES_READ:')) {
-                const files = line.slice(11).trim();
-                if (files !== 'none') {
-                    plan.files_to_read = files.split(',').map(f => f.trim());
+            const trimmedLine = line.trim();
+            if (trimmedLine.toUpperCase().startsWith('TASK:')) {
+                plan.task = trimmedLine.slice(5).trim();
+            } else if (trimmedLine.match(/^\d+\.\s/)) {
+                const step = trimmedLine.replace(/^\d+\.\s*/, '').trim();
+                if (step) plan.steps.push(step);
+            } else if (trimmedLine.toUpperCase().startsWith('FILES_READ:')) {
+                const files = trimmedLine.slice(11).trim();
+                if (files && files.toLowerCase() !== 'none') {
+                    plan.files_to_read = files.split(',').map(f => f.trim()).filter(f => f);
                 }
-            } else if (line.startsWith('FILES_MODIFY:')) {
-                const files = line.slice(13).trim();
-                if (files !== 'none') {
-                    plan.files_to_modify = files.split(',').map(f => f.trim());
+            } else if (trimmedLine.toUpperCase().startsWith('FILES_MODIFY:')) {
+                const files = trimmedLine.slice(13).trim();
+                if (files && files.toLowerCase() !== 'none') {
+                    plan.files_to_modify = files.split(',').map(f => f.trim()).filter(f => f);
                 }
-            } else if (line.startsWith('APPROVAL:')) {
-                plan.requires_approval = line.toLowerCase().includes('yes');
+            } else if (trimmedLine.toUpperCase().startsWith('APPROVAL:')) {
+                plan.requires_approval = trimmedLine.toLowerCase().includes('yes');
+            }
+        }
+
+        // Fallback: If no TASK: line found, try to extract from first meaningful line
+        if (!plan.task && lines.length > 0) {
+            const firstNonEmpty = lines.find(l => l.trim() && !l.trim().match(/^(TASK|FILES|APPROVAL|STEPS|\d+\.)/i));
+            if (firstNonEmpty) {
+                plan.task = firstNonEmpty.trim().slice(0, 100); // Use first 100 chars as fallback
             }
         }
 

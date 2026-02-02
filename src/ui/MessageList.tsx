@@ -20,9 +20,9 @@ export const MessageList: React.FC<MessageListProps> = ({ events, maxEvents = 50
 
                 if (event.type === 'user_input') {
                     content = (
-                        <Box flexDirection="column" paddingLeft={1} marginBottom={0}>
+                        <Box flexDirection="column" marginBottom={0}>
                             <Text color="white">
-                                <Text color="gray" bold>{`    > `}</Text>
+                                <Text color="cyan" bold>{`> `}</Text>
                                 {event.content}
                             </Text>
                         </Box>
@@ -33,7 +33,7 @@ export const MessageList: React.FC<MessageListProps> = ({ events, maxEvents = 50
 
                     const isLast = i === visibleEvents.length - 1;
                     content = (
-                        <Box flexDirection="column" paddingLeft={1}>
+                        <Box flexDirection="column">
                             <AgentLine content={event.content} isStreaming={isLast} />
                         </Box>
                     );
@@ -50,7 +50,7 @@ export const MessageList: React.FC<MessageListProps> = ({ events, maxEvents = 50
                     } catch { }
 
                     content = (
-                        <Box paddingLeft={3}>
+                        <Box paddingLeft={2}>
                             <Text color="gray">
                                 <Text color="cyan">⏺</Text> {event.tool} <Text dimColor>({argsSummary.trim()})</Text>
                             </Text>
@@ -58,20 +58,20 @@ export const MessageList: React.FC<MessageListProps> = ({ events, maxEvents = 50
                     );
                 } else if (event.type === 'tool_result') {
                     content = (
-                        <Box paddingLeft={5}>
+                        <Box paddingLeft={4}>
                             <ToolOutput tool={event.tool} output={event.output} isError={event.isError} />
                         </Box>
                     );
                 } else if (event.type === 'done') {
                     content = (
-                        <Box paddingLeft={1} marginTop={1}>
-                            <Text color="green">    ✔ {event.summary}</Text>
+                        <Box marginTop={1}>
+                            <Text color="green">✔ {event.summary}</Text>
                         </Box>
                     );
                 } else if (event.type === 'error') {
                     content = (
-                        <Box paddingLeft={1} marginTop={1}>
-                            <Text color="red">    [ERR] {event.message}</Text>
+                        <Box marginTop={1}>
+                            <Text color="red">[ERR] {event.message}</Text>
                         </Box>
                     );
                 }

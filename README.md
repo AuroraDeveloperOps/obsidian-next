@@ -3,7 +3,7 @@
 ![Obsidian Next](assets/obsidianboxes.png)
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.4.3-blue)](package.json)
+[![Version](https://img.shields.io/badge/Version-0.4.5-blue)](package.json)
 [![Status](https://img.shields.io/badge/Status-Stable-green)](CHANGELOG.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 
@@ -24,14 +24,21 @@ graph TD
     Supervisor -->|Reasoning| Agent[Agent Runtime]
     
     subgraph "Zero Trust Execution Interface"
-        Agent -->|Tool Call| Auditor{Auditor}
-        Auditor -->|Deny| Reject[Block Action]
+        Agent -.-> Redactor[PII Redactor]
+        Agent --> Auditor{Auditor}
         Auditor -->|Allow| Sandbox[Sandbox / Shell]
-        Sandbox -->|Result| EventBus[Typed Event Bus]
+        Sandbox -->|Result| bus[Typed Event Bus]
     end
     
-    EventBus -->|Sync| UI[Terminal UI]
-    EventBus -->|Stream| History[Session History]
+    bus -->|Sync| UI[Terminal UI]
+    bus -->|Persist| DB[(SQLite State Store)]
+    Agent <-->|Memory| DB
+    
+    subgraph "SQLite State Store"
+        DB --- Memos[Long-term Memory]
+        DB --- Sessions[Session Store]
+        DB --- Tasks[Task Tracker]
+    end
 ```
 
 ---
@@ -48,9 +55,14 @@ graph TD
 - **Semantic Summarization**: Intelligently compresses "middle" history using cheaper models (Haiku) to retain unlimited effective memory.
 - **Resume 2.0**: Full session state restoration, preserving execution history, costs, and working memory across restarts.
 
+### Long-term Memory (The Handoff)
+- **Cross-Session Awareness**: Implicitly learns user preferences and project facts to eliminate redundant discovery questions.
+- **Semantic Search**: Instant recall of decisions and patterns via vector-like search within a local SQLite vector store.
+- **Personalized System Prompt**: Dynamically injects relevant memories into every agent interaction for deep domain adaptation.
+
 ### Structure-First Engineering
 - **Typed Communication**: Agents communicate via structured JSON schemas, not raw text, preventing "hallucinated" tool calls.
-- **Local-First**: No external database dependencies. All state is maintained locally in transparent Markdown/JSON formats.
+- **Local-First**: All session state, memories, tasks, and usage metrics are maintained locally in a centralized **SQLite Database** (`.obsidian/state.db`).
 - **Audit Logging**: Comprehensive, immutable logs of every agent decision and tool result.
 
 ---

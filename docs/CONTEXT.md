@@ -24,8 +24,26 @@ The conversation history is segmented into three distinct logical blocks:
 
 ### 3. The Tail (Active)
 *   **Size**: Fixed (Last 10-15 messages).
-*   **Content**: The immediate immediate context—current error messages, file contents being edited, and the very last user prompt.
+*   **Content**: The immediate context—current error messages, file contents being edited, and the very last user prompt.
 *   **Behavior**: Protected from pruning to maintain immediate conversational fluidity.
+
+---
+
+## Tiered Long-term Memory (The Handoff)
+
+While history manages the *current session*, Obsidian uses an SQLite-backed memory system for *cross-session* awareness:
+
+### 1. User Preferences (`user_preference`)
+*   Implicitly or explicitly learned facts about the user (name, coding style, tech stack).
+*   Injected into every System Prompt for high personalization.
+
+### 2. Project Facts (`project_fact`)
+*   Key architectural decisions, library choices, and workspace quirks.
+*   Helps the agent avoid asking the same discovery questions twice.
+
+### 3. Learned Patterns (`learned_pattern`)
+*   Repeated bug fixes or common refactor requests are distilled into patterns.
+*   The agent proactively applies these patterns to new work.
 
 ---
 

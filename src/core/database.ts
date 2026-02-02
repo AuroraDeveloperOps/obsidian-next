@@ -77,13 +77,23 @@ export class DatabaseManager {
 
         // Tier 3: Distillation & Autonomy
         this.db.exec(`
-            CREATE TABLE IF NOT EXISTS memos ( -- The "Handoff" Layer
+            CREATE TABLE IF NOT EXISTS memos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT,
-                type TEXT, -- 'daily_summary', 'decision_log', 'user_preference'
-                content TEXT,
-                created_at INTEGER
+                type TEXT NOT NULL,
+                key TEXT,
+                content TEXT NOT NULL,
+                created_at INTEGER DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER DEFAULT (strftime('%s', 'now'))
             );
         `);
+
+        // Migration logic
+        import('./migrations.js').then(({ migrationManager }) => {
+            migrationManager.run(this.db).catch(err => {
+                console.error('Failed to run database migrations:', err);
+            });
+        });
 
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS scheduled_tasks ( -- OpenClaw "Heartbeat" Support
@@ -128,6 +138,43 @@ export class DatabaseManager {
                 content TEXT, -- JSON payload
                 timestamp INTEGER
             );
+        `);
+
+        // Audit Log Table (for security tracking)
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                action TEXT,
+                details TEXT,
+                timestamp INTEGER
+            );
+        `);
+
+        // Performance Indexes
+        this.db.exec(`
+            CREATE INDEX IF NOT EXISTS idx_events_session_timestamp
+                ON events(session_id, timestamp);
+        `);
+
+        this.db.exec(`
+            CREATE INDEX IF NOT EXISTS idx_working_set_session_rank
+                ON working_set(session_id, rank_score DESC);
+        `);
+
+        this.db.exec(`
+            CREATE INDEX IF NOT EXISTS idx_tasks_session_status
+                ON tasks(session_id, status);
+        `);
+
+        this.db.exec(`
+            CREATE INDEX IF NOT EXISTS idx_usage_stats_session
+                ON usage_stats(session_id, timestamp);
+        `);
+
+        this.db.exec(`
+            CREATE INDEX IF NOT EXISTS idx_audit_log_session
+                ON audit_log(session_id, timestamp);
         `);
     }
 
