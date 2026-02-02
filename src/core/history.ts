@@ -1,22 +1,26 @@
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
+import { db } from './database.js';
 import { AgentEvent } from '../events/types.js';
+import { context } from './context.js';
 
 export class HistoryManager {
-    private historyPath: string;
     private saveTimer: NodeJS.Timeout | null = null;
 
-    constructor(customPath?: string) {
-        this.historyPath = customPath || path.join(os.homedir(), '.obsidian', 'history.json');
-    }
+    constructor() { }
 
     async load(): Promise<AgentEvent[]> {
+        const currentSessionId = context.get().session_id;
+        if (!currentSessionId) return [];
+
         try {
-            const data = await fs.readFile(this.historyPath, 'utf-8');
-            const events = JSON.parse(data);
-            return Array.isArray(events) ? events : [];
-        } catch {
+            const rows = db.getDb().prepare(`
+                SELECT content FROM events 
+                WHERE session_id = ? 
+                ORDER BY timestamp ASC
+            `).all(currentSessionId) as { content: string }[];
+
+            return rows.map(r => JSON.parse(r.content));
+        } catch (e) {
+            console.error('Failed to load history:', e);
             return [];
         }
     }
@@ -26,38 +30,49 @@ export class HistoryManager {
         if (this.saveTimer) clearTimeout(this.saveTimer);
 
         this.saveTimer = setTimeout(async () => {
+            const currentSessionId = context.get().session_id;
+            if (!currentSessionId) return;
+
             try {
-                const dir = path.dirname(this.historyPath);
-                await fs.mkdir(dir, { recursive: true });
-                await fs.writeFile(this.historyPath, JSON.stringify(events, null, 2));
+                const transaction = db.getDb().transaction(() => {
+                    // Sync strategy: Delete all events for this session and re-insert.
+                    // This handles edits/undo correctly.
+                    db.getDb().prepare('DELETE FROM events WHERE session_id = ?').run(currentSessionId);
+
+                    const insert = db.getDb().prepare(`
+                        INSERT INTO events (session_id, type, content, timestamp)
+                        VALUES (?, ?, ?, ?)
+                    `);
+
+                    for (const event of events) {
+                        insert.run(
+                            currentSessionId,
+                            event.type,
+                            JSON.stringify(event),
+                            event.timestamp || Date.now()
+                        );
+                    }
+                });
+
+                transaction();
             } catch (error) {
-                // Squelch save errors in background
                 console.error('Failed to save history:', error);
             }
         }, 500);
     }
 
     async archive(events: AgentEvent[]) {
-        if (this.saveTimer) clearTimeout(this.saveTimer);
-        try {
-            const sessionsDir = path.join(path.dirname(this.historyPath), 'sessions');
-            await fs.mkdir(sessionsDir, { recursive: true });
-
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const archivePath = path.join(sessionsDir, `session-${timestamp}.json`);
-
-            await fs.writeFile(archivePath, JSON.stringify(events, null, 2));
-            return archivePath;
-        } catch (error) {
-            console.error('Failed to archive session:', error);
-            return null;
-        }
+        // No-op. History is persistent in SQLite.
+        return null;
     }
 
     async clear() {
         if (this.saveTimer) clearTimeout(this.saveTimer);
+        const currentSessionId = context.get().session_id;
+        if (!currentSessionId) return;
+
         try {
-            await fs.writeFile(this.historyPath, JSON.stringify([], null, 2));
+            db.getDb().prepare('DELETE FROM events WHERE session_id = ?').run(currentSessionId);
         } catch {
             // ignore
         }

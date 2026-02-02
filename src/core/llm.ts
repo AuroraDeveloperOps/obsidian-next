@@ -76,6 +76,8 @@ export class LLMClient {
             }
         }
 
+        // Auto-save history on init? No, restore handles that.
+
         // Load API key exclusively via KeyManager
         // Supports: environment variable, macOS keychain, Linux secret-tool, encrypted file
         const apiKey = await keyManager.loadKey();
@@ -509,6 +511,9 @@ ${registryList ? `Installable (New capabilities):\n${registryList}\n` : ''}`,
                 currentContextSize
             );
 
+            // Persist valid conversation state
+            await this.persistHistory();
+
             return fullResponse;
 
         } catch (error: any) {
@@ -657,6 +662,24 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
      */
     getHistorySnapshot(): Anthropic.MessageParam[] {
         return [...this.conversationHistory];
+    }
+
+    /**
+     * Persist current history to DB
+     */
+    private async persistHistory() {
+        const { context } = await import('./context.js');
+        const { db } = await import('./database.js');
+
+        const sessionId = context.get().session_id;
+        if (!sessionId) return;
+
+        try {
+            db.getDb().prepare('UPDATE sessions SET llm_history = ? WHERE id = ?')
+                .run(JSON.stringify(this.conversationHistory), sessionId);
+        } catch (e) {
+            console.error('Failed to persist LLM history:', e);
+        }
     }
 
     /**

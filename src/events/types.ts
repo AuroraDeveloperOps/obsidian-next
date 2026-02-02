@@ -9,7 +9,7 @@ export interface Option {
     allow_context?: boolean; // If true, user can press TAB to add context
 }
 
-export type AgentEvent =
+export type AgentEventUnion =
     // 1. Thought (Internal Monologue)
     | { type: "thought"; content: string; hidden?: boolean }
 
@@ -33,7 +33,9 @@ export type AgentEvent =
     | { type: "shutdown_complete"; summary: SessionSummary }
 
     // 6. Task Management
-    | { type: "task_update"; task: any | null }; // Using 'any' to avoid circular dependency with tasks.ts, or simpler: import type { Task } from '../core/tasks';
+    | { type: "task_update"; task: any | null };
+
+export type AgentEvent = AgentEventUnion & { timestamp?: number };
 
 /**
  * Session summary for graceful shutdown

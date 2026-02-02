@@ -2,20 +2,17 @@
  * Context Manager - Agent working memory
  */
 
-import fs from 'fs/promises';
-import path from 'path';
+import { db } from './database.js';
 import { settings } from './settings.js';
-
-const CONTEXT_DIR = '.obsidian';
-const CONTEXT_FILE = 'context.json';
+import path from 'path';
 
 export interface AgentContext {
     session_id: string;
     mode: 'auto' | 'plan' | 'safe';
-    current_task: string | null;
-    files_read: string[];
-    files_modified: string[];
-    working_set: string[];
+    current_task: string | null; // Deprecated in favor of TasksManager, kept for compatibility
+    files_read: string[]; // Transient list for this session
+    files_modified: string[]; // Transient list
+    working_set: string[]; // Rank-based set
     last_action: string | null;
     created_at: string;
     updated_at: string;
@@ -42,67 +39,119 @@ function createEmptyContext(): AgentContext {
 
 class ContextManager {
     private ctx: AgentContext = createEmptyContext();
-    private contextPath: string;
 
-    constructor() {
-        this.contextPath = path.join(process.cwd(), CONTEXT_DIR, CONTEXT_FILE);
-    }
+    constructor() { }
 
     async init(): Promise<void> {
-        const dir = path.join(process.cwd(), CONTEXT_DIR);
+        // Try to load the most recent session from DB
         try {
-            await fs.mkdir(dir, { recursive: true });
-            await this.load();
-        } catch {
+            const lastSession = db.getDb().prepare(`
+                SELECT id, created_at, source, permissions 
+                FROM sessions 
+                ORDER BY created_at DESC 
+                LIMIT 1
+            `).get() as any;
+
+            if (lastSession) {
+                await this.load(lastSession.id);
+            } else {
+                this.ctx = createEmptyContext();
+                await this.save();
+            }
+        } catch (e) {
+            console.error('Failed to init context from DB:', e);
             this.ctx = createEmptyContext();
             await this.save();
         }
     }
 
-    async load(): Promise<void> {
+    async load(sessionId?: string): Promise<void> {
+        if (!sessionId) return; // Should likely verify if current ctx is valid
+
         try {
-            const data = await fs.readFile(this.contextPath, 'utf-8');
-            this.ctx = JSON.parse(data);
-        } catch {
-            this.ctx = createEmptyContext();
+            const session = db.getDb().prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId) as any;
+            if (!session) return;
+
+            // Load Working Set
+            const workingSetRows = db.getDb().prepare(`
+                SELECT file_path 
+                FROM working_set 
+                WHERE session_id = ? 
+                ORDER BY rank_score DESC
+            `).all(sessionId) as { file_path: string }[];
+
+            this.ctx = {
+                session_id: session.id,
+                mode: 'safe', // Mode loaded from settings usually, but DB could store it if we added column
+                current_task: null, // Tasks are now in 'tasks' table
+                files_read: [], // Reset on load, or we could store this in DB if needed
+                files_modified: [],
+                working_set: workingSetRows.map(r => r.file_path),
+                last_action: null,
+                created_at: new Date(session.created_at).toISOString(),
+                updated_at: new Date().toISOString(), // Refreshed
+            };
+
+            // Sync mode
+            await this.syncModeFromSettings();
+
+        } catch (e) {
+            console.error('Failed to load context:', e);
         }
     }
 
     async save(): Promise<void> {
         this.ctx.updated_at = new Date().toISOString();
-        const dir = path.dirname(this.contextPath);
-        await fs.mkdir(dir, { recursive: true });
-        await fs.writeFile(this.contextPath, JSON.stringify(this.ctx, null, 2));
+
+        try {
+            const timestamp = Date.now();
+
+            // 1. Upsert Session
+            db.getDb().prepare(`
+                INSERT INTO sessions (id, created_at)
+                VALUES (?, ?)
+                ON CONFLICT(id) DO UPDATE SET 
+                summary = excluded.summary -- Just a placeholder update to keep syntax
+            `).run(this.ctx.session_id, timestamp);
+
+            // 2. Upsert Working Set (Transaction)
+            const insertFile = db.getDb().prepare(`
+                INSERT INTO working_set (session_id, file_path, rank_score, last_accessed, access_count)
+                VALUES (?, ?, ?, ?, 1)
+                ON CONFLICT(session_id, file_path) DO UPDATE SET 
+                access_count = access_count + 1,
+                last_accessed = ?
+            `);
+
+            // We only explicitly save "working_set" array here if it was modified in memory.
+            // Ideally trackRead() calls DB directly.
+            // For backward compat, we iterate ctx.working_set and ensure they exist.
+            const transaction = db.getDb().transaction(() => {
+                for (const file of this.ctx.working_set) {
+                    // Simple logic: if in working set, ensure it's in DB.
+                    // Real Smart Rank logic happens in trackRead
+                    insertFile.run(this.ctx.session_id, file, 1.0, timestamp, timestamp);
+                }
+            });
+            transaction();
+
+        } catch (e) {
+            console.error('Failed to save context to DB:', e);
+        }
     }
 
     async archive(): Promise<void> {
-        try {
-            const sessionsDir = path.join(process.cwd(), CONTEXT_DIR, 'sessions');
-            await fs.mkdir(sessionsDir, { recursive: true });
-
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const archivePath = path.join(sessionsDir, `context-${timestamp}.json`);
-
-            await fs.writeFile(archivePath, JSON.stringify(this.ctx, null, 2));
-        } catch {
-            // Ignore archive errors
-        }
+        // No-op in SQLite architecture. Sessions are persistent history.
+        // We could flag it as "archived" if we added a status column.
     }
 
     async startNewSession(): Promise<void> {
-        // Archive previous session if it had any meaningful activity
-        if (this.ctx.current_task || this.ctx.last_action || this.ctx.working_set.length > 0) {
-            await this.archive();
-        }
-
         // Create fresh context but preserve mode preference
         const oldMode = this.ctx.mode;
         this.ctx = createEmptyContext();
-        this.ctx.mode = oldMode; // Keep user's mode preference (safe/auto/plan)
+        this.ctx.mode = oldMode;
 
         await this.save();
-
-        // Ensure settings are synced
         await settings.set('mode', this.ctx.mode);
     }
 
@@ -112,7 +161,6 @@ class ContextManager {
     }
 
     getMode(): AgentContext['mode'] {
-        // Mode is now primarily stored in settings
         return this.ctx.mode;
     }
 
@@ -132,26 +180,42 @@ class ContextManager {
     // Setters
     async setMode(mode: AgentContext['mode']): Promise<void> {
         this.ctx.mode = mode;
-        // Also persist to settings
         await settings.set('mode', mode);
-        await this.save();
+        // await this.save(); // Mode is not in DB sessions table yet, strictly settings
     }
 
     async setTask(task: string | null): Promise<void> {
         this.ctx.current_task = task;
-        await this.save();
+        // In V13, tasks are managed by TasksManager. This method might be deprecated.
+        // But for compatibility we keep it.
     }
 
     // Tracking
     async trackRead(filePath: string): Promise<void> {
         const normalized = path.relative(process.cwd(), path.resolve(filePath));
+
+        // Memory update
         if (!this.ctx.files_read.includes(normalized)) {
             this.ctx.files_read.push(normalized);
         }
         if (!this.ctx.working_set.includes(normalized)) {
             this.ctx.working_set.push(normalized);
         }
-        await this.save();
+
+        // DB Update (Smart Rank Logic)
+        try {
+            const timestamp = Date.now();
+            db.getDb().prepare(`
+                INSERT INTO working_set (session_id, file_path, rank_score, last_accessed, access_count)
+                VALUES (?, ?, ?, ?, 1)
+                ON CONFLICT(session_id, file_path) DO UPDATE SET 
+                access_count = access_count + 1,
+                last_accessed = ?,
+                rank_score = (access_count * 1.0) -- Simplified Score
+            `).run(this.ctx.session_id, normalized, 1.0, timestamp, timestamp);
+        } catch (e) {
+            console.error('Failed to track read:', e);
+        }
     }
 
     async trackModified(filePath: string): Promise<void> {
@@ -159,15 +223,13 @@ class ContextManager {
         if (!this.ctx.files_modified.includes(normalized)) {
             this.ctx.files_modified.push(normalized);
         }
-        if (!this.ctx.working_set.includes(normalized)) {
-            this.ctx.working_set.push(normalized);
-        }
-        await this.save();
+        // Force add to working set
+        await this.trackRead(filePath);
     }
 
     async setLastAction(action: string): Promise<void> {
         this.ctx.last_action = action;
-        await this.save();
+        // Could save to events table?
     }
 
     // Reset
@@ -178,7 +240,8 @@ class ContextManager {
 
     async clearWorkingSet(): Promise<void> {
         this.ctx.working_set = [];
-        await this.save();
+        // DB clear
+        db.getDb().prepare('DELETE FROM working_set WHERE session_id = ?').run(this.ctx.session_id);
     }
 
     // Summary for LLM

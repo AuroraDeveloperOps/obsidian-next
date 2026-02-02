@@ -15,6 +15,9 @@ export class EventBus extends EventEmitter {
     }
 
     emitAgent(e: AgentEvent) {
+        if (!e.timestamp) {
+            (e as any).timestamp = Date.now();
+        }
         this.emit('agent', e);
     }
 

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { UsageTracker } from '../src/core/usage.js';
+import { db } from '../src/core/database.js';
+import { context } from '../src/core/context.js';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -11,23 +13,27 @@ describe('UsageTracker', () => {
     let tracker: UsageTracker;
 
     beforeEach(async () => {
-        await fs.mkdir(TEST_DIR, { recursive: true });
-        tracker = new UsageTracker(TEST_USAGE_PATH);
+        // Use in-memory DB for speed and isolation
+        db.reconnect(':memory:');
+
+        // Context is required for session_id
+        await context.init();
+
+        tracker = new UsageTracker();
+        await tracker.init();
     });
 
     afterEach(async () => {
-        await fs.rm(TEST_DIR, { recursive: true, force: true });
+        db.close();
     });
 
-    it('should initialize with zeros if no file exists', async () => {
-        await tracker.init();
+    it('should initialize with zeros if no data exists', async () => {
         const stats = tracker.getStats();
         expect(stats.totalCost).toBe(0);
         expect(stats.totalInputTokens).toBe(0);
     });
 
     it('should track usage and calculate cost', async () => {
-        await tracker.init();
         // Claude 3.5 Sonnet: $3 input / $15 output
         // 1M input / 1M output
         await tracker.track('claude-3-5-sonnet-20240620', 1_000_000, 1_000_000);
@@ -38,13 +44,14 @@ describe('UsageTracker', () => {
         expect(stats.totalCost).toBeCloseTo(3 + 15);
     });
 
-    it('should persist stats to disk', async () => {
-        await tracker.init();
+    it('should persist stats to db', async () => {
+        const sessionId = context.get().session_id;
         await tracker.track('claude-3-haiku-20240307', 1000, 1000);
 
-        // check file
-        const content = await fs.readFile(TEST_USAGE_PATH, 'utf-8');
-        const data = JSON.parse(content);
-        expect(data.totalInputTokens).toBe(1000);
+        // Check DB directly
+        const row = db.getDb().prepare('SELECT * FROM usage_stats WHERE session_id = ?').get(sessionId) as any;
+        expect(row).toBeDefined();
+        expect(row.input_tokens).toBe(1000);
+        expect(row.output_tokens).toBe(1000);
     });
 });

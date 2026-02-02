@@ -1,28 +1,24 @@
 
-import fs from 'fs/promises';
-import path from 'path';
-import { vi, describe, test, expect, beforeAll, afterEach } from 'vitest';
+import { vi, describe, test, expect, beforeAll, afterEach, beforeEach } from 'vitest';
 import { tasks } from '../../src/core/tasks';
 import { bus } from '../../src/core/bus';
+import { db } from '../../src/core/database';
+import { context } from '../../src/core/context';
 import { TaskTool } from '../../src/core/tools';
 import { agent } from '../../src/core/agent';
 
-const TASKS_DIR = '.obsidian';
-const TASKS_FILE = 'tasks.md';
-const TEST_TASKS_PATH = path.join(process.cwd(), TASKS_DIR, TASKS_FILE);
-
 describe('Task System Integration', () => {
-    beforeAll(async () => {
+    beforeEach(async () => {
+        // Use memory DB
+        db.reconnect(':memory:');
+        await context.init(); // Init context for session ID
         // Initialize systems
         await tasks.init();
     });
 
     afterEach(async () => {
         // clean up
-        await tasks.clear();
-        try {
-            await fs.unlink(TEST_TASKS_PATH);
-        } catch { }
+        db.close();
     });
 
     test('TaskTool creates task and emits event', async () => {
@@ -38,9 +34,11 @@ describe('Task System Integration', () => {
         expect(result.success).toBe(true);
         expect(tasks.get()?.title).toBe('Integration Test Task');
 
-        // Verify persistence
-        const fileContent = await fs.readFile(TEST_TASKS_PATH, 'utf-8');
-        expect(fileContent).toContain('# Integration Test Task');
+        // Verify persistence (DB)
+        // Check DB directly.
+        const row = db.getDb().prepare('SELECT * FROM tasks WHERE title = ?').get('Integration Test Task') as any;
+        expect(row).toBeDefined();
+        expect(row.title).toBe('Integration Test Task');
 
         // Verify event emission
         expect(eventSpy).toHaveBeenCalledWith(expect.objectContaining({
