@@ -116,13 +116,25 @@ export class Auditor {
     }
 
     checkPath(filePath: string): AuditResult {
-        const resolved = path.resolve(this.workspaceRoot, filePath);
-        const relative = path.relative(this.workspaceRoot, resolved);
+        try {
+            const resolved = path.resolve(this.workspaceRoot, filePath);
+            const relative = path.relative(this.workspaceRoot, resolved);
 
-        if (relative.startsWith('..') || path.isAbsolute(relative)) {
-            return { approved: false, reason: `Path outside workspace: ${filePath}`, isCritical: true };
+            // Path Traversal Check: Must not start with .. and must be inside workspaceRoot
+            if (relative.startsWith('..') || path.isAbsolute(relative)) {
+                return { approved: false, reason: `Access denied: Path '${filePath}' is outside the workspace.`, isCritical: true };
+            }
+
+            // Hidden Files Check (optional policy, but usually safe for MVP)
+            const parts = relative.split(path.sep);
+            if (parts.some(p => p.startsWith('.') && p !== '.obsidian' && p !== '.agent' && p !== '.claude')) {
+                // We allow .obsidian, .agent, .claude for internal use, but could block others
+            }
+
+            return { approved: true };
+        } catch (error) {
+            return { approved: false, reason: `Invalid path: ${filePath}`, isCritical: false };
         }
-        return { approved: true };
     }
 
     async checkFileEdit(filePath: string): Promise<AuditResult> {

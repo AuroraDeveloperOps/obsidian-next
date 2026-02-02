@@ -22,10 +22,14 @@ interface CommandDef {
     name: string;
     description: string;
     handler: CommandHandler;
+    isView?: boolean;
+    viewId?: string;
+    aliases?: string[];
 }
 
 export class CommandRegistry {
     private commands: Map<string, CommandDef> = new Map();
+    private aliases: Map<string, string> = new Map();
 
     constructor() {
         this.register('help', 'Show available commands', async () => {
@@ -37,36 +41,46 @@ export class CommandRegistry {
                 type: 'thought',
                 content: `Available Commands:\n${validCommands}`
             });
-        });
+        }, { isView: true, viewId: 'help' });
 
         this.register('init', 'Initialize configuration', initCommand);
         this.register('clear', 'Clear conversation history', clearCommand);
-        this.register('context', 'Show session context & usage', contextCommand);
-        this.register('models', 'Select AI model', modelsCommand);
+        this.register('context', 'Show session context & usage', contextCommand, { isView: true, viewId: 'usage', aliases: ['usage', 'cost'] });
+        this.register('models', 'Select AI model', modelsCommand, { isView: true, viewId: 'settings' });
         this.register('tool', 'Execute tools manually', toolCommand);
-        this.register('status', 'Show system status', statusCommand);
-        this.register('sandbox', 'Toggle sandbox mode', sandboxCommand);
-        this.register('mode', 'Set execution mode (auto/plan/safe)', modeCommand);
-        this.register('task', 'View/manage current task', taskCommand);
+        this.register('status', 'Show system status', statusCommand, { isView: true, viewId: 'doctor', aliases: ['doctor'] });
+        this.register('sandbox', 'Toggle sandbox mode', sandboxCommand, { isView: true, viewId: 'settings' }); // Root.tsx handles the specific tab
+        this.register('mode', 'Set execution mode (auto/plan/safe)', modeCommand, { isView: true, viewId: 'settings' });
+        this.register('task', 'View/manage current task', taskCommand, { isView: true, viewId: 'task' });
         this.register('undo', 'Undo recent file changes', undoCommand);
-        this.register('config', 'View/edit configuration', configCommand);
-        this.register('doctor', 'Run system diagnostics', doctorCommand);
-        this.register('settings', 'View/edit settings (mode, permissions, ui)', settingsCommand);
+        this.register('config', 'View/edit configuration', configCommand, { isView: true, viewId: 'settings' });
+        this.register('settings', 'View/edit settings (mode, permissions, ui)', settingsCommand, { isView: true, viewId: 'settings' });
         this.register('exit', 'Save session and exit gracefully', exitCommand);
-        this.register('resume', 'Restore a saved session', resumeCommand);
+        this.register('resume', 'Restore a saved session', resumeCommand, { isView: true, viewId: 'sessions', aliases: ['sessions'] });
         this.register('diff', 'View recent file changes', diffCommand);
+        this.register('mcp', 'Manage Model Context Protocol', async (args) => {
+            // Placeholder if needed, but UI usually handles it
+        }, { isView: true, viewId: 'mcp', aliases: ['plugin'] });
     }
 
-    register(name: string, description: string, handler: CommandHandler) {
-        this.commands.set(name, { name, description, handler });
+    register(name: string, description: string, handler: CommandHandler, options: Partial<Pick<CommandDef, 'isView' | 'viewId' | 'aliases'>> = {}) {
+        const def = { name, description, handler, ...options };
+        this.commands.set(name, def);
+
+        if (options.aliases) {
+            for (const alias of options.aliases) {
+                this.aliases.set(alias, name);
+            }
+        }
     }
 
     has(name: string): boolean {
-        return this.commands.has(name);
+        return this.commands.has(name) || this.aliases.has(name);
     }
 
     async execute(name: string, args: string[]) {
-        const cmd = this.commands.get(name);
+        const actualName = this.aliases.get(name) || name;
+        const cmd = this.commands.get(actualName);
         if (!cmd) {
             bus.emitAgent({
                 type: 'error',
@@ -76,7 +90,24 @@ export class CommandRegistry {
         }
 
         try {
+            // Signal UI if this is a view command
+            if (cmd.isView && cmd.viewId) {
+                bus.emitAgent({
+                    type: 'view_request',
+                    viewId: cmd.viewId,
+                    command: actualName,
+                    params: args
+                });
+            }
+
             await cmd.handler(args);
+
+            // Emit command executed event for UI/logging
+            bus.emitAgent({
+                type: 'command_executed',
+                command: actualName,
+                args: args
+            });
         } catch (error) {
             bus.emitAgent({
                 type: 'error',

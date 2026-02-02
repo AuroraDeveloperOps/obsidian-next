@@ -20,6 +20,7 @@ import { redactor } from './redactor.js';
 import { mcp } from './mcp.js';
 import { getRegistryDefinition, listRegistry } from './mcp-registry.js';
 import { UserEvent } from '../events/types.js';
+import { scheduler } from './scheduler.js';
 
 const execAsync = promisify(exec);
 
@@ -758,7 +759,7 @@ async function globSearch(
  */
 export const TaskTool: Tool = {
     name: 'task',
-    description: 'Manage the active task list. actions: create, add_step, complete_step, fail_step, complete_task',
+    description: 'Manage the project plan and todo list. Use this for tracking work items, not for scheduling recurring jobs. actions: create, add_step, complete_step, fail_step, complete_task',
     inputSchema: {
         action: {
             type: 'string',
@@ -1054,6 +1055,8 @@ export class ToolRegistry {
         this.register(TaskTool);
         this.register(WebFetchTool);
         this.register(MCPManagementTool);
+        this.register(ScheduleTool);
+        this.register(ListScheduledTasksTool);
     }
 
     register(tool: Tool): void {
@@ -1145,5 +1148,95 @@ export class ToolRegistry {
         return result;
     }
 }
+
+
+/**
+ * Schedule Tool - Create a recurring background task
+ */
+export const ScheduleTool: Tool = {
+    name: 'schedule_task',
+    description: 'Schedule a recurring background cron job. Use this for requests like "every hour", "at 9am", or "check every X".',
+    inputSchema: {
+        cron: {
+            type: 'string',
+            description: 'Cron expression (e.g. "* * * * *")'
+        },
+        ability: {
+            type: 'string',
+            description: 'Name of the ability to execute. Available: "system:bash" (run shell cmd), "system:echo", "system:summary", "system:heartbeat"'
+        },
+        params: {
+            type: 'string',
+            description: 'JSON string of parameters. For system:bash, use {"command": "..."}'
+        }
+    },
+    requiredParams: ['cron', 'ability'],
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const cron = args.cron as string;
+        const ability = args.ability as string;
+        const paramsStr = args.params as string || '{}';
+
+        if (!cron || !ability) {
+            return { success: false, error: 'Cron expression and ability name are required' };
+        }
+
+        let params = {};
+        try {
+            params = JSON.parse(paramsStr);
+        } catch {
+            return { success: false, error: 'Invalid JSON parameters' };
+        }
+
+        try {
+            const task = await scheduler.scheduleTask(cron, ability, params);
+            return {
+                success: true,
+                output: `Scheduled task ${task.id}: ${ability} @ "${cron}"`
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Failed to schedule task: ${error.message}`
+            };
+        }
+    },
+};
+
+/**
+ * List Scheduled Tasks Tool
+ */
+export const ListScheduledTasksTool: Tool = {
+    name: 'list_scheduled_tasks',
+    description: 'List all active scheduled background tasks',
+    inputSchema: {},
+    requiredParams: [],
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        try {
+            const tasks = scheduler.listTasks();
+            if (tasks.length === 0) {
+                return { success: true, output: 'No active scheduled tasks.' };
+            }
+
+            const header = `ID | CRON | COMMAND | LAST RUN | NEXT RUN\n${'-'.repeat(80)}`;
+            const rows = tasks.map(t => {
+                const last = t.last_run_at ? new Date(t.last_run_at).toLocaleString() : 'Never';
+                const next = t.next_run_at ? new Date(t.next_run_at).toLocaleString() : 'Unknown';
+                return `${t.id} | ${t.cron_expression} | ${t.command} | ${last} | ${next}`;
+            }).join('\n');
+
+            return {
+                success: true,
+                output: `${header}\n${rows}`
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Failed to list tasks: ${error.message}`
+            };
+        }
+    },
+};
 
 export const tools = new ToolRegistry();

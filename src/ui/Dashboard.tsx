@@ -7,13 +7,29 @@ import { keyManager } from '../core/keyManager.js';
 import { usage } from '../core/usage.js';
 import { AgentEvent } from '../events/types.js';
 
-// Character sprite for header
+// Character sprite for header (Terminal/Active)
 const SPRITE = [
     "▐▛█████████▜▌",
     "▐██▄     ▄██▌",
     "▐██   ▄   ██▌",
     "▐▙▄▄▄▄▄▄▄▄▄▟▌",
 ];
+
+// Sleeping/Flying Owl sprite frames
+const OWL_FRAMES = {
+    sleep: [
+        "    ,___,    ",
+        "    {O,O}    ",
+        "    /)__)    ",
+        "     \"\"\"     "
+    ],
+    flap: [
+        "    ,___,    ",
+        "   <{O,O}>   ",
+        "    /)__)    ",
+        "     \"\"\"     "
+    ]
+};
 
 interface DashboardState {
     model: string;
@@ -27,9 +43,17 @@ interface DashboardState {
 
 interface DashboardProps {
     isBusy?: boolean;
+    isBackgroundBusy?: boolean;
+    isIdle?: boolean;
+    isSleep?: boolean;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
+export const Dashboard: React.FC<DashboardProps> = ({
+    isBusy = false,
+    isBackgroundBusy = false,
+    isIdle = false,
+    isSleep = false
+}) => {
     const [columns, setColumns] = useState(process.stdout.columns || 80);
     const [state, setState] = useState<DashboardState>({
         model: 'Loading...',
@@ -90,7 +114,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
     }, []);
 
     // Responsive: Track terminal width using Ink's hook
-    // This avoids double-render glitches by aligning with Ink's internal resize logic
     const { stdout } = useStdout();
 
     useEffect(() => {
@@ -117,23 +140,46 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
 
     // Animation State
     const [frame, setFrame] = useState(0);
+    const [spriteX, setSpriteX] = useState(0);
+    const [targetX, setTargetX] = useState(0);
 
     // Sprite Animation Loop
     useEffect(() => {
-        // Only run full animation when busy, or slow idle animation
-        const interval = isBusy ? 100 : 3000;
+        let interval = 3000; // Idle
+        if (isBusy) interval = 100;
+        else if (isBackgroundBusy) interval = 300;
+        else if (isIdle && !isSleep) interval = 200; // Faster flap while flying
 
         const timer = setInterval(() => {
-            setFrame(f => {
-                // If not busy, only occasionally glitch (e.g. at frame 0)
-                if (!isBusy) return 0; // Reset to 0 (stable) when not busy
-                return (f + 1) % 30;
-            });
+            setFrame(f => (f + 1) % 120);
         }, interval);
         return () => clearInterval(timer);
-    }, [isBusy]);
+    }, [isBusy, isBackgroundBusy, isIdle, isSleep]);
 
-    // ... (rest of render)
+    // Spatial Movement Logic (Gliding/Flying)
+    useEffect(() => {
+        if (!isIdle || isBusy || isBackgroundBusy) {
+            setTargetX(0); // Return to terminal station
+        } else if (isIdle && frame % 20 === 0) {
+            // Randomly move while idle
+            const maxTravel = Math.max(0, (columns / 3) - 30);
+            setTargetX(Math.floor(Math.random() * maxTravel));
+        }
+    }, [isIdle, isBusy, isBackgroundBusy, frame, columns]);
+
+    // Smooth movement interpolation
+    useEffect(() => {
+        const moveTimer = setInterval(() => {
+            setSpriteX(current => {
+                const diff = targetX - current;
+                if (Math.abs(diff) < 0.5) return targetX;
+                // Move faster if moving back to station
+                const speed = targetX === 0 ? 0.2 : 0.05;
+                return current + diff * speed;
+            });
+        }, 50);
+        return () => clearInterval(moveTimer);
+    }, [targetX]);
 
     return (
         <Box
@@ -143,7 +189,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
             paddingX={0}
             paddingY={0}
         >
-            {/* Title Bar - Unchanged */}
+            {/* Title Bar */}
             <Box
                 borderStyle="single"
                 borderTop={false}
@@ -160,7 +206,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
             {/* Content Area */}
             <Box flexDirection={isNarrow ? 'column' : 'row'} padding={1}>
 
-                {/* LEFT COLUMN: Identity & Status */}
+                {/* LEFT COLUMN: Stage & Identity */}
                 <Box
                     flexDirection="column"
                     width={leftWidth}
@@ -180,22 +226,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
                         <Text>!</Text>
                     </Box>
 
-                    {/* Sprite with Animation */}
-                    <Box justifyContent="center" marginBottom={1}>
+                    {/* Sprite with Animation Area (The Stage) */}
+                    <Box height={6} alignItems="flex-start" paddingLeft={Math.floor(spriteX)}>
                         <Box flexDirection="column">
-                            {SPRITE.map((line, i) => {
+                            {(isIdle || isSleep ? (frame % 4 < 2 ? OWL_FRAMES.sleep : OWL_FRAMES.flap) : SPRITE).map((line, i) => {
                                 // Animation Logic
-                                // Scanline effect: A white line moves down the sprite every ~3 seconds
-                                const isScanline = frame === i;
-                                // Glitch effect: Randomly invert a character (simulated by color change)
-                                const isGlitch = frame === 25 && i === 2;
+                                const isScanline = (isBusy || isBackgroundBusy) && (frame % 30 === i);
+                                const isGlitch = isBusy && (frame % 30 === 25) && i === 2;
 
                                 let color = "red";
+                                if (isSleep) color = "gray";
+                                else if (isIdle && !isBackgroundBusy) color = "gray";
+
                                 if (isScanline) color = "white";
                                 if (isGlitch) color = "magenta";
 
+                                if (isBackgroundBusy && !isBusy && !isScanline && !isGlitch) {
+                                    color = frame % 2 === 0 ? "cyan" : "blue";
+                                }
+
+                                // Breathing/Flying Vertical Offset
+                                const isMoving = Math.abs(spriteX - targetX) > 1;
+                                const isFlapFrame = (isIdle || isSleep) && frame % 4 >= 2;
+
+                                // Vertical bobbing while flying or breathing
+                                let yOffset = 0;
+                                if (isIdle || isSleep) {
+                                    if (isMoving) {
+                                        // "Fly" up on flap frames
+                                        yOffset = isFlapFrame ? -1 : 0;
+                                    } else {
+                                        // Breathe/Rest bob
+                                        yOffset = frame % 20 > 10 ? 0.3 : 0;
+                                    }
+                                }
+
                                 return (
-                                    <Text key={i} color={color} bold={isScanline}>{line}</Text>
+                                    <Box key={i} marginTop={Math.max(0, Math.floor(yOffset))}>
+                                        <Text color={color} bold={isScanline}>{line}</Text>
+                                    </Box>
                                 );
                             })}
                         </Box>
@@ -218,7 +287,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
                         <Text>✔ <Text color="cyan">Shift+Tab</Text> to toggle modes ({state.mode})</Text>
                     </Box>
 
-                    {/* Separator - Dashed line to match mock */}
+                    {/* Separator */}
                     <Box marginY={1}>
                         <Text color="gray">────────────────────────────────────────────────────────</Text>
                     </Box>

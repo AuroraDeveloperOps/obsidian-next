@@ -11,6 +11,7 @@ import { ChoicePrompt } from '../components/ChoicePrompt.js';
 import { TextInputPrompt } from '../components/TextInputPrompt.js';
 import { Dashboard } from './Dashboard.js';
 import { CommandPopup, COMMANDS } from './CommandPopup.js';
+import { MessageList } from './MessageList.js';
 import { EphemeralItem } from '../components/EphemeralItem.js';
 import { Footer } from '../components/Footer.js';
 import { DoctorView } from './views/DoctorView.js';
@@ -73,10 +74,45 @@ export const Root = () => {
     const [settingsTab, setSettingsTab] = useState<MenuView | undefined>();
 
     const [isBusy, setIsBusy] = useState(false);
+    const [isBackgroundBusy, setIsBackgroundBusy] = useState(false);
+    const [lastActivity, setLastActivity] = useState(Date.now());
+    const [isIdle, setIsIdle] = useState(false);
+    const [isSleep, setIsSleep] = useState(false);
+
+    // Idle/Sleep detection
+    useEffect(() => {
+        const checkIdle = () => {
+            const now = Date.now();
+            const diff = now - lastActivity;
+
+            // 60s for idle, 5m for sleep
+            if (diff > 300000) {
+                setIsSleep(true);
+                setIsIdle(true);
+            } else if (diff > 60000) {
+                setIsIdle(true);
+                setIsSleep(false);
+            } else {
+                setIsIdle(false);
+                setIsSleep(false);
+            }
+        };
+
+        const timer = setInterval(checkIdle, 5000);
+        return () => clearInterval(timer);
+    }, [lastActivity]);
+
+    // Reset activity on input
+    useEffect(() => {
+        if (input.length > 0) {
+            setLastActivity(Date.now());
+        }
+    }, [input]);
 
     // Handle prompt resolution
     const handlePromptResolve = useCallback(() => {
         setPendingPrompt(null);
+        setLastActivity(Date.now());
     }, []);
 
     // Load initial footer data and subscribe to updates
@@ -134,6 +170,7 @@ export const Root = () => {
             // Handle shutdown - exit after rendering final messages
             if (event.type === 'shutdown_complete') {
                 setIsBusy(false);
+                setIsBackgroundBusy(false);
                 // Delay exit to allow final render
                 setTimeout(() => {
                     exit();
@@ -148,6 +185,13 @@ export const Root = () => {
             // Keep busy state for tool_start, thought, tool_result
             else if (event.type === 'tool_start' || event.type === 'thought') {
                 setIsBusy(true);
+            }
+            // Background task state
+            else if (event.type === 'scheduler_task_started') {
+                setIsBackgroundBusy(true);
+            }
+            else if (event.type === 'scheduler_task_completed' || event.type === 'scheduler_task_failed') {
+                setIsBackgroundBusy(false);
             }
             // Update task progress
             else if (event.type === 'task_update') {
@@ -185,6 +229,24 @@ export const Root = () => {
                 return;
             }
 
+            if (event.type === 'view_request') {
+                setActiveView(event.viewId as any);
+                if (event.viewId === 'settings') {
+                    // Map specific commands to tabs
+                    const trigger = event.command || '';
+                    if (trigger === 'sandbox') setSettingsTab('security');
+                    else if (trigger === 'mode') setSettingsTab('mode');
+                    else if (trigger === 'models') setSettingsTab('models');
+                    else if (trigger === 'config') setSettingsTab('categories');
+                    else if (event.params?.includes('sandbox')) setSettingsTab('security');
+                    else if (event.params?.includes('mode')) setSettingsTab('mode');
+                    else if (event.params?.includes('model') || event.params?.includes('models')) setSettingsTab('models');
+                    else if (event.params?.includes('config')) setSettingsTab('categories');
+                    else setSettingsTab(undefined);
+                }
+                return;
+            }
+
             setEvents(prev => {
                 // If it's a thought and the last event was also a thought, UPDATE it for streaming effect
                 const last = prev[prev.length - 1];
@@ -197,12 +259,16 @@ export const Root = () => {
                 }
                 return [...prev, event];
             });
+
+            // Any agent activity resets idle timer
+            setLastActivity(Date.now());
         };
 
         const userHandler = (event: any) => {
             if (event.type === 'user_input') {
                 setEvents(prev => [...prev, { type: 'user_input', content: event.content } as any]);
                 setIsBusy(true); // User input starts the busy state
+                setLastActivity(Date.now());
             }
         };
 
@@ -338,74 +404,7 @@ export const Root = () => {
             }
         }
 
-        // View Route Handlers
-        if (value.trim() === '/settings') {
-            setSettingsTab(undefined);
-            setActiveView('settings');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/doctor') {
-            setActiveView('doctor');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/help') {
-            setActiveView('help');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/status') {
-            setActiveView('doctor');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/context' || value.trim() === '/usage' || value.trim() === '/cost') {
-            setActiveView('usage');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/task') {
-            setActiveView('task');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/resume' || value.trim() === '/sessions') {
-            setActiveView('sessions');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/sandbox') {
-            setSettingsTab('security');
-            setActiveView('settings');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/mode') {
-            setSettingsTab('mode');
-            setActiveView('settings');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/models' || value.trim() === '/model') {
-            setSettingsTab('models');
-            setActiveView('settings');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/config') {
-            setSettingsTab('categories');
-            setActiveView('settings');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/mcp') {
-            setActiveView('mcp');
-            setInput('');
-            return;
-        }
-
-        // Destructive Commands Interception
+        // Destructive Commands Interception (Client-side confirmation)
         if (value.trim() === '/clear') {
             setPendingPrompt({
                 type: 'approval',
@@ -458,10 +457,17 @@ export const Root = () => {
 
     return (
         <Box flexDirection="column" height="100%">
-            {/* Header / Dashboard - Fixed Height */}
-            <Box flexShrink={0}>
-                <Dashboard isBusy={isBusy} />
-            </Box>
+            {/* Header / Dashboard - Hidden when overlay views are active */}
+            {activeView === 'chat' && (
+                <Box flexShrink={0}>
+                    <Dashboard
+                        isBusy={isBusy}
+                        isBackgroundBusy={isBackgroundBusy}
+                        isIdle={isIdle}
+                        isSleep={isSleep}
+                    />
+                </Box>
+            )}
 
             {/* Active View Area */}
             <Box flexDirection="column" flexGrow={1} overflowY={activeView === 'chat' ? undefined : 'hidden'} justifyContent={activeView !== 'chat' ? "flex-start" : "flex-end"} marginY={1}>
@@ -493,211 +499,135 @@ export const Root = () => {
                 ) : activeView === 'mcp' ? (
                     <MCPView onExit={() => setActiveView('chat')} />
                 ) : (
-                    events.slice(-MAX_EVENTS).map((event: any, i) => {
-                        let content = null;
-                        // ... (keep mapping logic)
-                        if (event.type === 'user_input') {
-                            content = (
-                                <Box key={i} flexDirection="row" paddingX={1} marginBottom={0}>
-                                    <Text backgroundColor="#222222">
-                                        <Text color="gray">{' > '}</Text>
-                                        <Text color="white">{event.content}</Text>
-                                        <Text>{' '}</Text>
-                                    </Text>
-                                </Box>
-                            );
-                        } else if (event.type === 'thought') {
-                            // Filter out "Mode: ..." thoughts as they are now shown in the UI
-                            if (event.content.startsWith('Mode:')) return null;
-                            if (event.hidden) return null;
-
-                            // Check if this is the latest event and if we should consider it streaming
-                            // Since we don't track 'isAgentBusy' globally here easily, we assume the LAST thought
-                            // in the list is streaming if it hasn't been followed by a result/error/done event.
-                            // But actually, the events list updates as we go.
-                            // A simple heuristic: if it's the very last event in the list, it might be streaming.
-                            const isLast = i === events.slice(-MAX_EVENTS).length - 1;
-                            content = <AgentLine key={i} content={event.content} isStreaming={isLast} />;
-                        } else if (event.type === 'tool_start') {
-                            // Format: ⏺ ToolName(args summary) with background
-                            let argsSummary = '';
-                            try {
-                                const args = JSON.parse(event.args);
-                                const firstVal = Object.values(args)[0];
-                                if (typeof firstVal === 'string') {
-                                    argsSummary = firstVal.length > 60
-                                        ? firstVal.slice(0, 60) + '...'
-                                        : firstVal;
-                                }
-                            } catch { }
-
-                            // Check if this tool is the latest event (active)
-                            const isLast = i === events.slice(-MAX_EVENTS).length - 1;
-
-                            content = (
-                                <Box key={i}>
-                                    <Text backgroundColor="#1a1a2e" color="white">
-                                        ⏺
-                                    </Text>
-                                    <Text backgroundColor="#1a1a2e" color="white" bold>{event.tool}</Text>
-                                    <Text backgroundColor="#1a1a2e" color="gray">({argsSummary.trim()}) </Text>
-                                </Box>
-                            );
-                        } else if (event.type === 'tool_result') {
-                            content = <ToolOutput key={i} tool={event.tool} output={event.output} isError={event.isError} />;
-                        } else if (event.type === 'done') {
-                            content = (
-                                <EphemeralItem delay={5000}>
-                                    <Text key={i} color="green">[OK] {event.summary}</Text>
-                                </EphemeralItem>
-                            );
-                        } else if (event.type === 'error') {
-                            content = <Text key={i} color="red">[ERR] {event.message}</Text>;
-                        } else if (event.type === 'clear_history') {
-                            content = (
-                                <EphemeralItem delay={3000}>
-                                    <Text key={i} color="gray">[SYS] History cleared</Text>
-                                </EphemeralItem>
-                            );
-                        }
-
-                        if (!content) return null;
-
-                        return (
-                            <Box key={i} marginTop={1}>
-                                {content}
-                            </Box>
-                        );
-                    })
+                    <MessageList events={events} maxEvents={MAX_EVENTS} />
                 )}
             </Box>
 
-            {/* Input & Footer - Fixed Height at Bottom */}
-            <Box flexDirection="column" flexShrink={0}>
-                {/* Persistent Thinking Indicator - Sticky at bottom */}
-                {isBusy && (
-                    <Box marginBottom={0} marginLeft={2}>
-                        <Glitter>Thinking...</Glitter>
-                    </Box>
-                )}
-
-                {/* Interactive Prompts */}
-                {/* ... prompts ... */}
-                {pendingPrompt?.type === 'approval' && (
-                    <Box marginBottom={1}>
-                        <ApprovalPrompt
-                            requestId={pendingPrompt.requestId}
-                            context={pendingPrompt.context}
-                            diff={pendingPrompt.diff}
-                            onResolve={handlePromptResolve}
-                        />
-                    </Box>
-                )}
-                {/* ... other prompts ... */}
-                {pendingPrompt?.type === 'choice' && (
-                    <Box marginBottom={1}>
-                        <ChoicePrompt
-                            question={pendingPrompt.question}
-                            options={pendingPrompt.options}
-                            onResolve={handlePromptResolve}
-                        />
-                    </Box>
-                )}
-                {pendingPrompt?.type === 'text_input' && (
-                    <Box marginBottom={1}>
-                        <TextInputPrompt
-                            requestId={pendingPrompt.requestId}
-                            prompt={pendingPrompt.prompt}
-                            masked={pendingPrompt.masked}
-                            placeholder={pendingPrompt.placeholder}
-                            onResolve={handlePromptResolve}
-                        />
-                    </Box>
-                )}
-
-                {/* Settings Menu REMOVED from here */}
-
-
-                {/* Footer Stats Area */}
-                <Box paddingX={0} marginBottom={0} marginTop={0}>
-                    <Footer mode={stats.mode} model={stats.model} taskProgress={taskProgress} />
-                </Box>
-
-                {/* Input Area (disabled when prompt is active) */}
-                <Box flexDirection="column">
-                    {/* Separator Line (Responsive) */}
-                    <Box
-                        borderStyle="single"
-                        borderTop={false}
-                        borderLeft={false}
-                        borderRight={false}
-                        borderBottom={true}
-                        borderColor="gray"
-                        marginBottom={0}
-                    />
-
-                    <Box marginY={0} paddingX={0}>
-                        <Text color="red" bold>❯ </Text>
-                        <TextInput
-                            key={inputKey}
-                            value={input}
-                            onChange={pendingPrompt ? () => { } : setInput}
-                            onSubmit={pendingPrompt ? () => { } : handleSubmit}
-                            placeholder={pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...'}
-                            focus={activeView === 'chat'} // Only focus when in chat mode
-                        />
-                    </Box>
-
-                    {/* Bottom Separator (Responsive) */}
-                    <Box
-                        borderStyle="single"
-                        borderTop={true}
-                        borderLeft={false}
-                        borderRight={false}
-                        borderBottom={false}
-                        borderColor="gray"
-                        marginTop={0}
-                    />
-                </Box>
-
-                {/* Popup now appears BELOW the input area */}
-                <CommandPopup
-                    matches={matches}
-                    selectedIndex={selectedIndex}
-                />
-
-                {/* Footer / Status Bar - Hidden when popup is open */}
-                {matches.length === 0 && (
-                    <Box flexDirection="column" marginTop={0} paddingX={0}>
-                        {/* Row 1 */}
-                        <Box flexDirection="row" justifyContent="space-between">
-                            <Box>
-                                <Text>
-                                    {stats.mode === 'plan' ? '⏸ ' : stats.mode === 'auto' ? '▶ ' : '⏺ '}
-                                    <Text bold>{stats.mode} mode on</Text>
-                                    <Text dimColor> (shift+Tab to cycle)</Text>
-                                </Text>
+            {/* Input & Footer - Fixed Height at Bottom - Hidden when overlay views are active */}
+            {activeView === 'chat' && (
+                <Box flexDirection="column" flexShrink={0}>
+                    {/* Persistent Thinking Indicator - Sticky at bottom */}
+                    <Box flexDirection="row" marginBottom={0} marginLeft={2}>
+                        {isBusy && (
+                            <Glitter>Thinking...</Glitter>
+                        )}
+                        {isBackgroundBusy && (
+                            <Box marginLeft={isBusy ? 4 : 0}>
+                                <Glitter>Background...</Glitter>
                             </Box>
-                            <Box>
-                                <Text dimColor>
-                                    Context: {(usage.getContextUsage(stats.model).used / 1000).toFixed(1)}k / {(usage.getContextUsage(stats.model).limit / 1000).toFixed(0)}k ({Math.round(usage.getContextUsage(stats.model).percentRemaining === 100 ? 0 : (100 - usage.getContextUsage(stats.model).percentRemaining))}%)
-                                </Text>
-                            </Box>
+                        )}
+                    </Box>
+
+                    {/* Interactive Prompts */}
+                    {pendingPrompt?.type === 'approval' && (
+                        <Box marginBottom={1}>
+                            <ApprovalPrompt
+                                requestId={pendingPrompt.requestId}
+                                context={pendingPrompt.context}
+                                diff={pendingPrompt.diff}
+                                onResolve={handlePromptResolve}
+                            />
+                        </Box>
+                    )}
+                    {pendingPrompt?.type === 'choice' && (
+                        <Box marginBottom={1}>
+                            <ChoicePrompt
+                                question={pendingPrompt.question}
+                                options={pendingPrompt.options}
+                                onResolve={handlePromptResolve}
+                            />
+                        </Box>
+                    )}
+                    {pendingPrompt?.type === 'text_input' && (
+                        <Box marginBottom={1}>
+                            <TextInputPrompt
+                                requestId={pendingPrompt.requestId}
+                                prompt={pendingPrompt.prompt}
+                                masked={pendingPrompt.masked}
+                                placeholder={pendingPrompt.placeholder}
+                                onResolve={handlePromptResolve}
+                            />
+                        </Box>
+                    )}
+
+                    {/* Footer Stats Area */}
+                    <Box paddingX={0} marginBottom={0} marginTop={0}>
+                        <Footer mode={stats.mode} model={stats.model} taskProgress={taskProgress} />
+                    </Box>
+
+                    {/* Input Area (disabled when prompt is active) */}
+                    <Box flexDirection="column">
+                        <Box
+                            borderStyle="single"
+                            borderTop={false}
+                            borderLeft={false}
+                            borderRight={false}
+                            borderBottom={true}
+                            borderColor="gray"
+                            marginBottom={0}
+                        />
+
+                        <Box marginY={0} paddingX={0}>
+                            <Text color="red" bold>❯ </Text>
+                            <TextInput
+                                key={inputKey}
+                                value={input}
+                                onChange={pendingPrompt ? () => { } : setInput}
+                                onSubmit={pendingPrompt ? () => { } : handleSubmit}
+                                placeholder={pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...'}
+                                focus={activeView === 'chat'}
+                            />
                         </Box>
 
-                        {/* Row 2 */}
-                        <Box flexDirection="row" justifyContent="space-between">
-                            <Box>
-                                {/* Placeholder for status messages or errors */}
-                                <Text dimColor></Text>
+                        <Box
+                            borderStyle="single"
+                            borderTop={true}
+                            borderLeft={false}
+                            borderRight={false}
+                            borderBottom={false}
+                            borderColor="gray"
+                            marginTop={0}
+                        />
+                    </Box>
+
+                    {/* Popup now appears BELOW the input area */}
+                    <CommandPopup
+                        matches={matches}
+                        selectedIndex={selectedIndex}
+                    />
+
+                    {/* Footer / Status Bar - Hidden when popup is open */}
+                    {matches.length === 0 && (
+                        <Box flexDirection="column" marginTop={0} paddingX={0}>
+                            {/* Row 1 */}
+                            <Box flexDirection="row" justifyContent="space-between">
+                                <Box>
+                                    <Text>
+                                        {stats.mode === 'plan' ? '⏸ ' : stats.mode === 'auto' ? '▶ ' : '⏺ '}
+                                        <Text bold>{stats.mode} mode on</Text>
+                                        <Text dimColor> (shift+Tab to cycle)</Text>
+                                    </Text>
+                                </Box>
+                                <Box>
+                                    <Text dimColor>
+                                        Context: {(usage.getContextUsage(stats.model).used / 1000).toFixed(1)}k / {(usage.getContextUsage(stats.model).limit / 1000).toFixed(0)}k ({Math.round(usage.getContextUsage(stats.model).percentRemaining === 100 ? 0 : (100 - usage.getContextUsage(stats.model).percentRemaining))}%)
+                                    </Text>
+                                </Box>
                             </Box>
-                            <Box>
-                                <Text dimColor>@aurora-foundation/obsidian-next</Text>
+
+                            {/* Row 2 */}
+                            <Box flexDirection="row" justifyContent="space-between">
+                                <Box>
+                                    <Text dimColor></Text>
+                                </Box>
+                                <Box>
+                                    <Text dimColor>@aurora-foundation/obsidian-next</Text>
+                                </Box>
                             </Box>
                         </Box>
-                    </Box>
-                )}
-            </Box>
+                    )}
+                </Box>
+            )}
         </Box >
     );
 };

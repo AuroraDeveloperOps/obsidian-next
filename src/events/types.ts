@@ -26,6 +26,8 @@ export type AgentEventUnion =
     | { type: "error"; message: string; code?: string }
     | { type: "done"; summary: string }
     | { type: "clear_history" }
+    | { type: "view_request"; viewId: string; command?: string; params?: any }
+    | { type: "command_executed"; command: string; args: string[] }
 
     // 5. Session Management
     | { type: "shutdown_request" }
@@ -33,7 +35,12 @@ export type AgentEventUnion =
     | { type: "shutdown_complete"; summary: SessionSummary }
 
     // 6. Task Management
-    | { type: "task_update"; task: any | null };
+    | { type: "task_update"; task: any | null }
+
+    // 7. Scheduler
+    | { type: "scheduler_task_started"; taskId: string; command: string }
+    | { type: "scheduler_task_completed"; taskId: string }
+    | { type: "scheduler_task_failed"; taskId: string; error: string };
 
 export type AgentEvent = AgentEventUnion & { timestamp?: number };
 

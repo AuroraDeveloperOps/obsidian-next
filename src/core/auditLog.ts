@@ -172,6 +172,18 @@ class AuditLogger {
     }
 
     /**
+     * Log a system event
+     */
+    async logSystemEvent(event: string, metadata: Record<string, any>): Promise<void> {
+        await this.log({
+            eventType: 'security_violation', // Mapping generic system events to generic log type for now, or add new type
+            command: event,
+            success: false, // Usually error events
+            reason: JSON.stringify(metadata),
+        });
+    }
+
+    /**
      * Log PII redaction
      */
     async logRedaction(count: number, types: string[]): Promise<void> {

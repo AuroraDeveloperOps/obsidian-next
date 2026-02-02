@@ -16,6 +16,8 @@ import { usage } from './usage.js';
 import { mcp } from './mcp.js';
 
 import { history } from './history.js';
+import { scheduler } from './scheduler.js';
+import { registerAbilities } from '../abilities/index.js';
 
 export interface AgentPlan {
     task: string;
@@ -39,6 +41,10 @@ class Agent {
         if (this.initialized) return;
         await context.init();
         await mcp.init();
+
+        // Initialize Scheduler
+        registerAbilities(scheduler);
+        scheduler.start();
 
         if (resumeSessionId) {
             const { session } = await import('./session.js');
