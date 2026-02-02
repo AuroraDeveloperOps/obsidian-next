@@ -107,8 +107,12 @@ export const contextCommand: CommandHandler = async (_args) => {
     outputLines.push('');
 
     bus.emitAgent({
-        type: 'tool_result',
-        tool: 'Context Manager',
-        output: outputLines.join('\n')
+        type: 'thought',
+        content: outputLines.join('\n')
+    });
+
+    bus.emitAgent({
+        type: 'done',
+        summary: 'Context usage displayed'
     });
 };

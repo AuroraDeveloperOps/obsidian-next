@@ -10,14 +10,19 @@ import { CommandHandler } from '../core/commands.js';
 export const toolCommand: CommandHandler = async (args) => {
     if (args.length === 0) {
         // List available tools
-        const toolList = tools.list();
-        const formatted = toolList
-            .map(t => `  • ${t.name}: ${t.description}`)
-            .join('\n');
+        const toolList = await tools.list();
+        const content = [
+            'Available Tool Registry',
+            ...toolList.map(t => `   ⎿  ${t.name.padEnd(12)} ${t.description}`),
+            '',
+            '   [Usage]',
+            '   ⎿  /tool <name> <json-args>',
+            '',
+        ].join('\n');
 
         bus.emitAgent({
             type: 'thought',
-            content: `Available tools:\n${formatted}\n\nUsage: /tool <name> <json-args>`
+            content
         });
 
         bus.emitAgent({

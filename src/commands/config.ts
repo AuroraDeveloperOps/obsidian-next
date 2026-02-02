@@ -268,23 +268,24 @@ async function configureSecurity(): Promise<void> {
 async function configurePermissions(): Promise<void> {
     const s = await settings.load();
 
-    const lines = [
-        'Current Permissions:',
+    const content = [
+        'Current Permission Policy',
         '',
-        '[Allow List]',
-        s.permissions.allow.length > 0
-            ? s.permissions.allow.map(p => `  + ${p}`).join('\n')
-            : '  (empty)',
+        '   [Allow List]',
+        ...(s.permissions.allow.length > 0
+            ? s.permissions.allow.map(p => `   ⎿  + ${p}`)
+            : ['   ⎿  (empty)']),
         '',
-        '[Deny List]',
-        s.permissions.deny.length > 0
-            ? s.permissions.deny.map(p => `  - ${p}`).join('\n')
-            : '  (empty)',
-    ];
+        '   [Deny List]',
+        ...(s.permissions.deny.length > 0
+            ? s.permissions.deny.map(p => `   ⎿  - ${p}`)
+            : ['   ⎿  (empty)']),
+        '',
+    ].join('\n');
 
     bus.emitAgent({
         type: 'thought',
-        content: lines.join('\n'),
+        content
     });
 
     const options = [
@@ -334,37 +335,36 @@ async function showConfig(): Promise<void> {
     const s = await settings.load();
     const backend = keyManager.getBackend();
 
-    const lines = [
-        '='.repeat(50),
-        'CONFIGURATION',
-        '='.repeat(50),
+    const content = [
+        'Configuration Overview',
         '',
-        '[Core]',
-        `  Model:       ${cfg.model}`,
-        `  Max Tokens:  ${cfg.maxTokens}`,
-        `  Language:    ${cfg.language}`,
+        '   [Core System]',
+        `   ⎿  Model       ${cfg.model}`,
+        `   ⎿  Tokens      Max ${cfg.maxTokens}`,
+        `   ⎿  Language    ${cfg.language}`,
         '',
-        '[Mode]',
-        `  Execution:   ${s.mode}`,
+        '   [Execution]',
+        `   ⎿  Mode        ${s.mode}`,
+        `   ⎿  Sandbox     ${s.mode === 'safe' ? 'ON' : 'OFF'}`,
         '',
-        '[Security]',
-        `  API Key:     ${backend ? `Stored in ${backend}` : 'Not configured'}`,
-        `  PII Redact:  ${s.security.piiRedaction ? 'ON' : 'OFF'}`,
-        `  Audit Log:   ${s.security.auditLogging ? 'ON' : 'OFF'}`,
+        '   [Security]',
+        `   ⎿  API Key     ${backend ? `Stored in ${backend}` : 'Not configured'}`,
+        `   ⎿  PII Redact  ${s.security.piiRedaction ? 'ON' : 'OFF'}`,
+        `   ⎿  Audit Log   ${s.security.auditLogging ? 'ON' : 'OFF'}`,
         '',
-        '[Permissions]',
-        `  Allow:       ${s.permissions.allow.length} patterns`,
-        `  Deny:        ${s.permissions.deny.length} patterns`,
+        '   [Permissions]',
+        `   ⎿  Allow       ${s.permissions.allow.length} patterns`,
+        `   ⎿  Deny        ${s.permissions.deny.length} patterns`,
         '',
-        '[Paths]',
-        `  Config:      ${config.getPath()}`,
-        `  Settings:    ${settings.getPath()}`,
-        '='.repeat(50),
-    ];
+        '   [System Paths]',
+        `   ⎿  Config      ${path.basename(config.getPath())}`,
+        `   ⎿  Settings    ${path.basename(settings.getPath())}`,
+        '',
+    ].join('\n');
 
     bus.emitAgent({
         type: 'thought',
-        content: lines.join('\n'),
+        content,
     });
 
     bus.emitAgent({
@@ -451,13 +451,23 @@ async function resetConfig(): Promise<void> {
         model: 'claude-sonnet-4-5-20250929',
         maxTokens: 8192,
         language: 'en',
+        workspaceRoot: process.cwd(),
+        executionMode: 'local',
+        sandbox: {
+            allowedDomains: ['*.github.com', '*.npmjs.org', '*.npmjs.com', 'api.anthropic.com', 'registry.npmjs.org'],
+            deniedDomains: [],
+            denyRead: ['~/.ssh', '~/.aws', '~/.config/gcloud', '~/.kube', '~/.gnupg'],
+            allowWrite: ['.', '/tmp'],
+            denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config'],
+        },
+        summarizerModel: 'claude-haiku-4-5-20251001',
     });
 
     await settings.save({
         mode: 'safe',
         autoAccept: { enabled: false, readOperations: false, safeCommands: false },
         permissions: { allow: [], deny: [] },
-        security: { piiRedaction: true, auditLogging: true, keyBackend: 'auto' },
+        security: { piiRedaction: true, auditLogging: true, keyBackend: 'auto', sandbox: false },
         ui: { syntaxHighlight: true, diffColors: true, showLineNumbers: true },
     });
 

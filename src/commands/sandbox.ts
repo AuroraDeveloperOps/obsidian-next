@@ -19,29 +19,24 @@ export const sandboxCommand: CommandHandler = async (args) => {
         const mode = sandbox.getMode();
         const available = await sandbox.isAvailable();
 
-        const statusLines = [
-            '='.repeat(50),
-            'SANDBOX EXECUTION MODE',
-            '='.repeat(50),
+        const content = [
+            `Sandbox Status: ${mode.toUpperCase()}`,
+            `   ⎿  Runtime     ${available ? 'Available' : 'Not installed'}`,
             '',
-            `Current Mode:    ${mode.toUpperCase()}`,
-            `Runtime:         ${available ? 'Available' : 'Not installed'}`,
+            '   [Available Modes]',
+            '   ⎿  local       Direct execution with audit checks',
+            '   ⎿  sandbox     OS-level isolation (FS/Network)',
             '',
-            'Modes:',
-            '  local   - Direct execution with auditor checks',
-            '  sandbox - OS-level isolation (filesystem/network)',
+            '   [Usage]',
+            '   ⎿  /sandbox local     Switch to local',
+            '   ⎿  /sandbox sandbox   Switch to sandbox',
+            '   ⎿  /sandbox config    View configuration',
             '',
-            'Usage:',
-            '  /sandbox local   - Switch to local mode',
-            '  /sandbox sandbox - Switch to sandbox mode',
-            '  /sandbox config  - Show sandbox configuration',
-            '',
-            '='.repeat(50),
-        ];
+        ].join('\n');
 
         bus.emitAgent({
             type: 'thought',
-            content: statusLines.join('\n')
+            content
         });
 
         bus.emitAgent({
@@ -67,40 +62,37 @@ export const sandboxCommand: CommandHandler = async (args) => {
 
         bus.emitAgent({
             type: 'done',
-            summary: `Execution mode: ${subcommand.toUpperCase()}`
+            summary: `Execution mode set to ${subcommand.toUpperCase()}`
         });
         return;
     }
 
     // Show configuration
     if (subcommand === 'config') {
-        const config = sandbox.getConfig();
+        const cfg = sandbox.getConfig();
 
-        const configLines = [
-            '='.repeat(50),
-            'SANDBOX CONFIGURATION',
-            '='.repeat(50),
+        const content = [
+            'Sandbox Configuration',
             '',
-            '[Network]',
-            `  Allowed: ${config.allowedDomains.join(', ') || 'none'}`,
-            `  Denied:  ${config.deniedDomains.join(', ') || 'none'}`,
+            '   [Network Domains]',
+            `   ⎿  Allowed     ${cfg.allowedDomains.join(', ') || 'none'}`,
+            `   ⎿  Denied      ${cfg.deniedDomains.join(', ') || 'none'}`,
             '',
-            '[Filesystem]',
-            `  Deny Read:   ${config.denyRead.join(', ') || 'none'}`,
-            `  Allow Write: ${config.allowWrite.join(', ') || 'none'}`,
-            `  Deny Write:  ${config.denyWrite.join(', ') || 'none'}`,
+            '   [Filesystem]',
+            `   ⎿  Deny Read   ${cfg.denyRead.join(', ') || 'none'}`,
+            `   ⎿  Allow Write ${cfg.allowWrite.join(', ') || 'none'}`,
+            `   ⎿  Deny Write  ${cfg.denyWrite.join(', ') || 'none'}`,
             '',
-            '='.repeat(50),
-        ];
+        ].join('\n');
 
         bus.emitAgent({
             type: 'thought',
-            content: configLines.join('\n')
+            content
         });
 
         bus.emitAgent({
             type: 'done',
-            summary: 'Sandbox config displayed'
+            summary: 'Sandbox configuration displayed'
         });
         return;
     }

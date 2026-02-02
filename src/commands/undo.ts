@@ -16,13 +16,16 @@ export async function undoCommand(args: string[]): Promise<void> {
             return;
         }
 
-        const lines = ['Recent changes:', ''];
-        history.forEach((c, i) => {
-            const op = c.operation === 'create' ? '+' : c.operation === 'delete' ? '-' : '~';
-            lines.push(`  ${i + 1}. [${op}] ${c.filePath}`);
-        });
+        const content = [
+            'Recent Change History',
+            ...history.map((c, i) => {
+                const op = c.operation === 'create' ? '+' : c.operation === 'delete' ? '-' : '~';
+                return `   ⎿  [${op}] ${c.filePath}`;
+            }),
+            '',
+        ].join('\n');
 
-        bus.emitAgent({ type: 'thought', content: lines.join('\n') });
+        bus.emitAgent({ type: 'thought', content });
         return;
     }
 

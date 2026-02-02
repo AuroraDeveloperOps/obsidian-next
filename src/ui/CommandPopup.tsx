@@ -2,24 +2,24 @@ import React from 'react';
 import { Box, Text } from 'ink';
 
 export const COMMANDS = [
-    { name: '/help', desc: 'Show available commands' },
+    { name: '/help', desc: 'Show available commands', isView: true },
     { name: '/init', desc: 'Initialize configuration' },
-    { name: '/config', desc: 'View/edit configuration' },
-    { name: '/models', desc: 'Select AI model' },
-    { name: '/mode', desc: 'Set mode (auto/plan/safe)' },
+    { name: '/config', desc: 'View/edit configuration', isView: true },
+    { name: '/models', desc: 'Select AI model', isView: true },
+    { name: '/mode', desc: 'Set mode (auto/plan/safe)', isView: true },
     { name: '/clear', desc: 'Clear conversation' },
-    { name: '/context', desc: 'Show context & token usage' },
-    { name: '/status', desc: 'Show system status' },
-    { name: '/task', desc: 'View current task' },
+    { name: '/context', desc: 'Show context & token usage', isView: true },
+    { name: '/status', desc: 'Show system status', isView: true },
+    { name: '/task', desc: 'View current task', isView: true },
     { name: '/tool', desc: 'Execute tools manually' },
-    { name: '/sandbox', desc: 'Toggle sandbox mode' },
+    { name: '/sandbox', desc: 'Toggle sandbox mode', isView: true },
     { name: '/undo', desc: 'Undo file changes' },
-    { name: '/doctor', desc: 'Run diagnostics' },
-    { name: '/settings', desc: 'View/edit settings' },
+    { name: '/doctor', desc: 'Run diagnostics', isView: true },
+    { name: '/settings', desc: 'View/edit settings', isView: true },
     { name: '/exit', desc: 'Save session and exit' },
-    { name: '/resume', desc: 'Restore saved session' },
+    { name: '/resume', desc: 'Restore saved session', isView: true },
     { name: '/diff', desc: 'View file changes' },
-    { name: '/mcp', desc: 'Manage Model Context Protocol' },
+    { name: '/mcp', desc: 'Manage Model Context Protocol', isView: true },
 ];
 
 interface CommandPopupProps {

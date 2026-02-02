@@ -17,6 +17,7 @@ export interface SessionInfo {
     savedAt: string;
     task: string | null;
     filesModified: number;
+    workspace: string;
 }
 
 class SessionManager {
@@ -40,7 +41,7 @@ class SessionManager {
     async list(): Promise<SessionInfo[]> {
         try {
             const rows = db.getDb().prepare(`
-                SELECT id, created_at 
+                SELECT id, created_at, workspace 
                 FROM sessions 
                 ORDER BY created_at DESC
             `).all() as any[];
@@ -65,6 +66,7 @@ class SessionManager {
                     savedAt: new Date(row.created_at).toISOString(),
                     task: taskRow ? taskRow.title : null,
                     filesModified: modCount ? modCount.count : 0,
+                    workspace: row.workspace || process.cwd(),
                 });
             }
 

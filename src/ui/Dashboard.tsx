@@ -159,11 +159,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
     // Spatial Movement Logic (Gliding/Flying)
     useEffect(() => {
         if (!isIdle || isBusy || isBackgroundBusy) {
-            setTargetX(0); // Return to terminal station
-        } else if (isIdle && frame % 20 === 0) {
-            // Randomly move while idle
-            const maxTravel = Math.max(0, (columns / 3) - 30);
-            setTargetX(Math.floor(Math.random() * maxTravel));
+            setTargetX(0); // Return to center station
+        } else if (isIdle && frame % 40 === 0) {
+            // Randomly move while idle - wider range
+            const maxTravel = Math.floor(columns / 2) - 20;
+            // Move between -maxTravel and +maxTravel for a wide sweep
+            setTargetX(Math.floor(Math.random() * maxTravel * 2) - maxTravel);
         }
     }, [isIdle, isBusy, isBackgroundBusy, frame, columns]);
 
@@ -172,9 +173,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
         const moveTimer = setInterval(() => {
             setSpriteX(current => {
                 const diff = targetX - current;
-                if (Math.abs(diff) < 0.5) return targetX;
-                // Move faster if moving back to station
-                const speed = targetX === 0 ? 0.2 : 0.05;
+                if (Math.abs(diff) < 0.1) return targetX;
+                // Fluid "gliding" speed
+                const speed = targetX === 0 ? 0.15 : 0.08;
                 return current + diff * speed;
             });
         }, 50);
@@ -227,46 +228,48 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </Box>
 
                     {/* Sprite with Animation Area (The Stage) */}
-                    <Box height={6} alignItems="flex-start" paddingLeft={Math.floor(spriteX)}>
-                        <Box flexDirection="column">
-                            {(isIdle || isSleep ? (frame % 4 < 2 ? OWL_FRAMES.sleep : OWL_FRAMES.flap) : SPRITE).map((line, i) => {
-                                // Animation Logic
-                                const isScanline = (isBusy || isBackgroundBusy) && (frame % 30 === i);
-                                const isGlitch = isBusy && (frame % 30 === 25) && i === 2;
+                    <Box height={6} alignItems="flex-start" width="100%" justifyContent="center">
+                        <Box marginLeft={Math.floor(spriteX)}>
+                            <Box flexDirection="column">
+                                {(isIdle || isSleep ? (frame % 4 < 2 ? OWL_FRAMES.sleep : OWL_FRAMES.flap) : SPRITE).map((line, i) => {
+                                    // Animation Logic
+                                    const isScanline = (isBusy || isBackgroundBusy) && (frame % 30 === i);
+                                    const isGlitch = isBusy && (frame % 30 === 25) && i === 2;
 
-                                let color = "red";
-                                if (isSleep) color = "gray";
-                                else if (isIdle && !isBackgroundBusy) color = "gray";
+                                    let color = "red";
+                                    if (isSleep) color = "gray";
+                                    else if (isIdle && !isBackgroundBusy) color = "gray";
 
-                                if (isScanline) color = "white";
-                                if (isGlitch) color = "magenta";
+                                    if (isScanline) color = "white";
+                                    if (isGlitch) color = "magenta";
 
-                                if (isBackgroundBusy && !isBusy && !isScanline && !isGlitch) {
-                                    color = frame % 2 === 0 ? "cyan" : "blue";
-                                }
-
-                                // Breathing/Flying Vertical Offset
-                                const isMoving = Math.abs(spriteX - targetX) > 1;
-                                const isFlapFrame = (isIdle || isSleep) && frame % 4 >= 2;
-
-                                // Vertical bobbing while flying or breathing
-                                let yOffset = 0;
-                                if (isIdle || isSleep) {
-                                    if (isMoving) {
-                                        // "Fly" up on flap frames
-                                        yOffset = isFlapFrame ? -1 : 0;
-                                    } else {
-                                        // Breathe/Rest bob
-                                        yOffset = frame % 20 > 10 ? 0.3 : 0;
+                                    if (isBackgroundBusy && !isBusy && !isScanline && !isGlitch) {
+                                        color = frame % 2 === 0 ? "cyan" : "blue";
                                     }
-                                }
 
-                                return (
-                                    <Box key={i} marginTop={Math.max(0, Math.floor(yOffset))}>
-                                        <Text color={color} bold={isScanline}>{line}</Text>
-                                    </Box>
-                                );
-                            })}
+                                    // Breathing/Flying Vertical Offset
+                                    const isMoving = Math.abs(spriteX - targetX) > 1;
+                                    const isFlapFrame = (isIdle || isSleep) && frame % 4 >= 2;
+
+                                    // Vertical bobbing while flying or breathing
+                                    let yOffset = 0;
+                                    if (isIdle || isSleep) {
+                                        if (isMoving) {
+                                            // "Fly" up on flap frames
+                                            yOffset = isFlapFrame ? -1 : 0;
+                                        } else {
+                                            // Breathe/Rest bob
+                                            yOffset = frame % 20 > 10 ? 0.3 : 0;
+                                        }
+                                    }
+
+                                    return (
+                                        <Box key={i} marginTop={Math.max(0, Math.floor(yOffset))}>
+                                            <Text color={color} bold={isScanline}>{line}</Text>
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
                         </Box>
                     </Box>
 

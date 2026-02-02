@@ -21,34 +21,27 @@ export const statusCommand: CommandHandler = async (_args) => {
 
     // Session info
     const sessionCost = usage.getSessionCost();
-    const toolList = tools.list().map(t => t.name).join(', ');
+    const toolList = (await tools.list()).map(t => t.name).join(', ');
 
     // Build status display
     const statusLines = [
-        '='.repeat(50),
-        'OBSIDIAN NEXT - System Status',
-        '='.repeat(50),
+        `System Status: ${workspaceName}`,
+        `   ⎿  Platform    ${platform}`,
+        `   ⎿  Runtime     Node.js ${nodeVersion}`,
         '',
-        '[System]',
-        `  Platform:    ${platform}`,
-        `  Node.js:     ${nodeVersion}`,
-        `  Workspace:   ${workspaceName}`,
-        `  Path:        ${workspace}`,
+        '   [Configuration]',
+        `   ⎿  Model       ${cfg.model || 'claude-sonnet-4-5'}`,
+        `   ⎿  Tokens      Max ${cfg.maxTokens || 8192}`,
+        `   ⎿  API Key     ${cfg.apiKey ? 'OK (Set)' : 'MISSING'}`,
         '',
-        '[Configuration]',
-        `  Model:       ${cfg.model || 'claude-sonnet-4-5'}`,
-        `  Max Tokens:  ${cfg.maxTokens || 8192}`,
-        `  API Key:     ${cfg.apiKey ? '[SET]' : '[NOT SET]'}`,
+        '   [Session Usage]',
+        `   ⎿  Cost        $${sessionCost.toFixed(4)}`,
+        `   ⎿  Input       ${stats.totalInputTokens.toLocaleString()} tokens`,
+        `   ⎿  Output      ${stats.totalOutputTokens.toLocaleString()} tokens`,
         '',
-        '[Session]',
-        `  Cost:        $${sessionCost.toFixed(4)}`,
-        `  Input:       ${stats.totalInputTokens.toLocaleString()} tokens`,
-        `  Output:      ${stats.totalOutputTokens.toLocaleString()} tokens`,
+        '   [Capabilities]',
+        `   ⎿  Tools       ${(await tools.list()).length} registered`,
         '',
-        '[Tools]',
-        `  Available:   ${toolList}`,
-        '',
-        '='.repeat(50),
     ];
 
     bus.emitAgent({

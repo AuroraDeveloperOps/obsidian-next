@@ -55,7 +55,7 @@ export async function doctorCommand(args: string[]): Promise<void> {
     }
 
     // 2. Check tools
-    const toolList = tools.list();
+    const toolList = await tools.list();
     results.push({
         name: 'Tools',
         status: 'ok',
@@ -110,28 +110,24 @@ export async function doctorCommand(args: string[]): Promise<void> {
 
     // Format results
     const statusIcons: Record<string, string> = {
-        ok: '[OK]',
-        warn: '[!!]',
-        error: '[X]'
-    };
-
-    const statusColors: Record<string, string> = {
-        ok: 'green',
-        warn: 'yellow',
-        error: 'red'
+        ok: '✔',
+        warn: '⚠',
+        error: '✘'
     };
 
     const output = [
-        formatHeader('System Diagnostics'),
+        'System Diagnostic Report',
         ...results.map(r => {
             const icon = statusIcons[r.status];
-            return `${icon.padEnd(6)} ${r.name.padEnd(12)} ${r.message}`;
+            return `   ⎿  ${r.name.padEnd(12)} ${icon} ${r.message}`;
         }),
-        formatFooter(),
-        `Total: ${results.filter(r => r.status === 'ok').length} OK, ` +
+        '',
+        `   Summary: ${results.filter(r => r.status === 'ok').length} OK, ` +
         `${results.filter(r => r.status === 'warn').length} warnings, ` +
-        `${results.filter(r => r.status === 'error').length} errors`
+        `${results.filter(r => r.status === 'error').length} errors`,
+        '',
     ];
 
     bus.emitAgent({ type: 'thought', content: output.join('\n') });
+    bus.emitAgent({ type: 'done', summary: 'Diagnostics complete' });
 }

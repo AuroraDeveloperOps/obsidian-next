@@ -168,23 +168,23 @@ export const Root = () => {
             }
 
             // Handle shutdown - exit after rendering final messages
-            if (event.type === 'shutdown_complete') {
+            // Handle thinking/busy state
+            const completionTypes: string[] = ['done', 'error', 'command_executed', 'shutdown_complete'];
+            const startTypes: string[] = ['tool_start', 'thought'];
+
+            if (completionTypes.includes(event.type)) {
                 setIsBusy(false);
+            } else if (startTypes.includes(event.type)) {
+                setIsBusy(true);
+            }
+
+            if (event.type === 'shutdown_complete') {
                 setIsBackgroundBusy(false);
                 // Delay exit to allow final render
                 setTimeout(() => {
                     exit();
                 }, 200);
                 return;
-            }
-
-            // Stop busy state on done/error
-            if (event.type === 'done' || event.type === 'error') {
-                setIsBusy(false);
-            }
-            // Keep busy state for tool_start, thought, tool_result
-            else if (event.type === 'tool_start' || event.type === 'thought') {
-                setIsBusy(true);
             }
             // Background task state
             else if (event.type === 'scheduler_task_started') {
@@ -266,7 +266,9 @@ export const Root = () => {
 
         const userHandler = (event: any) => {
             if (event.type === 'user_input') {
-                setEvents(prev => [...prev, { type: 'user_input', content: event.content } as any]);
+                if (!event.silent) {
+                    setEvents(prev => [...prev, { type: 'user_input', content: event.content } as any]);
+                }
                 setIsBusy(true); // User input starts the busy state
                 setLastActivity(Date.now());
             }
@@ -392,20 +394,20 @@ export const Root = () => {
     });
     // --------------- POPUP LOGIC END ---------------
 
+    const lastSubmitTime = React.useRef(0);
+
     const handleSubmit = (value: string) => {
         if (!value.trim()) return;
 
-        // RACE CONDITION FIX with Debugging
-        if (matches.length > 0 && value !== matches[selectedIndex]?.name) {
-            const selected = matches[selectedIndex];
-            if (selected && selected.name.startsWith(value) && selected.name !== value) {
-                // Debugging why send fails - but blocking partial submission is intended.
-                return;
-            }
-        }
+        // Debounce double-submissions (TextInput + popup useInput conflict)
+        const now = Date.now();
+        if (now - lastSubmitTime.current < 250) return;
+        lastSubmitTime.current = now;
 
-        // Destructive Commands Interception (Client-side confirmation)
-        if (value.trim() === '/clear') {
+        const trimmed = value.trim();
+
+        // 1. Silent Interceptions (No echo to chat)
+        if (trimmed === '/clear') {
             setPendingPrompt({
                 type: 'approval',
                 requestId: 'ui:clear',
@@ -415,7 +417,7 @@ export const Root = () => {
             return;
         }
 
-        if (value.trim() === '/exit') {
+        if (trimmed === '/exit') {
             setPendingPrompt({
                 type: 'approval',
                 requestId: 'ui:exit',
@@ -425,7 +427,20 @@ export const Root = () => {
             return;
         }
 
-        bus.emitUser({ type: 'user_input', content: value });
+        // 2. Echo handling: Only echo if NOT a known UI/View command that doesn't need it
+        // Check if it's a command
+        const matchingCommand = COMMANDS.find(c => c.name === trimmed);
+        const silent = matchingCommand?.isView || false;
+
+        // RACE CONDITION FIX with Debugging
+        if (matches.length > 0 && value !== matches[selectedIndex]?.name) {
+            const selected = matches[selectedIndex];
+            if (selected && selected.name.startsWith(value) && selected.name !== value) {
+                return;
+            }
+        }
+
+        bus.emitUser({ type: 'user_input', content: value, silent });
         setInput('');
     };
 

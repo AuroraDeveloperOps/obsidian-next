@@ -6,18 +6,26 @@ export const modelsCommand: CommandHandler = async (args) => {
     const currentConfig = await config.load();
 
     if (args.length === 0) {
+        const content = [
+            'Available AI Models',
+            `   ⎿  1. Sonnet 4.5    ${currentConfig.model.includes('sonnet') ? '[Current]' : ''}`,
+            `   ⎿  2. Opus 4.5      ${currentConfig.model.includes('opus') ? '[Current]' : ''}`,
+            `   ⎿  3. Haiku 4.5     ${currentConfig.model.includes('haiku') ? '[Current]' : ''}`,
+            `   ⎿  4. Ollama        ${currentConfig.model === 'ollama' ? '[Current]' : ''}`,
+            '',
+            '   [Usage]',
+            '   ⎿  /models <name|id>  Set model',
+            '',
+        ].join('\n');
+
         bus.emitAgent({
-            type: 'tool_result',
-            tool: 'Model Selector',
-            output: `Available AI Models:
-   1. claude-sonnet-4-5    [Current/Default]
-   2. claude-opus-4-5      [Powerful]
-   3. claude-haiku-4-5     [Fast/Cheap]
-   4. ollama               [Local]
+            type: 'thought',
+            content
+        });
 
-Current model: ${currentConfig.model}
-
-Usage: /models <number> to select a model`
+        bus.emitAgent({
+            type: 'done',
+            summary: 'Available models displayed'
         });
         return;
     }
