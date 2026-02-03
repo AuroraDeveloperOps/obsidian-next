@@ -41,7 +41,10 @@ export type AgentEventUnion =
     // 7. Scheduler
     | { type: "scheduler_task_started"; taskId: string; command: string }
     | { type: "scheduler_task_completed"; taskId: string; command: string }
-    | { type: "scheduler_task_failed"; taskId: string; command: string; error: string };
+    | { type: "scheduler_task_failed"; taskId: string; command: string; error: string }
+
+    // 8. Computer Use
+    | { type: "computer_scale_update"; scale: number; scaledWidth: number; scaledHeight: number; nativeWidth: number; nativeHeight: number };
 
 export type AgentEvent = AgentEventUnion & { timestamp?: number };
 

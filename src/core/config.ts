@@ -27,6 +27,11 @@ export const ConfigSchema = z.object({
 
     // Context Management
     summarizerModel: z.string().default('claude-haiku-4-5-20251001'),
+
+    // Token Counting
+    // When true, uses Anthropic's countTokens API for accurate pre-request validation
+    // Set to false to skip pre-counting (saves ~100-500ms latency per request)
+    preCountTokens: z.boolean().default(true),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -45,6 +50,7 @@ const DEFAULT_CONFIG: Config = {
         denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config'],
     },
     summarizerModel: 'claude-haiku-4-5-20251001',
+    preCountTokens: true,
 };
 
 export class ConfigManager {

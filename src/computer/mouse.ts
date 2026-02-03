@@ -24,7 +24,8 @@ export async function mouseMove(x: number, y: number): Promise<void> {
 }
 
 export async function leftClickDrag(startX: number, startY: number, endX: number, endY: number): Promise<void> {
-  await shell.execute(`cliclick dd:${startX},${startY}t:${endX},${endY}`);
+  // dd: = drag down (mouse down), du: = drag up (mouse up)
+  await shell.execute(`cliclick dd:${startX},${startY} du:${endX},${endY}`);
 }
 
 export async function rightClick(x: number, y: number, modifier?: string): Promise<void> {
@@ -50,11 +51,13 @@ export async function tripleClick(x: number, y: number, modifier?: string): Prom
 }
 
 export async function leftMouseDown(x: number, y: number): Promise<void> {
-  await shell.execute(`cliclick kd:M1 m:${x},${y}`);
+  // dd: = drag down (press and hold mouse button at position)
+  await shell.execute(`cliclick dd:${x},${y}`);
 }
 
 export async function leftMouseUp(x: number, y: number): Promise<void> {
-  await shell.execute(`cliclick ku:M1 m:${x},${y}`);
+  // du: = drag up (release mouse button at position)
+  await shell.execute(`cliclick du:${x},${y}`);
 }
 
 // Scroll functionality might be tricky with cliclick, as it primarily focuses on clicks and key presses.
@@ -88,4 +91,9 @@ export async function scroll(x: number, y: number, direction: 'up' | 'down' | 'l
   }
 
   await shell.execute(`cliclick ${scrollCommand}`);
+}
+
+export async function executeBatch(commands: string[]): Promise<void> {
+  const batchString = commands.join(' ');
+  await shell.execute(`cliclick ${batchString}`);
 }

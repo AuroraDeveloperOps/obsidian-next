@@ -305,7 +305,7 @@ FILES_READ: <comma separated paths or "none">
 FILES_MODIFY: <comma separated paths or "none">
 APPROVAL: <yes if destructive, no otherwise>`;
 
-        const readOnlyTools = ['read_file', 'list_directory', 'search_file_content', 'glob'];
+        const readOnlyTools = ['read', 'list', 'grep', 'glob'];
         
         const planResponse = await llm.streamChat(planPrompt, { allowedTools: readOnlyTools });
 
