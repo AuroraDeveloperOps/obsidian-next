@@ -106,11 +106,18 @@ export const initCommand: CommandHandler = async (args) => {
                 await setupModel();
                 break;
             case 'status':
-                await showSetupSummary();
-                // Pause to let user read
-                bus.emitAgent({ type: 'thought', content: 'Press any key to continue...' }); // Placeholder, actually just loops
-                // In a real TUI we'd wait, here we just loop and the menu re-prints
-                break;
+                // Navigate to /config view for detailed configuration
+                running = false;
+                bus.emitAgent({
+                    type: 'view_request',
+                    viewId: 'settings',
+                    command: 'config',
+                });
+                bus.emitAgent({
+                    type: 'done',
+                    summary: 'Opening configuration...',
+                });
+                return; // Exit early to prevent double done message
             case 'exit':
             case 'cancel':
                 running = false;

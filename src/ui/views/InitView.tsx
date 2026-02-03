@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
-import { config } from '../../core/config.js';
+import { keyManager } from '../../core/keyManager.js';
 
 interface InitViewProps {
     onClose: () => void;
@@ -19,10 +19,14 @@ export const InitView = ({ onClose }: InitViewProps) => {
         }
 
         try {
-            await config.set('apiKey', apiKey.trim());
-            setIsSubmitted(true);
-            // Close the view after a short delay
-            setTimeout(onClose, 1500);
+            const result = await keyManager.storeKey(apiKey.trim());
+            if (result.success) {
+                setIsSubmitted(true);
+                // Close the view after a short delay
+                setTimeout(onClose, 1500);
+            } else {
+                setError(`Failed to save key: ${result.error || 'Unknown error'}`);
+            }
         } catch (e: any) {
             setError(`Failed to save config: ${e.message}`);
         }

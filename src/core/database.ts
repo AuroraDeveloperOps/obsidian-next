@@ -34,6 +34,7 @@ export class DatabaseManager {
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
                 created_at INTEGER,
+                workspace TEXT,
                 summary TEXT,
                 source TEXT DEFAULT 'cli', -- 'cli', 'telegram', 'desktop_automator'
                 permissions TEXT DEFAULT 'sandbox', -- 'sandbox', 'high_trust', 'read_only'
@@ -186,6 +187,16 @@ export class DatabaseManager {
             }
         } catch (e) {
             console.error('Failed to run manual migration for scheduled_tasks:', e);
+        }
+
+        // Migration: Add workspace column to sessions if it doesn't exist
+        try {
+            const columns = this.db.pragma('table_info(sessions)') as any[];
+            if (!columns.find(c => c.name === 'workspace')) {
+                this.db.exec('ALTER TABLE sessions ADD COLUMN workspace TEXT');
+            }
+        } catch (e) {
+            console.error('Failed to run manual migration for sessions:', e);
         }
     }
 

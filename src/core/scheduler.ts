@@ -189,14 +189,15 @@ export class Scheduler {
 
             bus.emitAgent({
                 type: 'scheduler_task_completed',
-                taskId: task.id
+                taskId: task.id,
+                command: task.command
             });
 
         } catch (error: any) {
             console.error(`[Scheduler] Task ${task.id} failed:`, error);
             await auditLog.logSystemEvent('scheduler_error', { taskId: task.id, error: error.message });
 
-            bus.emitAgent({ type: 'scheduler_task_failed', taskId: task.id, error: error.message });
+            bus.emitAgent({ type: 'scheduler_task_failed', taskId: task.id, command: task.command, error: error.message });
         } finally {
             // Update last_run_at REGARDLESS of success to avoid refiring loops
             db.getDb().prepare(`

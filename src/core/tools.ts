@@ -42,6 +42,34 @@ function truncateOutput(output: string, maxLength: number = MAX_OUTPUT_LENGTH): 
     return `${truncated}\n\n... [TRUNCATED: ${remaining} more characters]`;
 }
 
+/**
+ * Filter out known harmless system noise from stderr
+ * These are OS-level messages that don't indicate actual errors
+ */
+function filterSystemNoise(stderr: string): string {
+    if (!stderr) return stderr;
+
+    const noisePatterns = [
+        /^aks:aks_get_lock_state:\d+:\d+: aks connection failed\s*/gm,  // macOS keychain noise
+        /^objc\[\d+\]: .* may have been in progress in another thread.*$/gm,  // Objective-C runtime
+        /^Warning: .* is deprecated.*$/gm,  // Deprecation warnings
+        /^\[warn\].*$/gmi,  // Generic warn prefixes
+        /^MESA-LOADER:.*$/gm,  // Mesa graphics loader
+        /^libEGL warning:.*$/gm,  // EGL warnings
+        /^Fontconfig warning:.*$/gm,  // Font config
+    ];
+
+    let filtered = stderr;
+    for (const pattern of noisePatterns) {
+        filtered = filtered.replace(pattern, '');
+    }
+
+    // Clean up empty lines left behind
+    filtered = filtered.replace(/^\s*[\r\n]/gm, '').trim();
+
+    return filtered;
+}
+
 // Pending approval requests
 const pendingApprovals = new Map<string, {
     resolve: (result: { approved: boolean; scope: 'session' | 'persistent'; bypass?: boolean }) => void;
@@ -190,7 +218,9 @@ export const BashTool: Tool = {
                 maxBuffer: 1024 * 1024, // 1MB buffer (reduced from 10MB)
             });
 
-            const output = stdout || stderr || 'Command executed successfully';
+            // Filter out known harmless system noise from stderr
+            const filteredStderr = filterSystemNoise(stderr);
+            const output = stdout || filteredStderr || 'Command executed successfully';
 
             // Log successful execution
             await auditLog.logCommand(command, true);

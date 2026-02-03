@@ -15,6 +15,7 @@ import { auditLog } from './auditLog.js';
 import { usage } from './usage.js';
 import { mcp } from './mcp.js';
 import { COMMANDS } from '../ui/CommandPopup.js';
+import { exitCommand } from '../commands/exit.js';
 
 import { history } from './history.js';
 import { scheduler } from './scheduler.js';
@@ -109,6 +110,12 @@ class Agent {
                     viewId = 'doctor';
                     break;
                 case '/resume':
+                    // If resume has an argument (session ID), execute the command directly
+                    if (args.length > 0) {
+                        const { resumeCommand } = await import('../commands/resume.js');
+                        await resumeCommand(args);
+                        return true;
+                    }
                     viewId = 'sessions';
                     break;
                 case '/task':
@@ -147,11 +154,7 @@ class Agent {
                 });
                 return true;
             case '/exit':
-                bus.emitAgent({
-                    type: 'approval_request',
-                    requestId: 'ui:exit',
-                    context: 'Terminate session? Progress will be archived.',
-                });
+                await exitCommand(args);
                 return true;
             case '/undo':
                  bus.emitAgent({
@@ -174,9 +177,11 @@ class Agent {
     }
 
     private async showDiff() {
-        const changes = await undo.getChangesForLastAction();
+        const changes = undo.getHistory(1);
         if (changes.length > 0) {
-            bus.emitAgent({ type: 'diff_view_request', changes });
+            const change = changes[0];
+            const diffContent = `File: ${change.filePath}\nOperation: ${change.operation}\n${change.beforeContent ? `Before:\n${change.beforeContent.slice(0, 500)}...` : ''}`;
+            bus.emitAgent({ type: 'thought', content: diffContent });
         } else {
             bus.emitAgent({ type: 'thought', content: 'No changes to display.' });
         }
@@ -300,7 +305,9 @@ FILES_READ: <comma separated paths or "none">
 FILES_MODIFY: <comma separated paths or "none">
 APPROVAL: <yes if destructive, no otherwise>`;
 
-        const planResponse = await llm.streamChat(planPrompt);
+        const readOnlyTools = ['read_file', 'list_directory', 'search_file_content', 'glob'];
+        
+        const planResponse = await llm.streamChat(planPrompt, { allowedTools: readOnlyTools });
 
         if (!planResponse) {
             bus.emitAgent({ type: 'error', message: 'Failed to generate plan' });
@@ -367,8 +374,8 @@ APPROVAL: <yes if destructive, no otherwise>`;
     async handleApprovalResponse(approved: boolean, requestId: string): Promise<void> {
         if (requestId === 'agent:undo') {
             if (approved) {
-                await undo.undoLastAction();
-                bus.emitAgent({ type: 'thought', content: 'Last action has been undone.' });
+                const result = await undo.undo(1);
+                bus.emitAgent({ type: 'thought', content: result.message });
             } else {
                 bus.emitAgent({ type: 'thought', content: 'Undo cancelled.' });
             }
@@ -419,9 +426,16 @@ ${this.formatPlan(plan)}
 
 Execute each step carefully. Use available tools as needed.
 
-IMPORTANT:
-1. You have an active task. You MUST use the 'task' tool to mark steps as done (action: 'complete_step', step_index: <index>) immediately after completing them to keep the user informed.
-2. Do NOT create 'summary' files (e.g., SUMMARY.md, START_HERE.txt) to report completion. Report results directly in the final chat message. Keep the workspace clean.`;
+CRITICAL TASK TRACKING REQUIREMENT:
+- You have an active task with ${plan.steps.length} steps.
+- After completing EACH step, you MUST call: task tool with action: 'complete_step', step_index: <0-based index>
+- Step indices are 0-based (first step is 0, second is 1, etc.)
+- Do this IMMEDIATELY after each step completes, not at the end.
+- When ALL steps are done, call: task tool with action: 'complete_task'
+
+OTHER RULES:
+- Do NOT create summary files (SUMMARY.md, START_HERE.txt, etc.)
+- Report results directly in chat.`;
 
         try {
             const response = await llm.streamChat(executionPrompt);

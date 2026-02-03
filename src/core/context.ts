@@ -166,11 +166,12 @@ class ContextManager {
 
             // 1. Upsert Session
             db.getDb().prepare(`
-                INSERT INTO sessions (id, created_at)
-                VALUES (?, ?)
-                ON CONFLICT(id) DO UPDATE SET 
-                summary = excluded.summary -- Just a placeholder update to keep syntax
-            `).run(this.ctx.session_id, timestamp);
+                INSERT INTO sessions (id, created_at, workspace)
+                VALUES (?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                workspace = excluded.workspace,
+                created_at = excluded.created_at
+            `).run(this.ctx.session_id, timestamp, process.cwd());
 
             // 2. Upsert Working Set (Transaction)
             const insertFile = db.getDb().prepare(`

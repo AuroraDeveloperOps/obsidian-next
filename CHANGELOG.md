@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.6] - 2026-02-02
+
+### Added
+- **Keyboard Shortcuts**:
+  - `Ctrl+T`: Open Task View from anywhere in chat mode.
+  - Command input now works seamlessly with autocomplete popup visible.
+- **Smart Command Highlighting**:
+  - Recognized commands display in **red** (e.g., `/mcp`, `/help`).
+  - Partial matches display in **yellow** (e.g., `/m` matching `/mode`, `/mcp`).
+  - Unknown commands remain uncolored for clear visual feedback.
+- **Session Restoration**:
+  - `/resume <id>` now properly restores sessions when selected from the session browser.
+  - Added `restore_history` event to hydrate UI without clearing database.
+  - LLM conversation history is validated on restore to prevent orphaned `tool_use` API errors.
+
+### Changed
+- **Plan Mode Execution**:
+  - Enhanced task tracking prompts with explicit 0-based step indexing instructions.
+  - Clearer guidance for LLM to mark steps complete immediately after execution.
+- **Agent System Prompt**:
+  - Added explicit "Full OS Access" section documenting bash capabilities.
+  - Included macOS-specific commands (`open`, `osascript`, `say`, clipboard).
+  - Added guidance on handling harmless system stderr noise (keychain errors, etc.).
+- **View Command Routing**:
+  - Commands with arguments (e.g., `/resume abc123`) now execute directly instead of opening views.
+  - Commands without arguments open their respective views as expected.
+
+### Fixed
+- **Session Browser** (`/resume`):
+  - Pressing Enter now properly closes the session list and restores the selected session.
+  - Fixed input handler conflict where Root.tsx was capturing keys meant for child views.
+- **Command Input**:
+  - Fixed typing being blocked when command autocomplete popup was visible.
+  - Backspace and character input now work correctly with popup open.
+- **Bash Tool Output**:
+  - Added `filterSystemNoise()` to strip harmless macOS stderr messages:
+    - `aks:aks_get_lock_state` (keychain noise)
+    - Objective-C runtime warnings
+    - Mesa/EGL graphics warnings
+    - Fontconfig warnings
+- **Audit Log**:
+  - Removed duplicate `getRecentActivities` method that was causing build warnings.
+- **Init Command**:
+  - "Show Configuration Status" now navigates to settings view instead of looping to menu top.
+- **Settings Menu**:
+  - Updated deprecated `/cost` command to `/context`.
+- **Dashboard**:
+  - Recent activity text now truncates at 60 characters to prevent overflow.
+- **LLM History Restoration**:
+  - Added validation to strip orphaned `tool_use` blocks missing `tool_result` responses.
+  - Prevents "tool_use ids were found without tool_result blocks" API errors on session resume.
+
+### Technical
+- **Event Types**: Added `restore_history` event type for session restoration.
+- **Input Handling**: Root.tsx now skips input handling when `activeView !== 'chat'`, allowing child views to manage their own keyboard input.
+- **Command Registry**: `execute()` now checks `args.length` before emitting `view_request` to support action vs. view distinction.
+
+---
+
 ## [0.4.5] - 2026-02-02
 
 ### Added

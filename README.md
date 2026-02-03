@@ -3,127 +3,212 @@
 ![Obsidian Next](assets/obsidianboxes.png)
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.4.5-blue)](package.json)
+[![Version](https://img.shields.io/badge/Version-0.4.6-blue)](package.json)
 [![Status](https://img.shields.io/badge/Status-Stable-green)](CHANGELOG.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 
-**Obsidian Next** is a strict, structure-driven AI engineering runtime designed for high-assurance agent workflows.
+**Obsidian Next** is a terminal-native AI engineering assistant with full operating system access, persistent memory, and structured task execution.
 
-Unlike conversational coding assistants that rely on unpredictable text streams, Obsidian Next operates on a **Deterministic Event Bus**, enabling precise state synchronization, rigorous permission enforcement, and "Zero Trust" execution for sensitive engineering environments.
-
----
-
-## Core Architecture
-
-Obsidian implements a **Supervisor-Agent Topology** where all actions are pre-flight validated by an Auditor compliance layer before affecting the host system.
-
-```mermaid
-graph TD
-    User([User Input]) --> Supervisor[Supervisor Layer]
-    Supervisor -->|Command| cmd[/Slash Command/]
-    Supervisor -->|Reasoning| Agent[Agent Runtime]
-    
-    subgraph "Zero Trust Execution Interface"
-        Agent -.-> Redactor[PII Redactor]
-        Agent --> Auditor{Auditor}
-        Auditor -->|Allow| Sandbox[Sandbox / Shell]
-        Sandbox -->|Result| bus[Typed Event Bus]
-    end
-    
-    bus -->|Sync| UI[Terminal UI]
-    bus -->|Persist| DB[(SQLite State Store)]
-    Agent <-->|Memory| DB
-    
-    subgraph "SQLite State Store"
-        DB --- Memos[Long-term Memory]
-        DB --- Sessions[Session Store]
-        DB --- Tasks[Task Tracker]
-    end
-```
+Built for developers who need an agent that can actually *do things* - not just chat about them.
 
 ---
 
-## Key Features
+## What Makes Obsidian Different
 
-### Zero Trust Security
-- **Runtime Auditor**: Every file access and shell command is statically analyzed for safety violations before execution.
-- **PII Redaction**: Real-time sanitation of sensitive data (API keys, credentials, PII) from LLM context windows.
-- **Secure Storage**: System Keychain integration for credential management; minimal disk footprint.
-
-### 100x Context Architecture
-- **High-Fidelity Tracking**: 10x10 visualization grid (`⛁`) providing precise, token-level insight into context window usage.
-- **Semantic Summarization**: Intelligently compresses "middle" history using cheaper models (Haiku) to retain unlimited effective memory.
-- **Resume 2.0**: Full session state restoration, preserving execution history, costs, and working memory across restarts.
-
-### Long-term Memory (The Handoff)
-- **Cross-Session Awareness**: Implicitly learns user preferences and project facts to eliminate redundant discovery questions.
-- **Semantic Search**: Instant recall of decisions and patterns via vector-like search within a local SQLite vector store.
-- **Personalized System Prompt**: Dynamically injects relevant memories into every agent interaction for deep domain adaptation.
-
-### Structure-First Engineering
-- **Typed Communication**: Agents communicate via structured JSON schemas, not raw text, preventing "hallucinated" tool calls.
-- **Local-First**: All session state, memories, tasks, and usage metrics are maintained locally in a centralized **SQLite Database** (`.obsidian/state.db`).
-- **Audit Logging**: Comprehensive, immutable logs of every agent decision and tool result.
+| Feature | Obsidian | Other Assistants |
+|---------|----------|------------------|
+| **OS Access** | Full bash, file system, app control | Sandboxed or none |
+| **Memory** | Persistent across sessions (SQLite) | Per-conversation only |
+| **Task Tracking** | Built-in plan mode with step completion | Manual or none |
+| **Session Resume** | Full state restoration | Start fresh each time |
+| **Security** | Auditor + PII redaction + approval prompts | Trust the model |
 
 ---
-
-## Installation
-
-Install globally via npm to access the `obsidian` binary:
-
-```bash
-npm install -g @aurora-foundation/obsidian-next
-```
 
 ## Quick Start
 
-Initialize your environment. This interactive wizard handles PII-redacted credential entry and local configuration.
-
 ```bash
+# Install globally
+npm install -g @aurora-foundation/obsidian-next
+
+# Run
 obsidian
+
+# First time setup
 /init
 ```
 
-> **Note**: For security-critical networks, we recommend reviewing the [Sandboxing Guide](docs/SANDBOX.md) to configure OS-level isolation.
+---
+
+## Core Features
+
+### Full OS Access
+Obsidian has unrestricted access to your operating system via bash. It can:
+- Open applications (`open`, `osascript`)
+- Control system settings
+- Run any shell command
+- Speak text aloud (`say` on macOS)
+- Manage clipboard (`pbcopy`/`pbpaste`)
+
+```
+> open spotify and play some music
+> say "build complete" when the tests pass
+> organize my Downloads folder
+```
+
+### Three Execution Modes
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| **Safe** (default) | Approval required for writes/commands | Daily use |
+| **Plan** | Read-only exploration, creates execution plan | Complex tasks |
+| **Auto** | Full autonomy, no confirmations | Trusted workflows |
+
+Toggle modes with `Shift+Tab` or `/mode`.
+
+### Persistent Memory
+Obsidian remembers you across sessions:
+- User preferences and project facts
+- Learned patterns and decisions
+- Session history with full restoration
+
+```
+> remember that I prefer tabs over spaces
+> what's my preferred testing framework?
+```
+
+### Task Tracking
+Built-in task management for multi-step work:
+- Automatic step creation in plan mode
+- Progress tracking with visual indicators
+- Resume incomplete tasks across sessions
+
+View tasks with `Ctrl+T` or `/task`.
+
+### Session Management
+Never lose your work:
+- `/exit` - Save session and quit
+- `/resume` - Browse and restore saved sessions
+- Full context, history, and task restoration
 
 ---
 
-## Documentation Index
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show all commands |
+| `/init` | Configure API key and model |
+| `/mode` | Switch execution mode |
+| `/context` | View token usage and session stats |
+| `/task` | View current task progress |
+| `/resume` | Restore a saved session |
+| `/mcp` | Manage Model Context Protocol servers |
+| `/clear` | Clear conversation history |
+| `/exit` | Save session and exit |
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Shift+Tab` | Cycle execution mode |
+| `Ctrl+T` | Open task view |
+| `Ctrl+C` | Exit (saves session) |
+| `Escape` | Interrupt current operation |
+| `Tab` | Autocomplete command |
+| `Up/Down` | Navigate command suggestions |
+
+---
+
+## Architecture
+
+```
+User Input
+    |
+    v
+[Supervisor] --> /command --> [Command Registry]
+    |
+    v
+[Agent Runtime]
+    |
+    +---> [Auditor] --> Security checks
+    |
+    +---> [Tools] --> bash, read, write, edit, grep, glob, web_fetch
+    |
+    +---> [Memory] --> SQLite persistent store
+    |
+    v
+[Event Bus] --> [Terminal UI]
+```
+
+All state is stored locally in `.obsidian/state.db` (SQLite).
+
+---
+
+## Security
+
+- **Auditor**: Pre-flight validation of all commands and file operations
+- **PII Redaction**: Automatic sanitation of sensitive data from LLM context
+- **Approval Prompts**: Explicit confirmation for destructive operations
+- **Secure Storage**: System Keychain integration for API keys
+- **Audit Logging**: Complete trail of all agent actions
+
+---
+
+## Model Support
+
+Obsidian works with Claude 4.5 models:
+
+| Model | Best For |
+|-------|----------|
+| **Opus 4.5** | Complex reasoning, architecture decisions |
+| **Sonnet 4.5** | Balanced performance (default) |
+| **Haiku 4.5** | Fast responses, simple tasks |
+
+Configure with `/init` or `/models`.
+
+---
+
+## MCP Integration
+
+Extend Obsidian with Model Context Protocol servers:
+
+```
+/mcp
+```
+
+Install certified tools:
+- `filesystem` - Enhanced file operations
+- `git` - Repository management
+- `research` - Web search and analysis
+- `context7` - Documentation lookup
+
+---
+
+## Documentation
 
 | Resource | Description |
 |----------|-------------|
-| **[Documentation Index](docs/INDEX.md)** | Navigation hub for all documentation, guides, and specifications. |
-| **[Architecture Deep Dive](docs/ARCHITECTURE.md)** | Internals of the Supervisor, Event Bus, and Agent loop. |
-| **[CLI Design System](docs/CLI_DESIGN_SYSTEM.md)** | UI specifications, component reference, and visual standards. |
-| **[Tooling Reference](docs/TOOLS.md)** | API documentation for built-in tools (`bash`, `edit`, `read`, etc.). |
-| **[Sandboxing Guide](docs/SANDBOX.md)** | Configuring `sandbox-exec` (macOS) and `firejail` (Linux). |
-| **[Product Specs (PRD)](docs/PRD.md)** | Functional requirements, roadmap alignment, and features. |
+| [Architecture](docs/ARCHITECTURE.md) | System internals and design |
+| [Tools Reference](docs/TOOLS.md) | Built-in tool documentation |
+| [Sandboxing](docs/SANDBOX.md) | OS-level isolation setup |
+| [CLI Design](docs/CLI_DESIGN_SYSTEM.md) | UI specifications |
 
 ---
 
-## Future Roadmap
+## Development
 
-We are actively creating the next generation of autonomous engineering capabilities.
-
-| Feature | Status | Description |
-|---------|--------|-------------|
-| **Adaptive Skills** (`/skills`) | In Dev | Dynamic loading of specialized domain capabilities (e.g., *Kubernetes Operator*, *React Performance Expert*) that inject context-specific rules and tools. |
-| **Advanced MCP** (`/mcp`) | In Dev | Full Model Context Protocol service mesh for auto-discovering and connecting to local tool servers and databases. |
-| **Computer Use** | Saved | Native GUI interaction capabilities allowing the agent to "see" and control desktop applications for end-to-end regression testing. |
-| **Enterprise Comms** | Saved | Integration with Email (SMTP/IMAP) and SMS (Twilio) gateways for automated reporting and human-in-the-loop verification. |
+```bash
+npm run dev      # Watch mode
+npm run build    # Build distribution
+npm test         # Run tests
+npm start        # Run locally
+```
 
 ---
-
-## Contributing
-
-We enforce professional engineering standards for all contributions:
-1.  **Conventional Commits**: All PRs must follow the structured commit message specification.
-2.  **Branch Convention**: Use `user-type/description` (e.g., `polyoxy-feat/context-grid`).
-3.  **Verification**: All unit and integration tests must pass before review.
-
-See **[CONTRIBUTING.md](CONTRIBUTING.md)** for detailed workflows.
 
 ## License
 
-Copyright © 2026 **Aurora Labs**.
-Licensed under the **[Apache 2.0 License](LICENSE)**.
+Copyright 2026 Aurora Labs. Licensed under [Apache 2.0](LICENSE).

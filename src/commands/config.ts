@@ -466,9 +466,9 @@ async function resetConfig(): Promise<void> {
     await settings.save({
         mode: 'safe',
         autoAccept: { enabled: false, readOperations: false, safeCommands: false },
-        permissions: { allow: [], deny: [] },
+        permissions: { allow: [], allowUnsandboxed: [], deny: [] },
         security: { piiRedaction: true, auditLogging: true, keyBackend: 'auto', sandbox: false },
-        ui: { syntaxHighlight: true, diffColors: true, showLineNumbers: true },
+        ui: { syntaxHighlight: true, diffColors: true, showLineNumbers: true, owlAnimation: { enabled: true, flyWhenIdle: true, idleTimeout: 60000, sleepTimeout: 300000 } },
     });
 
     bus.emitAgent({

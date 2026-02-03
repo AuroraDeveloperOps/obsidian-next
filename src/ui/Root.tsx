@@ -71,7 +71,7 @@ export const Root = () => {
     const [stats, setStats] = useState({ cost: 0, model: 'Loading...', mode: 'safe' as 'auto' | 'plan' | 'safe' });
 
     // Active View State Machine
-    type ActiveView = 'chat' | 'settings' | 'doctor' | 'help' | 'usage' | 'task' | 'sessions' | 'mcp';
+    type ActiveView = 'chat' | 'settings' | 'doctor' | 'help' | 'init' | 'usage' | 'task' | 'context' | 'sessions' | 'mcp';
     const [activeView, setActiveView] = useState<ActiveView>('chat');
     const [settingsTab, setSettingsTab] = useState<MenuView | undefined>();
 

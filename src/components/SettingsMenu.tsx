@@ -257,10 +257,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                 onClose();
                 bus.emitUser({ type: 'user_input', content: cmd });
             } else if (item.key === 'plan-execute') {
-                bus.emitUser({ type: 'approval_response', approved: true, requestId: 'plan' });
+                bus.emitUser({ type: 'approval_response', approved: true, requestId: 'plan', scope: 'session' });
                 onClose();
             } else if (item.key === 'plan-cancel') {
-                bus.emitUser({ type: 'approval_response', approved: false, requestId: 'plan' });
+                bus.emitUser({ type: 'approval_response', approved: false, requestId: 'plan', scope: 'session' });
                 onClose();
             } else if (item.key === 'plan-modify') {
                 bus.emitUser({ type: 'user_input', content: 'Please modify the plan' });

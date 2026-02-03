@@ -103,8 +103,9 @@ export class CommandRegistry {
         }
 
         try {
-            // Signal UI if this is a view command
-            if (cmd.isView && cmd.viewId) {
+            // Signal UI if this is a view command WITHOUT arguments
+            // If args are provided, we're executing an action, not just viewing
+            if (cmd.isView && cmd.viewId && args.length === 0) {
                 bus.emitAgent({
                     type: 'view_request',
                     viewId: cmd.viewId,

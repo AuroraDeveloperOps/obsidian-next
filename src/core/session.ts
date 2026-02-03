@@ -112,15 +112,15 @@ class SessionManager {
 
         // 2. Restore History
         const { bus } = await import('./bus.js'); // Dynamic import to avoid cycles if any
-        // Clear in-memory history UI first?
-        bus.emitAgent({ type: 'clear_history' });
 
-        // Load events from DB and emit them to re-hydrate UI
+        // Load events from DB and restore UI (without clearing DB)
         const events = await history.load();
-        for (const event of events) {
-            if (event.type === 'approval_request' || event.type === 'choice_request') continue;
-            bus.emitAgent(event);
-        }
+        const filteredEvents = events.filter(e =>
+            e.type !== 'approval_request' && e.type !== 'choice_request'
+        );
+
+        // Use restore_history to set events directly without triggering DB clear
+        bus.emitAgent({ type: 'restore_history', events: filteredEvents } as any);
 
         // 3. Restore Tasks
         // tasks.init() calls load() which reads from DB based on context.session_id
