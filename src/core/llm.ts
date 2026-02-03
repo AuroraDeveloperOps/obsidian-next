@@ -401,7 +401,24 @@ MEMORY:
                     (error.message && error.message.includes('not_found_error')) ||
                     (error.error && error.error.type === 'not_found_error');
 
-                if (isNotFound) {
+                // Check if it's a corrupted history error (orphaned tool_use/tool_result)
+                const isHistoryCorruption = error.status === 400 &&
+                    (error.message?.includes('tool_use_id') || error.message?.includes('tool_result') ||
+                     error.error?.message?.includes('tool_use_id') || error.error?.message?.includes('tool_result'));
+
+                if (isHistoryCorruption) {
+                    bus.emitAgent({
+                        type: 'thought',
+                        content: '[Context] Detected corrupted history - clearing and retrying...',
+                        hidden: false
+                    });
+                    // Clear corrupted history and retry with just the current message
+                    this.conversationHistory = [{
+                        role: 'user',
+                        content: userMessage || 'Continue from where we left off.'
+                    }];
+                    stream = await createMessage(apiModel);
+                } else if (isNotFound) {
                     bus.emitAgent({
                         type: 'error',
                         message: `Model ${apiModel} not available. Falling back to claude-haiku-4-5.`
@@ -781,12 +798,57 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
         // Validate and fix history to prevent tool_use without tool_result errors
         const validatedHistory = this.validateAndFixHistory(history);
 
+        // Final integrity check - verify no orphaned tool_results exist
+        if (!this.verifyHistoryIntegrity(validatedHistory)) {
+            bus.emitAgent({
+                type: 'thought',
+                content: `[Context] History validation failed - starting fresh to avoid API errors.`,
+                hidden: false
+            });
+            this.conversationHistory = [];
+            return;
+        }
+
         this.conversationHistory = validatedHistory;
         bus.emitAgent({
             type: 'thought',
             content: `[Context] Restored ${validatedHistory.length} messages from saved session.`,
             hidden: true
         });
+    }
+
+    /**
+     * Verify history integrity - check that all tool_results have matching tool_uses
+     */
+    private verifyHistoryIntegrity(history: Anthropic.MessageParam[]): boolean {
+        for (let i = 0; i < history.length; i++) {
+            const msg = history[i];
+            const prevMsg = history[i - 1];
+
+            if (msg.role === 'user' && Array.isArray(msg.content)) {
+                const toolResults = (msg.content as any[]).filter((b: any) => b.type === 'tool_result');
+
+                if (toolResults.length > 0) {
+                    // Must have a previous assistant message with matching tool_uses
+                    if (!prevMsg || prevMsg.role !== 'assistant' || !Array.isArray(prevMsg.content)) {
+                        return false;
+                    }
+
+                    const toolUseIds = new Set(
+                        (prevMsg.content as any[])
+                            .filter((b: any) => b.type === 'tool_use')
+                            .map((b: any) => b.id)
+                    );
+
+                    for (const tr of toolResults) {
+                        if (!toolUseIds.has(tr.tool_use_id)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     /**

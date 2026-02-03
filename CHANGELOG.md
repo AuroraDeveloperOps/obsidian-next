@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `/resume <id>` now properly restores sessions when selected from the session browser.
   - Added `restore_history` event to hydrate UI without clearing database.
   - LLM conversation history is validated on restore to prevent orphaned `tool_use` API errors.
+- **Owl Animation Settings**:
+  - New `ui.owlAnimation` settings: `enabled`, `flyWhenIdle`, `idleTimeout`, `sleepTimeout`.
+  - Settings accessible via Settings > UI Preferences > Owl Animation.
+  - Toggle owl on/off, control flying behavior, and adjust timeouts.
+- **File Diff Indicator**:
+  - Footer now shows last file change with `[W]` (write) or `[E]` (edit) indicator.
+  - Displays shortened file path for quick reference during operations.
 
 ### Changed
 - **Plan Mode Execution**:
@@ -31,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **View Command Routing**:
   - Commands with arguments (e.g., `/resume abc123`) now execute directly instead of opening views.
   - Commands without arguments open their respective views as expected.
+- **Tool Output Spacing**:
+  - Removed visual gaps between step descriptions and tool executions.
+  - Tool start and tool result now display as a single cohesive action group.
+  - Spacing only appears between different actions, not within them.
 
 ### Fixed
 - **Session Browser** (`/resume`):
@@ -56,6 +67,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **LLM History Restoration**:
   - Added validation to strip orphaned `tool_use` blocks missing `tool_result` responses.
   - Prevents "tool_use ids were found without tool_result blocks" API errors on session resume.
+- **Session Events Preservation**:
+  - Fixed `history.clear()` deleting events on exit that were needed for `/resume`.
+  - Events now persist in database for proper session restoration.
+- **LLM History Corruption Recovery**:
+  - Added `verifyHistoryIntegrity()` post-validation check for orphaned tool blocks.
+  - Auto-recovery on API 400 errors: clears corrupted history and retries request.
+  - Handles both orphaned `tool_use` and orphaned `tool_result` blocks.
+- **Owl Animation Color**:
+  - Main logo sprite now stays red when owl animation is disabled.
+  - Grey color only applies when owl mode is active and idle/sleeping.
 
 ### Technical
 - **Event Types**: Added `restore_history` event type for session restoration.

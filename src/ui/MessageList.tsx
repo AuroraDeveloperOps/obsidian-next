@@ -16,11 +16,18 @@ export const MessageList: React.FC<MessageListProps> = ({ events, maxEvents = 50
     return (
         <Box flexDirection="column">
             {visibleEvents.map((event: any, i) => {
+                const prevEvent = visibleEvents[i - 1];
                 let content = null;
+
+                // Determine spacing: no margin between tool_start and tool_result,
+                // or between thought and tool_start (same action group)
+                const isToolGroup = event.type === 'tool_result' && prevEvent?.type === 'tool_start';
+                const isActionStart = event.type === 'tool_start' && prevEvent?.type === 'thought';
+                const needsMargin = !isToolGroup && !isActionStart;
 
                 if (event.type === 'user_input') {
                     content = (
-                        <Box flexDirection="column" marginBottom={0}>
+                        <Box flexDirection="column">
                             <Text color="white">
                                 <Text color="cyan" bold>{`> `}</Text>
                                 {event.content}
@@ -64,13 +71,13 @@ export const MessageList: React.FC<MessageListProps> = ({ events, maxEvents = 50
                     );
                 } else if (event.type === 'done') {
                     content = (
-                        <Box marginTop={1}>
+                        <Box>
                             <Text color="green">✔ {event.summary}</Text>
                         </Box>
                     );
                 } else if (event.type === 'error') {
                     content = (
-                        <Box marginTop={1}>
+                        <Box>
                             <Text color="red">[ERR] {event.message}</Text>
                         </Box>
                     );
@@ -79,7 +86,7 @@ export const MessageList: React.FC<MessageListProps> = ({ events, maxEvents = 50
                 if (!content) return null;
 
                 return (
-                    <Box key={i} marginTop={1} flexDirection="column">
+                    <Box key={i} marginTop={needsMargin ? 1 : 0} flexDirection="column">
                         {content}
                     </Box>
                 );

@@ -82,6 +82,7 @@ export const Root = () => {
     const [isIdle, setIsIdle] = useState(false);
     const [isSleep, setIsSleep] = useState(false);
     const [latestActivity, setLatestActivity] = useState<{ content: string; color: string; } | undefined>();
+    const [lastFileChange, setLastFileChange] = useState<{ path: string; op: string } | null>(null);
 
     // Update latest activity on any agent event
     useEffect(() => {
@@ -283,6 +284,19 @@ export const Root = () => {
                     else setSettingsTab(undefined);
                 }
                 return;
+            }
+
+            // Track file changes for footer display
+            if (event.type === 'tool_start') {
+                const tool = event.tool;
+                if (tool === 'write' || tool === 'edit') {
+                    try {
+                        const args = JSON.parse(event.args);
+                        const filePath = args.file_path || args.path || '';
+                        const shortPath = filePath.split('/').slice(-2).join('/');
+                        setLastFileChange({ path: shortPath, op: tool === 'write' ? 'W' : 'E' });
+                    } catch { }
+                }
             }
 
             setEvents(prev => {
@@ -709,6 +723,14 @@ export const Root = () => {
                                         <Text bold>{stats.mode} mode on</Text>
                                         <Text dimColor> (shift+Tab to cycle)</Text>
                                     </Text>
+                                </Box>
+                                {/* File diff indicator in center */}
+                                <Box>
+                                    {lastFileChange && (
+                                        <Text dimColor>
+                                            <Text color={lastFileChange.op === 'W' ? 'green' : 'yellow'}>[{lastFileChange.op}]</Text> {lastFileChange.path}
+                                        </Text>
+                                    )}
                                 </Box>
                                 <Box>
                                     <Text dimColor>

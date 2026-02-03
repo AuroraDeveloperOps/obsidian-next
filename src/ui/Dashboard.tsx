@@ -276,10 +276,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                     // Animation Logic
                                     const isScanline = (isBusy || isBackgroundBusy) && (frame % 30 === i);
                                     const isGlitch = isBusy && (frame % 30 === 25) && i === 2;
+                                    const showOwl = state.owlSettings.enabled && (isIdle || isSleep);
 
                                     let color = "red";
-                                    if (isSleep) color = "gray";
-                                    else if (isIdle && !isBackgroundBusy) color = "gray";
+                                    // Only turn grey for owl mode, keep red for main logo
+                                    if (showOwl && isSleep) color = "gray";
+                                    else if (showOwl && isIdle && !isBackgroundBusy) color = "gray";
 
                                     if (isScanline) color = "white";
                                     if (isGlitch) color = "magenta";
