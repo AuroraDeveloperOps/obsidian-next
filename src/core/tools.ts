@@ -21,6 +21,8 @@ import { mcp } from './mcp.js';
 import { getRegistryDefinition, listRegistry } from './mcp-registry.js';
 import { UserEvent } from '../events/types.js';
 import { scheduler } from './scheduler.js';
+import { computer } from '../computer/index.js';
+import { ComputerAction } from '../computer/types.js';
 
 const execAsync = promisify(exec);
 
@@ -130,6 +132,7 @@ export interface ToolResult {
     success: boolean;
     output?: string;
     error?: string;
+    content?: any[]; // Supports structured content like image blocks
 }
 
 export interface Tool {
@@ -1171,6 +1174,169 @@ const MemoryTool: Tool = {
 };
 
 /**
+ * Unschedule Tool - Remove a recurring background task
+ */
+export const UnscheduleTool: Tool = {
+    name: 'unschedule_task',
+    description: 'Unschedule a previously scheduled background cron job. Requires the task ID.',
+    inputSchema: {
+        taskId: {
+            type: 'string',
+            description: 'The ID of the task to unschedule (obtained from list_scheduled_tasks).'
+        }
+    },
+    requiredParams: ['taskId'],
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const taskId = args.taskId as string;
+
+        if (!taskId) {
+            return { success: false, error: 'Task ID is required to unschedule a task.' };
+        }
+
+        try {
+            const success = await scheduler.removeTask(taskId);
+            if (success) {
+                return { success: true, output: `Successfully unscheduled task: ${taskId}` };
+            } else {
+                return { success: false, output: `Failed to unschedule task: ${taskId}. Task not found or already inactive.` };
+            }
+        } catch (error: any) {
+            return { success: false, error: `Failed to unschedule task: ${error.message}` };
+        }
+    },
+};
+
+
+/**
+ * Computer Use Tool - Interact with the desktop environment
+ */
+export const ComputerUseTool: Tool = {
+    name: 'computer',
+    description: 'Interact with the desktop environment (screenshots, mouse, keyboard)',
+    inputSchema: {
+        action: {
+            type: 'string',
+            description: 'The action to perform: screenshot, mouse_move, left_click, left_click_drag, right_click, middle_click, double_click, key, type, scroll, left_mouse_down, left_mouse_up, wait, zoom'
+        },
+        coordinate: {
+            type: 'array',
+            items: { type: 'number' },
+            description: '[x, y] coordinates'
+        },
+        text: {
+            type: 'string',
+            description: 'Text to type or key modifier'
+        },
+        key: {
+            type: 'string',
+            description: 'Key to press'
+        },
+        scroll_direction: {
+            type: 'string',
+            description: 'up, down, left, or right'
+        },
+        scroll_amount: {
+            type: 'number',
+            description: 'Amount to scroll'
+        },
+        start_coordinate: {
+            type: 'array',
+            items: { type: 'number' },
+            description: '[x, y] start coordinates for drag'
+        },
+        end_coordinate: {
+            type: 'array',
+            items: { type: 'number' },
+            description: '[x, y] end coordinates for drag'
+        },
+        duration: {
+            type: 'number',
+            description: 'Duration in milliseconds'
+        },
+        region: {
+            type: 'array',
+            items: { type: 'number' },
+            description: '[x1, y1, x2, y2] region for zoom'
+        }
+    },
+    requiredParams: ['action'],
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const actionType = args.action;
+
+        if (!actionType) {
+            return { success: false, error: 'No computer action provided.' };
+        }
+
+        try {
+            let output: string | undefined;
+
+            switch (actionType) {
+                case 'screenshot':
+                    const base64 = await computer.takeScreenshot();
+                    return {
+                        success: true,
+                        output: 'Screenshot captured.',
+                        content: [{ type: 'image', data: base64, mimeType: 'image/png' }]
+                    };
+                case 'left_click':
+                    await computer.leftClick(args.coordinate[0], args.coordinate[1], args.text);
+                    break;
+                case 'type':
+                    await computer.typeText(args.text);
+                    break;
+                case 'key':
+                    await computer.pressKey(args.key || args.text);
+                    break;
+                case 'mouse_move':
+                    await computer.mouseMove(args.coordinate[0], args.coordinate[1]);
+                    break;
+                case 'scroll':
+                    await computer.scroll(args.coordinate[0], args.coordinate[1], args.scroll_direction, args.scroll_amount, args.text);
+                    break;
+                case 'left_click_drag':
+                    await computer.leftClickDrag(args.start_coordinate[0], args.start_coordinate[1], args.end_coordinate[0], args.end_coordinate[1]);
+                    break;
+                case 'right_click':
+                    await computer.rightClick(args.coordinate[0], args.coordinate[1], args.text);
+                    break;
+                case 'middle_click':
+                    await computer.middleClick(args.coordinate[0], args.coordinate[1], args.text);
+                    break;
+                case 'double_click':
+                    await computer.doubleClick(args.coordinate[0], args.coordinate[1], args.text);
+                    break;
+                case 'triple_click':
+                    await computer.tripleClick(args.coordinate[0], args.coordinate[1], args.text);
+                    break;
+                case 'left_mouse_down':
+                    await computer.leftMouseDown(args.coordinate[0], args.coordinate[1]);
+                    break;
+                case 'left_mouse_up':
+                    await computer.leftMouseUp(args.coordinate[0], args.coordinate[1]);
+                    break;
+                case 'hold_key':
+                    await computer.holdKey(args.key || args.text, args.duration);
+                    break;
+                case 'wait':
+                    await computer.wait(args.duration);
+                    break;
+                case 'zoom':
+                    output = await computer.zoom(args.region[0], args.region[1], args.region[2], args.region[3]);
+                    break;
+                default:
+                    return { success: false, error: `Unknown computer action: ${actionType}` };
+            }
+
+            return { success: true, output: output || 'Computer action executed successfully.' };
+        } catch (error: any) {
+            return { success: false, error: `Computer action failed: ${error.message}` };
+        }
+    },
+};
+
+/**
  * Tool Registry - Manages available tools
  */
 export class ToolRegistry {
@@ -1190,7 +1356,9 @@ export class ToolRegistry {
         this.register(MCPManagementTool);
         this.register(ScheduleTool);
         this.register(ListScheduledTasksTool);
+        this.register(UnscheduleTool); // Registered the new tool
         this.register(MemoryTool);
+        this.register(ComputerUseTool);
     }
 
     register(tool: Tool): void {
@@ -1229,8 +1397,8 @@ export class ToolRegistry {
                     }
 
                     // Parse MCP content result
-                    const output = result.content.map((c: any) => c.text).join('\n');
-                    return { success: !result.isError, output };
+                    const output = result.content.filter((c: any) => c.text).map((c: any) => c.text).join('\n');
+                    return { success: !result.isError, output, content: result.content };
                 }
             }));
 

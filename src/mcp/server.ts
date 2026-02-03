@@ -11,6 +11,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { computer } from '../computer/index.js';
 
 const execAsync = promisify(exec);
 
@@ -477,6 +478,105 @@ export function createMcpServer() {
                         type: 'text',
                         text: truncateOutput(`URL: ${url}\nContent-Type: ${contentType}\n${'='.repeat(60)}\n${content}`)
                     }],
+                };
+            } catch (error: any) {
+                return {
+                    content: [{ type: 'text', text: `Error: ${error.message}` }],
+                    isError: true,
+                };
+            }
+        }
+    );
+
+    // Computer Tool (Anthropic Standard)
+    server.registerTool(
+        'computer',
+        {
+            title: 'Computer Use',
+            description: 'Control the computer (screenshot, keyboard, mouse). Available actions: screenshot, key, type, mouse_move, left_click, left_click_drag, right_click, middle_click, double_click, cursor_position.',
+            inputSchema: {
+                action: z.enum([
+                    'screenshot',
+                    'key',
+                    'type',
+                    'mouse_move',
+                    'left_click',
+                    'left_click_drag',
+                    'right_click',
+                    'middle_click',
+                    'double_click',
+                    'cursor_position'
+                ]).describe('The action to perform'),
+                coordinate: z.array(z.number()).length(2).optional().describe('Coordinates [x, y] for mouse actions'),
+                text: z.string().optional().describe('Text to type or key to press'),
+                start_coordinate: z.array(z.number()).length(2).optional().describe('Start coordinates [x, y] for drag'),
+            },
+        },
+        async ({ action, coordinate, text, start_coordinate }) => {
+            try {
+                let result: any;
+                const [x, y] = coordinate || [0, 0];
+                const [startX, startY] = start_coordinate || [0, 0];
+
+                switch (action) {
+                    case 'screenshot':
+                        const base64 = await computer.takeScreenshot();
+                        return {
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: 'Screenshot captured'
+                                },
+                                {
+                                    type: 'image',
+                                    data: base64,
+                                    mimeType: 'image/png'
+                                }
+                            ]
+                        };
+
+                    case 'mouse_move':
+                        await computer.mouseMove(x, y);
+                        result = `Moved mouse to ${x}, ${y}`;
+                        break;
+
+                    case 'left_click':
+                        await computer.leftClick(x, y);
+                        result = `Left clicked at ${x}, ${y}`;
+                        break;
+
+                    case 'right_click':
+                        await computer.rightClick(x, y);
+                        result = `Right clicked at ${x}, ${y}`;
+                        break;
+
+                    case 'double_click':
+                        await computer.doubleClick(x, y);
+                        result = `Double clicked at ${x}, ${y}`;
+                        break;
+
+                    case 'type':
+                        if (!text) throw new Error('Text is required for type action');
+                        await computer.typeText(text);
+                        result = `Typed: ${text}`;
+                        break;
+
+                    case 'key':
+                        if (!text) throw new Error('Key (text) is required for key action');
+                        await computer.pressKey(text);
+                        result = `Pressed key: ${text}`;
+                        break;
+
+                    case 'left_click_drag':
+                        await computer.leftClickDrag(startX, startY, x, y);
+                        break;
+
+                    default:
+                        throw new Error(`Action ${action} not implemented or supported via MCP yet`);
+                }
+
+                return {
+                    content: [{ type: 'text', text: result }],
                 };
             } catch (error: any) {
                 return {

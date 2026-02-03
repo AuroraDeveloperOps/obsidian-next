@@ -280,7 +280,7 @@ MODE TRANSITION GUIDANCE:
 
 CONTEXT AWARENESS:
 <budget:token_budget>${tokenBudget}</budget:token_budget>
-<context_usage>${tokensUsed}/${tokenBudget} tokens used; ${tokensRemaining} remaining (${((tokensRemaining/tokenBudget)*100).toFixed(0)}% free)</context_usage>
+<context_usage>${tokensUsed}/${tokenBudget} tokens used; ${tokensRemaining} remaining (${((tokensRemaining / tokenBudget) * 100).toFixed(0)}% free)</context_usage>
 ${tokensUsed > tokenBudget * 0.7 ? '- WARNING: Context is filling up. Be concise. Consider suggesting /clear if the task is complete.' : ''}
 
 CORE DIRECTIVES:
@@ -299,9 +299,8 @@ CORE DIRECTIVES:
    - Do not rely on internal training data for documentation if a certified source is available.
 5. COMMUNICATION:
    - Be concise. One sharp observation or witty remark, then act.
-   - STRICTLY FORBIDDEN: Do not use ANY Markdown formatting symbols in your thought process.
-   - No **bold**, no *italics*, no # headers, no [links], no \`code\`.
-   - Use ONLY plain text for thoughts.
+   - STRICTLY FORBIDDEN: Do not use ANY Markdown formatting symbols (like **bold**, *italics*, # headers, [links], or \`code\`) in ANY part of your output.
+   - Communications must be 100% plain text. For emphasis, use CAPITAL LETTERS.
 6. SECURITY:
    - Never output API keys or secrets.
    - Don't read outside the workspace unless necessary (system paths).
@@ -404,7 +403,7 @@ MEMORY:
                 // Check if it's a corrupted history error (orphaned tool_use/tool_result)
                 const isHistoryCorruption = error.status === 400 &&
                     (error.message?.includes('tool_use_id') || error.message?.includes('tool_result') ||
-                     error.error?.message?.includes('tool_use_id') || error.error?.message?.includes('tool_result'));
+                        error.error?.message?.includes('tool_use_id') || error.error?.message?.includes('tool_result'));
 
                 if (isHistoryCorruption) {
                     bus.emitAgent({
@@ -541,10 +540,35 @@ MEMORY:
                         outputContent = outputContent.slice(0, 5000) + `\n... [${outputContent.length - 10000} chars truncated] ...\n` + outputContent.slice(-5000);
                     }
 
+                    let toolResultContent: any = outputContent;
+
+                    // If we have structured content (like image blocks), use them
+                    if (result.content && Array.isArray(result.content)) {
+                        toolResultContent = result.content.map((block: any) => {
+                            if (block.type === 'image') {
+                                return {
+                                    type: 'image',
+                                    source: {
+                                        type: 'base64',
+                                        media_type: block.mimeType || 'image/png',
+                                        data: block.data
+                                    }
+                                };
+                            }
+                            if (block.type === 'text') {
+                                return {
+                                    type: 'text',
+                                    text: block.text
+                                };
+                            }
+                            return block;
+                        });
+                    }
+
                     toolResults.push({
                         type: 'tool_result',
                         tool_use_id: toolUse.id,
-                        content: outputContent,
+                        content: toolResultContent,
                         is_error: !result.success
                     });
                 }

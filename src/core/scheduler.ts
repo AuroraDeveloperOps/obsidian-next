@@ -205,6 +205,21 @@ export class Scheduler {
             `).run(Date.now(), task.id);
         }
     }
+
+    /**
+     * Remove (deactivate) a scheduled task
+     */
+    public async removeTask(taskId: string): Promise<boolean> {
+        const result = db.getDb().prepare(`
+            UPDATE scheduled_tasks SET active = 0 WHERE id = ?
+        `).run(taskId);
+
+        if (result.changes && result.changes > 0) {
+            bus.emitAgent({ type: 'thought', content: `[Scheduler] Deactivated task: ${taskId}` });
+            return true;
+        }
+        return false;
+    }
 }
 
 export const scheduler = Scheduler.getInstance();
