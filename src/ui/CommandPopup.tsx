@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 
 export const COMMANDS = [
     { name: '/help', desc: 'Show available commands', isView: true },
-    { name: '/init', desc: 'Initialize configuration' },
+    { name: '/init', desc: 'Initialize configuration', isView: true },
     { name: '/config', desc: 'View/edit configuration', isView: true },
     { name: '/models', desc: 'Select AI model', isView: true },
     { name: '/mode', desc: 'Set mode (auto/plan/safe)', isView: true },

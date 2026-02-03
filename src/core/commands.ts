@@ -61,6 +61,19 @@ export class CommandRegistry {
         this.register('mcp', 'Manage Model Context Protocol', async (args) => {
             // Placeholder if needed, but UI usually handles it
         }, { isView: true, viewId: 'mcp', aliases: ['plugin'] });
+
+        this.register('schedule_test', 'Schedule a test task', async () => {
+            const { scheduler } = await import('./scheduler.js');
+            const now = new Date();
+            now.setSeconds(now.getSeconds() + 5);
+            const cronExpression = `${now.getSeconds()} ${now.getMinutes()} ${now.getHours()} ${now.getDate()} ${now.getMonth() + 1} *`;
+
+            await scheduler.scheduleTask(cronExpression, 'system:echo', { message: 'Hello from scheduled task' });
+            bus.emitAgent({
+                type: 'thought',
+                content: `Scheduled a test task to run at ${now.toLocaleTimeString()}`
+            });
+        });
     }
 
     register(name: string, description: string, handler: CommandHandler, options: Partial<Pick<CommandDef, 'isView' | 'viewId' | 'aliases'>> = {}) {

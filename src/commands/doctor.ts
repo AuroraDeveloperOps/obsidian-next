@@ -19,8 +19,6 @@ interface CheckResult {
 export async function doctorCommand(args: string[]): Promise<void> {
     const results: CheckResult[] = [];
 
-    bus.emitAgent({ type: 'thought', content: 'Running diagnostics...' });
-
     // 1. Check configuration
     try {
         const cfg = await config.load();

@@ -46,13 +46,15 @@ interface DashboardProps {
     isBackgroundBusy?: boolean;
     isIdle?: boolean;
     isSleep?: boolean;
+    latestActivity?: { content: string; color: string; };
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
     isBusy = false,
     isBackgroundBusy = false,
     isIdle = false,
-    isSleep = false
+    isSleep = false,
+    latestActivity
 }) => {
     const [columns, setColumns] = useState(process.stdout.columns || 80);
     const [state, setState] = useState<DashboardState>({
@@ -300,7 +302,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     {/* Recent Activity */}
                     <Box flexDirection="column">
                         <Text>Recent activity</Text>
-                        <Text dimColor>No recent activity</Text>
+                        {latestActivity ? (
+                            <Text color={latestActivity.color as any}>
+                                {latestActivity.content}
+                            </Text>
+                        ) : (
+                            <Text dimColor>No recent activity</Text>
+                        )}
                     </Box>
                 </Box>
             </Box>

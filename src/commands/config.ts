@@ -268,6 +268,13 @@ async function configureSecurity(): Promise<void> {
 async function configurePermissions(): Promise<void> {
     const s = await settings.load();
 
+    const options = [
+        { id: 'add-allow', label: 'Add to allow list' },
+        { id: 'add-deny', label: 'Add to deny list' },
+        { id: 'clear-allow', label: 'Clear allow list' },
+        { id: 'clear-deny', label: 'Clear deny list' },
+    ];
+
     const content = [
         'Current Permission Policy',
         '',
@@ -283,19 +290,12 @@ async function configurePermissions(): Promise<void> {
         '',
     ].join('\n');
 
-    bus.emitAgent({
-        type: 'thought',
-        content
-    });
+    const question = [
+        content,
+        'Permission Actions'
+    ].join('\n');
 
-    const options = [
-        { id: 'add-allow', label: 'Add to allow list' },
-        { id: 'add-deny', label: 'Add to deny list' },
-        { id: 'clear-allow', label: 'Clear allow list' },
-        { id: 'clear-deny', label: 'Clear deny list' },
-    ];
-
-    const selection = await waitForChoice('Permission Actions', options);
+    const selection = await waitForChoice(question, options);
 
     if (selection === 'cancel') {
         return;
@@ -557,12 +557,8 @@ async function importConfig(filepath?: string): Promise<void> {
 }
 
 async function rotateKey(): Promise<void> {
-    bus.emitAgent({
-        type: 'thought',
-        content: 'API Key Rotation\n\nThis will replace your current API key with a new one.',
-    });
-
-    const { value: newKey, cancelled } = await waitForTextInput('Enter new API key:', true);
+    const prompt = 'API Key Rotation\n\nThis will replace your current API key with a new one.\n\nEnter new API key:';
+    const { value: newKey, cancelled } = await waitForTextInput(prompt, true);
 
     if (cancelled || !newKey) {
         bus.emitAgent({ type: 'done', summary: 'Key rotation cancelled.' });

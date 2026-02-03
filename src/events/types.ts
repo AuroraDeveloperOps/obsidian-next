@@ -27,7 +27,7 @@ export type AgentEventUnion =
     | { type: "done"; summary: string }
     | { type: "clear_history" }
     | { type: "view_request"; viewId: string; command?: string; params?: any }
-    | { type: "command_executed"; command: string; args: string[] }
+    | { type: "command_executed"; command: string; args: string[] };
 
     // 5. Session Management
     | { type: "shutdown_request" }

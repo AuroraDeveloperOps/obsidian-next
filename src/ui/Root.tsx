@@ -16,10 +16,12 @@ import { EphemeralItem } from '../components/EphemeralItem.js';
 import { Footer } from '../components/Footer.js';
 import { DoctorView } from './views/DoctorView.js';
 import { HelpView } from './views/HelpView.js';
+import { InitView } from './views/InitView.js';
 import { UsageView } from './views/UsageView.js';
 import { TaskView } from './views/TaskView.js';
 import { SessionView } from './views/SessionView.js';
 import { MCPView } from './views/MCPView.js';
+import { ContextView } from './views/ContextView.js';
 import { SettingsMenu, MenuView } from '../components/SettingsMenu.js';
 
 import { history } from '../core/history.js';
@@ -74,10 +76,37 @@ export const Root = () => {
     const [settingsTab, setSettingsTab] = useState<MenuView | undefined>();
 
     const [isBusy, setIsBusy] = useState(false);
+    const [isInitCommand, setIsInitCommand] = useState(false);
     const [isBackgroundBusy, setIsBackgroundBusy] = useState(false);
     const [lastActivity, setLastActivity] = useState(Date.now());
     const [isIdle, setIsIdle] = useState(false);
     const [isSleep, setIsSleep] = useState(false);
+    const [latestActivity, setLatestActivity] = useState<{ content: string; color: string; } | undefined>();
+
+    // Update latest activity on any agent event
+    useEffect(() => {
+        const updateActivity = async () => {
+            const { auditLog } = await import('../core/auditLog.js');
+            const activities = await auditLog.getRecentActivities(1);
+            if (activities.length > 0) {
+                setLatestActivity(activities[0]);
+            }
+        };
+        const sub = (event: AgentEvent) => {
+            // Only update on meaningful events to avoid flicker
+            if (event.type !== 'thought') {
+                updateActivity();
+            }
+        };
+
+        bus.on('agent', sub);
+        // Also fetch on initial load
+        updateActivity();
+
+        return () => {
+            bus.off('agent', sub);
+        };
+    }, []);
 
     // Idle/Sleep detection
     useEffect(() => {
@@ -170,10 +199,11 @@ export const Root = () => {
             // Handle shutdown - exit after rendering final messages
             // Handle thinking/busy state
             const completionTypes: string[] = ['done', 'error', 'command_executed', 'shutdown_complete'];
-            const startTypes: string[] = ['tool_start'];
+            const startTypes: string[] = ['tool_start', 'thought'];
 
             if (completionTypes.includes(event.type)) {
                 setIsBusy(false);
+                setIsInitCommand(false);
             } else if (startTypes.includes(event.type)) {
                 setIsBusy(true);
             }
@@ -266,6 +296,9 @@ export const Root = () => {
 
         const userHandler = (event: any) => {
             if (event.type === 'user_input') {
+                if (event.content.trim().startsWith('/init')) {
+                    setIsInitCommand(true);
+                }
                 if (!event.silent) {
                     setEvents(prev => [...prev, { type: 'user_input', content: event.content } as any]);
                 }
@@ -273,6 +306,7 @@ export const Root = () => {
                 setLastActivity(Date.now());
             }
         };
+
 
         bus.on('agent', handler);
         bus.on('user', userHandler);
@@ -415,27 +449,6 @@ export const Root = () => {
 
         const trimmed = value.trim();
 
-        // 1. Silent Interceptions (No echo to chat)
-        if (trimmed === '/clear') {
-            setPendingPrompt({
-                type: 'approval',
-                requestId: 'ui:clear',
-                context: 'Flush session history? This cannot be undone.',
-            });
-            setInput('');
-            return;
-        }
-
-        if (trimmed === '/exit') {
-            setPendingPrompt({
-                type: 'approval',
-                requestId: 'ui:exit',
-                context: 'Terminate session? Progress will be archived.',
-            });
-            setInput('');
-            return;
-        }
-
         // 2. Determine if this is a view command (silent - no echo)
         const matchingCommand = COMMANDS.find(c => c.name === trimmed);
         const silent = matchingCommand?.isView || false;
@@ -481,6 +494,7 @@ export const Root = () => {
                         isBackgroundBusy={isBackgroundBusy}
                         isIdle={isIdle}
                         isSleep={isSleep}
+                        latestActivity={latestActivity}
                     />
                 </Box>
             )}
@@ -493,10 +507,14 @@ export const Root = () => {
                     <DoctorView onClose={() => setActiveView('chat')} />
                 ) : activeView === 'help' ? (
                     <HelpView onClose={() => setActiveView('chat')} />
+                ) : activeView === 'init' ? (
+                    <InitView onClose={() => setActiveView('chat')} />
                 ) : activeView === 'usage' ? (
                     <UsageView onClose={() => setActiveView('chat')} />
                 ) : activeView === 'task' ? (
                     <TaskView onClose={() => setActiveView('chat')} />
+                ) : activeView === 'context' ? (
+                    <ContextView onClose={() => setActiveView('chat')} />
                 ) : activeView === 'sessions' ? (
                     <SessionView
                         onClose={() => setActiveView('chat')}
@@ -524,7 +542,7 @@ export const Root = () => {
                 <Box flexDirection="column" flexShrink={0}>
                     {/* Persistent Thinking Indicator - Sticky at bottom */}
                     <Box flexDirection="row" marginBottom={0} marginLeft={2}>
-                        {isBusy && (
+                        {isBusy && !isInitCommand && (
                             <Glitter>Thinking...</Glitter>
                         )}
                         {isBackgroundBusy && (
@@ -588,9 +606,9 @@ export const Root = () => {
                             <TextInput
                                 key={inputKey}
                                 value={input}
-                                onChange={pendingPrompt ? () => { } : setInput}
-                                onSubmit={pendingPrompt ? () => { } : handleSubmit}
-                                placeholder={pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...'}
+                                onChange={pendingPrompt || isBusy ? () => { } : setInput}
+                                onSubmit={pendingPrompt || isBusy || matches.length > 0 ? () => { } : handleSubmit}
+                                placeholder={isBusy ? 'Thinking...' : (pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...')}
                                 focus={activeView === 'chat'}
                             />
                         </Box>

@@ -43,7 +43,7 @@ function waitForTextInput(requestId: string): Promise<{ value: string; cancelled
 }
 
 // Helper to wait for choice selection
-function waitForChoice(options: Array<{ id: string; label: string }>): Promise<string> {
+function waitForChoice(options: Array<{ id: string; label: string }>, title?: string): Promise<string> {
     return new Promise((resolve) => {
         const handler = (event: any) => {
             if (event.type === 'user_choice') {
@@ -56,7 +56,7 @@ function waitForChoice(options: Array<{ id: string; label: string }>): Promise<s
         // Emit choice request
         bus.emitAgent({
             type: 'choice_request',
-            question: 'Select an option:',
+            question: title ? `${title}\nSelect an option:` : 'Select an option:',
             options: options.map(o => ({ id: o.id, label: o.label })),
         });
 
@@ -91,12 +91,7 @@ export const initCommand: CommandHandler = async (args) => {
             { id: 'exit', label: 'Exit' }
         ];
 
-        bus.emitAgent({
-            type: 'thought',
-            content: formatHeader('Configuration Menu')
-        });
-
-        const choice = await waitForChoice(options);
+        const choice = await waitForChoice(options, formatHeader('Configuration Menu'));
 
         switch (choice) {
             case 'setup':

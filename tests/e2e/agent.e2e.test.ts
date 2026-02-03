@@ -181,6 +181,20 @@ describe('Agent E2E', () => {
             expect(typeof agent.run).toBe('function');
         });
 
+        it('should ignore single slash command trigger', async () => {
+            const { agent } = await import('../../src/core/agent.js');
+            const { llm } = await import('../../src/core/llm.js');
+
+            await agent.run('/');
+
+            // Should not call the LLM
+            expect(llm.streamChat).not.toHaveBeenCalled();
+
+            // Should not emit an error
+            const errorEvent = capturedEvents.find(e => e.type === 'error');
+            expect(errorEvent).toBeUndefined();
+        });
+
         it('should support mode switching', async () => {
             const { agent } = await import('../../src/core/agent.js');
 

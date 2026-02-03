@@ -14,6 +14,7 @@ import { redactor } from './redactor.js';
 import { auditLog } from './auditLog.js';
 import { usage } from './usage.js';
 import { mcp } from './mcp.js';
+import { COMMANDS } from '../ui/CommandPopup.js';
 
 import { history } from './history.js';
 import { scheduler } from './scheduler.js';
@@ -84,8 +85,110 @@ class Agent {
         this.initialized = true;
     }
 
+    private async handleCommand(input: string): Promise<boolean> {
+        if (input.trim() === '/') return true; // Ignore single slash
+        const commandName = input.split(' ')[0];
+        const command = COMMANDS.find(c => c.name === commandName);
+        if (!command) return false;
+
+        const args = input.split(' ').slice(1);
+
+        if (command.isView) {
+            let viewId = command.name.slice(1);
+            // Special handling for commands that map to settings tabs or other views
+            switch (command.name) {
+                case '/models':
+                case '/mode':
+                case '/sandbox':
+                case '/config':
+                case '/settings':
+                    viewId = 'settings';
+                    break;
+                case '/status':
+                case '/doctor':
+                    viewId = 'doctor';
+                    break;
+                case '/resume':
+                    viewId = 'sessions';
+                    break;
+                case '/task':
+                    viewId = 'task';
+                    break;
+                case '/context':
+                    viewId = 'context';
+                    break;
+                case '/mcp':
+                    viewId = 'mcp';
+                    break;
+                case '/init':
+                    viewId = 'init';
+                    break;
+                case '/help':
+                    viewId = 'help';
+                    break;
+            }
+
+            bus.emitAgent({
+                type: 'view_request',
+                viewId,
+                command: command.name,
+                params: args,
+            });
+            return true;
+        }
+
+        // Handle non-view commands
+        switch (command.name) {
+            case '/clear':
+                bus.emitAgent({
+                    type: 'approval_request',
+                    requestId: 'ui:clear',
+                    context: 'Flush session history? This cannot be undone.',
+                });
+                return true;
+            case '/exit':
+                bus.emitAgent({
+                    type: 'approval_request',
+                    requestId: 'ui:exit',
+                    context: 'Terminate session? Progress will be archived.',
+                });
+                return true;
+            case '/undo':
+                 bus.emitAgent({
+                    type: 'approval_request',
+                    requestId: 'agent:undo',
+                    context: 'Undo the last file modification? This will revert the change on disk.',
+                });
+                return true;
+            case '/diff':
+                this.showDiff();
+                return true;
+            case '/tool':
+                // This might need more complex handling depending on args
+                bus.emitAgent({ type: 'thought', content: `Tool command requires arguments: /tool <tool_name> [args]`});
+                return true;
+
+        }
+
+        return false;
+    }
+
+    private async showDiff() {
+        const changes = await undo.getChangesForLastAction();
+        if (changes.length > 0) {
+            bus.emitAgent({ type: 'diff_view_request', changes });
+        } else {
+            bus.emitAgent({ type: 'thought', content: 'No changes to display.' });
+        }
+    }
+
+
     async run(input: string): Promise<void> {
         await this.init();
+
+        if (await this.handleCommand(input)) {
+            return;
+        }
 
         const mode = context.getMode();
 
@@ -262,6 +365,16 @@ APPROVAL: <yes if destructive, no otherwise>`;
     }
 
     async handleApprovalResponse(approved: boolean, requestId: string): Promise<void> {
+        if (requestId === 'agent:undo') {
+            if (approved) {
+                await undo.undoLastAction();
+                bus.emitAgent({ type: 'thought', content: 'Last action has been undone.' });
+            } else {
+                bus.emitAgent({ type: 'thought', content: 'Undo cancelled.' });
+            }
+            return;
+        }
+
         if (!this.pendingPlan) {
             return;
         }
