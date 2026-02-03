@@ -50,6 +50,13 @@ export const SettingsSchema = z.object({
         syntaxHighlight: z.boolean().default(true),
         diffColors: z.boolean().default(true),
         showLineNumbers: z.boolean().default(true),
+        // Owl animation settings
+        owlAnimation: z.object({
+            enabled: z.boolean().default(true),
+            flyWhenIdle: z.boolean().default(true),
+            idleTimeout: z.number().default(60000),      // 60s before idle animation
+            sleepTimeout: z.number().default(300000),    // 5m before sleep animation
+        }).default({}),
     }).default({}),
 });
 
@@ -78,6 +85,12 @@ const DEFAULT_SETTINGS: Settings = {
         syntaxHighlight: true,
         diffColors: true,
         showLineNumbers: true,
+        owlAnimation: {
+            enabled: true,
+            flyWhenIdle: true,
+            idleTimeout: 60000,      // 60s before idle animation
+            sleepTimeout: 300000,    // 5m before sleep animation
+        },
     },
 };
 

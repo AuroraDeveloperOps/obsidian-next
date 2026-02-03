@@ -31,6 +31,13 @@ const OWL_FRAMES = {
     ]
 };
 
+interface OwlSettings {
+    enabled: boolean;
+    flyWhenIdle: boolean;
+    idleTimeout: number;
+    sleepTimeout: number;
+}
+
 interface DashboardState {
     model: string;
     mode: 'auto' | 'plan' | 'safe';
@@ -39,6 +46,7 @@ interface DashboardState {
     workspace: string;
     user: string;
     version: string;
+    owlSettings: OwlSettings;
 }
 
 interface DashboardProps {
@@ -65,6 +73,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
         workspace: process.cwd().split('/').slice(-2).join('/'), // Shortened path
         user: process.env.USER || 'User',
         version: 'v...',
+        owlSettings: {
+            enabled: true,
+            flyWhenIdle: true,
+            idleTimeout: 60000,
+            sleepTimeout: 300000,
+        },
     });
 
     // Load initial state
@@ -75,13 +89,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
             const hasKey = await keyManager.hasKey();
             const ver = await config.getVersion();
 
+            // Get owl settings with defaults
+            const owlSettings = s.ui?.owlAnimation || {
+                enabled: true,
+                flyWhenIdle: true,
+                idleTimeout: 60000,
+                sleepTimeout: 300000,
+            };
+
             setState(prev => ({
                 ...prev,
                 model: formatModelName(cfg.model),
                 mode: s.mode,
                 keyStatus: hasKey ? 'valid' : 'missing',
                 sessionCost: usage.getSessionCost(),
-                version: ver.startsWith('v') ? ver : `v${ver}`
+                version: ver.startsWith('v') ? ver : `v${ver}`,
+                owlSettings,
             }));
         };
 
@@ -94,11 +117,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
             if (['done', 'tool_result', 'session_saved', 'shutdown_complete'].includes(event.type)) {
                 const cfg = await config.load();
                 const s = await settings.load();
+                const owlSettings = s.ui?.owlAnimation || {
+                    enabled: true,
+                    flyWhenIdle: true,
+                    idleTimeout: 60000,
+                    sleepTimeout: 300000,
+                };
                 setState(prev => ({
                     ...prev,
                     model: formatModelName(cfg.model),
                     mode: s.mode,
                     sessionCost: usage.getSessionCost(),
+                    owlSettings,
                 }));
             }
             if (event.type === 'thought') {
@@ -164,13 +194,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
     useEffect(() => {
         if (!isIdle || isBusy || isBackgroundBusy) {
             setTargetX(0); // Return to center station
-        } else if (isIdle && frame % 40 === 0) {
-            // Randomly move while idle - wider range
+        } else if (isIdle && state.owlSettings.enabled && state.owlSettings.flyWhenIdle && frame % 40 === 0) {
+            // Randomly move while idle - wider range (only if owl flying is enabled)
             const maxTravel = Math.floor(columns / 2) - 20;
             // Move between -maxTravel and +maxTravel for a wide sweep
             setTargetX(Math.floor(Math.random() * maxTravel * 2) - maxTravel);
+        } else if (!state.owlSettings.flyWhenIdle) {
+            setTargetX(0); // Stay centered if flying is disabled
         }
-    }, [isIdle, isBusy, isBackgroundBusy, frame, columns]);
+    }, [isIdle, isBusy, isBackgroundBusy, frame, columns, state.owlSettings.enabled, state.owlSettings.flyWhenIdle]);
 
     // Smooth movement interpolation
     useEffect(() => {
@@ -235,7 +267,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <Box height={6} alignItems="flex-start" width="100%" justifyContent="center">
                         <Box marginLeft={Math.floor(spriteX)}>
                             <Box flexDirection="column">
-                                {(isIdle || isSleep ? (frame % 4 < 2 ? OWL_FRAMES.sleep : OWL_FRAMES.flap) : SPRITE).map((line, i) => {
+                                {(() => {
+                                    // Determine which sprite to show based on settings
+                                    const showOwl = state.owlSettings.enabled && (isIdle || isSleep);
+                                    const owlFrame = frame % 4 < 2 ? OWL_FRAMES.sleep : OWL_FRAMES.flap;
+                                    return showOwl ? owlFrame : SPRITE;
+                                })().map((line, i) => {
                                     // Animation Logic
                                     const isScanline = (isBusy || isBackgroundBusy) && (frame % 30 === i);
                                     const isGlitch = isBusy && (frame % 30 === 25) && i === 2;
@@ -304,7 +341,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         <Text>Recent activity</Text>
                         {latestActivity ? (
                             <Text color={latestActivity.color as any}>
-                                {latestActivity.content}
+                                {latestActivity.content.length > 60
+                                    ? latestActivity.content.slice(0, 57) + '...'
+                                    : latestActivity.content}
                             </Text>
                         ) : (
                             <Text dimColor>No recent activity</Text>

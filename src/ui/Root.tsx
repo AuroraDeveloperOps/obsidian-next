@@ -196,6 +196,14 @@ export const Root = () => {
                 return;
             }
 
+            // Handle session restore - set events directly without clearing DB
+            if (event.type === 'restore_history') {
+                const restored = (event as any).events || [];
+                setEvents(restored);
+                setPendingPrompt(null);
+                return;
+            }
+
             // Handle shutdown - exit after rendering final messages
             // Handle thinking/busy state
             const completionTypes: string[] = ['done', 'error', 'command_executed', 'shutdown_complete'];
@@ -318,6 +326,15 @@ export const Root = () => {
     }, []);
 
     const [inputKey, setInputKey] = useState(0);
+    const [cursorVisible, setCursorVisible] = useState(true);
+
+    // Blinking cursor effect
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCursorVisible(v => !v);
+        }, 500);
+        return () => clearInterval(timer);
+    }, []);
 
     // --------------- POPUP LOGIC START ---------------
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -359,9 +376,8 @@ export const Root = () => {
             bus.emitAgent({ type: 'error', message: `Failed to save session: ${err}` });
         }
 
-        // Clear the active history file so next boot is fresh
-        await history.clear();
-
+        // Clear UI state but preserve DB events for session restoration
+        // Note: history.clear() was removed here - it was deleting events needed for /resume
         bus.emitAgent({ type: 'clear_history' });
 
         setTimeout(() => {
@@ -370,7 +386,7 @@ export const Root = () => {
     }, [exit]);
 
     useInput((inputChar, key) => {
-        // Graceful Exit - Ctrl+C
+        // Graceful Exit - Ctrl+C (global, works in any view)
         if (inputChar === '\x03' || (key.ctrl && inputChar === 'c')) {
             // Prevent multiple triggers
             if (activeView === 'chat' && pendingPrompt === null) {
@@ -379,6 +395,12 @@ export const Root = () => {
                 // Force exit if stuck or in other views
                 exit();
             }
+            return;
+        }
+
+        // Skip all other input handling when not in chat view
+        // Let child views (SessionView, SettingsMenu, etc.) handle their own input
+        if (activeView !== 'chat') {
             return;
         }
 
@@ -401,38 +423,60 @@ export const Root = () => {
             return;
         }
 
+        // Task View Toggle - Ctrl+T
+        if (key.ctrl && inputChar === 't') {
+            setActiveView('task');
+            return;
+        }
+
+        if (pendingPrompt || isBusy) return;
+
         // Popup navigation - only when popup is visible
-        if (matches.length === 0) return;
-
-        if (key.upArrow) {
-            setSelectedIndex(prev => (prev > 0 ? prev - 1 : matches.length - 1));
-            return;
-        }
-
-        if (key.downArrow) {
-            setSelectedIndex(prev => (prev < matches.length - 1 ? prev + 1 : 0));
-            return;
-        }
-
-        // Tab to autocomplete without executing
-        if (key.tab && !key.shift) {
-            const selected = matches[selectedIndex];
-            if (selected && input !== selected.name) {
-                setInput(selected.name);
-                setInputKey(prev => prev + 1);
+        if (matches.length > 0) {
+            if (key.upArrow) {
+                setSelectedIndex(prev => (prev > 0 ? prev - 1 : matches.length - 1));
+                return;
             }
-            return;
+
+            if (key.downArrow) {
+                setSelectedIndex(prev => (prev < matches.length - 1 ? prev + 1 : 0));
+                return;
+            }
+
+            // Tab to autocomplete without executing
+            if (key.tab && !key.shift) {
+                const selected = matches[selectedIndex];
+                if (selected && input !== selected.name) {
+                    setInput(selected.name);
+                    setInputKey(prev => prev + 1);
+                }
+                return;
+            }
+
+            // Enter to execute selected command from popup
+            if (key.return) {
+                const selected = matches[selectedIndex];
+                if (selected) {
+                    setInput('');
+                    handleSubmit(selected.name);
+                }
+                return;
+            }
         }
 
-        // Enter to execute selected command
+        // Regular text input - works with or without popup
         if (key.return) {
-            const selected = matches[selectedIndex];
-            if (selected) {
-                // Clear input first, then execute - prevents double-display
-                setInput('');
-                handleSubmit(selected.name);
-            }
+            handleSubmit(input);
             return;
+        }
+        if (key.backspace || key.delete) {
+            setInput(prev => prev.slice(0, -1));
+            return;
+        }
+
+        // Paste and regular input
+        if (!key.ctrl && !key.meta && inputChar) {
+            setInput(prev => prev + inputChar);
         }
     });
     // --------------- POPUP LOGIC END ---------------
@@ -483,6 +527,37 @@ export const Root = () => {
             bus.off('user', uiHandler);
         };
     }, [handleExit]);
+
+    const renderInput = () => {
+        const placeholder = isBusy ? 'Thinking...' : (pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...');
+
+        if (input.length === 0) {
+            return <Text color="gray">{placeholder}</Text>;
+        }
+
+        const commandMatch = input.match(/^\/([a-zA-Z0-9_-]+)/);
+        if (commandMatch) {
+            const command = commandMatch[0];
+            const rest = input.slice(command.length);
+            // Check if this is a recognized command
+            const isValidCommand = COMMANDS.some(c => c.name === command || c.name.startsWith(command));
+            const isExactMatch = COMMANDS.some(c => c.name === command);
+            return (
+                <Text>
+                    <Text color={isExactMatch ? 'red' : isValidCommand ? 'yellow' : undefined}>{command}</Text>
+                    {rest}
+                    {cursorVisible && <Text>_</Text>}
+                </Text>
+            );
+        }
+
+        return (
+            <Text>
+                {input}
+                {cursorVisible && <Text>_</Text>}
+            </Text>
+        );
+    };
 
     return (
         <Box flexDirection="column" height="100%">
@@ -603,14 +678,7 @@ export const Root = () => {
 
                         <Box marginY={0} paddingX={0}>
                             <Text color="red" bold>❯ </Text>
-                            <TextInput
-                                key={inputKey}
-                                value={input}
-                                onChange={pendingPrompt || isBusy ? () => { } : setInput}
-                                onSubmit={pendingPrompt || isBusy || matches.length > 0 ? () => { } : handleSubmit}
-                                placeholder={isBusy ? 'Thinking...' : (pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...')}
-                                focus={activeView === 'chat'}
-                            />
+                            {renderInput()}
                         </Box>
 
                         <Box

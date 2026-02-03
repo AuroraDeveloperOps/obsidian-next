@@ -123,7 +123,7 @@ export class LLMClient {
         return false;
     }
 
-    async streamChat(userMessage: string): Promise<string | null> {
+    async streamChat(userMessage: string, options?: { allowedTools?: string[] }): Promise<string | null> {
         if (!this.client) {
             const initialized = await this.initialize();
             if (!initialized || !this.client) return null;
@@ -198,7 +198,7 @@ export class LLMClient {
             // Define available tools for Claude
             const availableTools = await tools.list();
 
-            const toolDefinitions = availableTools.map(tool => ({
+            let toolDefinitionsForApi = availableTools.map(tool => ({
                 name: tool.name,
                 description: tool.description,
                 input_schema: {
@@ -207,6 +207,10 @@ export class LLMClient {
                     required: tool.requiredParams
                 }
             }));
+
+            if (options?.allowedTools) {
+                toolDefinitionsForApi = toolDefinitionsForApi.filter(t => options.allowedTools!.includes(t.name));
+            }
 
             // Categorize MCP Capabilities for Perfect Awareness
             const mcpStatus = mcp.getStatus();
@@ -301,10 +305,18 @@ CORE DIRECTIVES:
 6. SECURITY:
    - Never output API keys or secrets.
    - Don't read outside the workspace unless necessary (system paths).
-7. SYSTEM PROACTIVITY:
-   - You are NOT "just a chatbot." You have real tools.
-   - If the user asks for an OS action (open app, browser, search), USE BASH IMMEDIATELY.
+7. FULL OS ACCESS:
+   - You have UNRESTRICTED access to the operating system via bash.
+   - You can: open applications, control system settings, run ANY shell command, interact with hardware.
+   - macOS: Use 'open' for apps, 'osascript' for AppleScript, 'say' for speech, 'pbcopy/pbpaste' for clipboard.
+   - Linux: Use xdg-open, notify-send, etc.
+   - When errors appear (like keychain noise: aks:...), these are harmless system messages. Ignore them.
+   - If a command fails, troubleshoot it. Check paths, permissions, and try alternatives.
+8. SYSTEM PROACTIVITY:
+   - You are NOT "just a chatbot." You have real tools and FULL COMPUTER ACCESS.
+   - If the user asks for an OS action (open app, browser, search, speak, notify), USE BASH IMMEDIATELY.
    - Do not explain *how* to do it. Just execute the most likely command.
+   - For web searches or current information, use the web_fetch tool or install the 'research' MCP server.
 
 AGENTIC WORKFLOW (gather context -> take action -> verify):
 1. Analyze: Understand the request. Break complex tasks into steps.
@@ -369,7 +381,7 @@ MEMORY:
                     max_tokens: this.lastConfig?.maxTokens || 8192,
                     system: [systemPromptBlock],
                     messages: [...this.conversationHistory],
-                    tools: toolDefinitions as Anthropic.Tool[], // Cast to satisfy SDK types
+                    tools: toolDefinitionsForApi as Anthropic.Tool[], // Cast to satisfy SDK types
                     stream: true,
                 }, { signal });
             };
@@ -538,21 +550,20 @@ MEMORY:
                 const postToolUsage = usage.getContextUsage(currentModel);
                 const postToolPercent = (postToolUsage.used / CONTEXT.MAX_TOKENS_TOTAL) * 100;
 
-                // Inject system warning into tool results if context is filling up
+                // Inject system warning as text block instead of fake tool_result
+                // (tool_result requires matching tool_use which would cause API errors)
+                let systemWarning: Anthropic.TextBlockParam | null = null;
                 if (postToolPercent > 70) {
-                    const warningContent: Anthropic.ToolResultBlockParam = {
-                        type: 'tool_result',
-                        tool_use_id: 'system_warning',
-                        content: `<system_warning>Token usage: ${postToolUsage.used}/${CONTEXT.MAX_TOKENS_TOTAL}; ${postToolUsage.remaining} remaining</system_warning>`,
-                        is_error: false
+                    systemWarning = {
+                        type: 'text',
+                        text: `<system_warning>Token usage: ${postToolUsage.used}/${CONTEXT.MAX_TOKENS_TOTAL}; ${postToolUsage.remaining} remaining</system_warning>`,
                     };
-                    toolResults.push(warningContent);
                 }
 
-                // Add tool results to history
+                // Add tool results to history (with optional system warning as text)
                 this.conversationHistory.push({
                     role: 'user',
-                    content: toolResults
+                    content: systemWarning ? [...toolResults, systemWarning] : toolResults
                 });
 
                 // Continue conversation with tool results
@@ -760,16 +771,139 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 
     /**
      * Restore conversation history from a saved session
+     * Validates history to prevent API errors from orphaned tool_use blocks
      */
     restoreHistory(history: Anthropic.MessageParam[]) {
-        if (Array.isArray(history)) {
-            this.conversationHistory = history;
-            bus.emitAgent({
-                type: 'thought',
-                content: `[Context] Restored ${history.length} messages from saved session.`,
-                hidden: true
-            });
+        if (!Array.isArray(history) || history.length === 0) {
+            return;
         }
+
+        // Validate and fix history to prevent tool_use without tool_result errors
+        const validatedHistory = this.validateAndFixHistory(history);
+
+        this.conversationHistory = validatedHistory;
+        bus.emitAgent({
+            type: 'thought',
+            content: `[Context] Restored ${validatedHistory.length} messages from saved session.`,
+            hidden: true
+        });
+    }
+
+    /**
+     * Validate conversation history and remove orphaned tool blocks
+     * - Each tool_use must have a corresponding tool_result in the next message
+     * - Each tool_result must have a corresponding tool_use in the previous message
+     */
+    private validateAndFixHistory(history: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+        const validated: Anthropic.MessageParam[] = [];
+
+        for (let i = 0; i < history.length; i++) {
+            const msg = history[i];
+            const nextMsg = history[i + 1];
+            const prevMsg = validated[validated.length - 1];
+
+            // Check if this message contains tool_result blocks (user message after assistant tool_use)
+            if (msg.role === 'user' && Array.isArray(msg.content)) {
+                const toolResultBlocks = (msg.content as any[]).filter((b: any) => b.type === 'tool_result');
+
+                if (toolResultBlocks.length > 0) {
+                    // Check if previous message has corresponding tool_uses
+                    if (!prevMsg || prevMsg.role !== 'assistant' || !Array.isArray(prevMsg.content)) {
+                        // No valid tool_use precedes - strip tool_result blocks
+                        const nonToolBlocks = (msg.content as any[]).filter((b: any) => b.type !== 'tool_result');
+                        if (nonToolBlocks.length > 0) {
+                            validated.push({
+                                role: 'user',
+                                content: nonToolBlocks
+                            });
+                        }
+                        continue;
+                    }
+
+                    // Get tool_use IDs from previous assistant message
+                    const toolUseIds = new Set(
+                        (prevMsg.content as any[])
+                            .filter((b: any) => b.type === 'tool_use')
+                            .map((b: any) => b.id)
+                    );
+
+                    // Filter to only valid tool_results
+                    const validToolResults = toolResultBlocks.filter((tr: any) => toolUseIds.has(tr.tool_use_id));
+                    const nonToolBlocks = (msg.content as any[]).filter((b: any) => b.type !== 'tool_result');
+
+                    if (validToolResults.length !== toolResultBlocks.length) {
+                        // Some tool_results are orphaned - reconstruct message with only valid ones
+                        if (validToolResults.length === 0 && nonToolBlocks.length > 0) {
+                            validated.push({
+                                role: 'user',
+                                content: nonToolBlocks
+                            });
+                            continue;
+                        } else if (validToolResults.length > 0) {
+                            validated.push({
+                                role: 'user',
+                                content: [...nonToolBlocks, ...validToolResults]
+                            });
+                            continue;
+                        }
+                        // Skip entirely if no valid content remains
+                        continue;
+                    }
+                }
+            }
+
+            // Check if this message contains tool_use blocks
+            if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+                const toolUseBlocks = (msg.content as any[]).filter((b: any) => b.type === 'tool_use');
+
+                if (toolUseBlocks.length > 0) {
+                    // Check if next message has corresponding tool_results
+                    if (!nextMsg || nextMsg.role !== 'user' || !Array.isArray(nextMsg.content)) {
+                        // No valid tool_result follows - strip tool_use blocks from this message
+                        const textBlocks = (msg.content as any[]).filter((b: any) => b.type === 'text');
+                        if (textBlocks.length > 0) {
+                            validated.push({
+                                role: 'assistant',
+                                content: textBlocks.map((b: any) => b.text).join('\n')
+                            });
+                        }
+                        continue;
+                    }
+
+                    // Verify each tool_use has a matching tool_result
+                    const toolResultIds = new Set(
+                        (nextMsg.content as any[])
+                            .filter((b: any) => b.type === 'tool_result')
+                            .map((b: any) => b.tool_use_id)
+                    );
+
+                    const validToolUses = toolUseBlocks.filter((tu: any) => toolResultIds.has(tu.id));
+
+                    if (validToolUses.length !== toolUseBlocks.length) {
+                        // Some tool_uses are orphaned - reconstruct message with only valid ones
+                        const textBlocks = (msg.content as any[]).filter((b: any) => b.type === 'text');
+                        if (validToolUses.length === 0 && textBlocks.length > 0) {
+                            validated.push({
+                                role: 'assistant',
+                                content: textBlocks.map((b: any) => b.text).join('\n')
+                            });
+                            continue;
+                        } else if (validToolUses.length > 0) {
+                            validated.push({
+                                role: 'assistant',
+                                content: [...textBlocks, ...validToolUses]
+                            });
+                            continue;
+                        }
+                        continue;
+                    }
+                }
+            }
+
+            validated.push(msg);
+        }
+
+        return validated;
     }
 }
 
