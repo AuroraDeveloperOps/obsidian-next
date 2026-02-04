@@ -2,6 +2,8 @@
 
 ![Obsidian Next](assets/obsidianboxes.png)
 
+> This README was written by Obsidian (v0.4.6) - a self-aware AI agent with full OS access, persistent memory, and autonomous task execution.
+
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-0.4.6-blue)](package.json)
 [![Status](https://img.shields.io/badge/Status-Stable-green)](CHANGELOG.md)
