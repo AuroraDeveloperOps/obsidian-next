@@ -213,4 +213,4 @@ npm start        # Run locally
 
 ## License
 
-Copyright 2026 Aurora Labs. Licensed under [Apache 2.0](LICENSE).
+Copyright 2026 Aurora Foundation. Licensed under [Apache 2.0](LICENSE).
