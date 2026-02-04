@@ -569,6 +569,13 @@ CORE DIRECTIVES:
 6. SECURITY:
    - Never output API keys or secrets.
    - Don't read outside the workspace unless necessary (system paths).
+
+CRITICAL RESPONSE RULE:
+After executing any tool, you MUST respond with a brief text message to the user summarizing the result.
+NEVER end a turn silently after a tool call - always provide a human-readable response.
+Example: If list_scheduled_tasks returns "No active scheduled tasks", respond: "No background tasks scheduled."
+Example: If read returns file contents, summarize what you found.
+The user should ALWAYS see a text response from you, not just raw tool output.
 7. FULL OS ACCESS:
    - You have UNRESTRICTED access to the operating system via bash.
    - You can: open applications, control system settings, run ANY shell command, interact with hardware.
@@ -899,36 +906,41 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
 
                     let result;
 
-                    // Handle Anthropic-defined tools
-                    // Note: Coordinate scaling is now handled in ComputerUseTool (tools.ts)
-                    // This ensures scaling works both with and without pilot mode
-                    if (this.computerUseState.enabled && toolUse.name === 'computer') {
-                        result = await tools.execute('computer', toolUse.input);
-                    } else if (this.computerUseState.enabled && toolUse.name === 'str_replace_based_edit_tool') {
-                        // Map Anthropic text_editor to our edit tool
-                        const cmd = toolUse.input.command;
-                        if (cmd === 'view') {
-                            result = await tools.execute('read', { path: toolUse.input.path });
-                        } else if (cmd === 'create') {
-                            result = await tools.execute('write', {
-                                path: toolUse.input.path,
-                                content: toolUse.input.file_text || ''
-                            });
-                        } else if (cmd === 'str_replace') {
-                            result = await tools.execute('edit', {
-                                path: toolUse.input.path,
-                                search: toolUse.input.old_str,
-                                replace: toolUse.input.new_str
-                            });
+                    try {
+                        // Handle Anthropic-defined tools
+                        // Note: Coordinate scaling is now handled in ComputerUseTool (tools.ts)
+                        // This ensures scaling works both with and without pilot mode
+                        if (this.computerUseState.enabled && toolUse.name === 'computer') {
+                            result = await tools.execute('computer', toolUse.input);
+                        } else if (this.computerUseState.enabled && toolUse.name === 'str_replace_based_edit_tool') {
+                            // Map Anthropic text_editor to our edit tool
+                            const cmd = toolUse.input.command;
+                            if (cmd === 'view') {
+                                result = await tools.execute('read', { path: toolUse.input.path });
+                            } else if (cmd === 'create') {
+                                result = await tools.execute('write', {
+                                    path: toolUse.input.path,
+                                    content: toolUse.input.file_text || ''
+                                });
+                            } else if (cmd === 'str_replace') {
+                                result = await tools.execute('edit', {
+                                    path: toolUse.input.path,
+                                    search: toolUse.input.old_str,
+                                    replace: toolUse.input.new_str
+                                });
+                            } else {
+                                result = { success: false, error: `Unknown editor command: ${cmd}` };
+                            }
+                        } else if (this.computerUseState.enabled && toolUse.name === 'bash') {
+                            // Anthropic bash tool - pass through to our bash tool
+                            result = await tools.execute('bash', { command: toolUse.input.command });
                         } else {
-                            result = { success: false, error: `Unknown editor command: ${cmd}` };
+                            // Standard tool execution
+                            result = await tools.execute(toolUse.name, toolUse.input);
                         }
-                    } else if (this.computerUseState.enabled && toolUse.name === 'bash') {
-                        // Anthropic bash tool - pass through to our bash tool
-                        result = await tools.execute('bash', { command: toolUse.input.command });
-                    } else {
-                        // Standard tool execution
-                        result = await tools.execute(toolUse.name, toolUse.input);
+                    } catch (toolError: any) {
+                        console.error(`[LLM] Tool execution error for ${toolUse.name}:`, toolError);
+                        result = { success: false, error: `Tool execution failed: ${toolError.message}` };
                     }
 
                     // Redact PII
@@ -981,6 +993,15 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
                         content: toolResultContent,
                         is_error: !result.success
                     });
+
+                    // Emit informational tool results as thoughts so user sees them
+                    // (don't rely on LLM to always comment on results)
+                    if (result.success && outputContent && !result.content) {
+                        bus.emitAgent({
+                            type: 'thought',
+                            content: outputContent
+                        });
+                    }
                 }
 
                 // Add assistant message with tool uses to history
@@ -1024,7 +1045,38 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
                 });
 
                 // Continue conversation with tool results
-                return await this.streamChat('');
+                const recursiveResponse = await this.streamChat('');
+
+                // If LLM responded with meaningful text, use that
+                if (recursiveResponse && recursiveResponse.trim()) {
+                    return recursiveResponse;
+                }
+
+                // LLM didn't respond - extract and return tool output as the response
+                // This ensures user ALWAYS sees something, not just "Completed in X.Xs"
+                if (toolResults.length > 0) {
+                    const lastToolResult = toolResults[toolResults.length - 1];
+                    let content = lastToolResult.content;
+
+                    // Handle array content (extract text blocks)
+                    if (Array.isArray(content)) {
+                        content = content
+                            .filter((b: any) => b.type === 'text')
+                            .map((b: any) => b.text)
+                            .join('\n');
+                    }
+
+                    if (typeof content === 'string' && content.trim()) {
+                        bus.emitAgent({
+                            type: 'thought',
+                            content: content
+                        });
+                        return content;
+                    }
+                }
+
+                // Last resort fallback
+                return recursiveResponse || '';
             }
 
             // Add assistant response to history
@@ -1059,10 +1111,16 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
             if (error.name === 'AbortError' || error.type === 'aborted') {
                 return null;
             }
+            // Log detailed error for debugging
+            const errorDetails = error.status
+                ? `[${error.status}] ${error.message}`
+                : error.message || String(error);
             bus.emitAgent({
                 type: 'error',
-                message: `LLM Error: ${error.message}`
+                message: `LLM Error: ${errorDetails}`
             });
+            // Log to console for debugging
+            console.error('[LLM] API Error:', error);
             return null;
         } finally {
             this.abortController = null;

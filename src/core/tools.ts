@@ -1769,7 +1769,7 @@ export const ScheduleTool: Tool = {
  */
 export const ListScheduledTasksTool: Tool = {
     name: 'list_scheduled_tasks',
-    description: 'List all active scheduled background tasks',
+    description: 'List all scheduled/recurring background cron jobs. Use this when the user asks "what tasks are scheduled", "show scheduled tasks", "check scheduled jobs", "list cron jobs", or any variation asking about background recurring tasks.',
     inputSchema: {},
     requiredParams: [],
 

@@ -16,6 +16,7 @@ import { exitCommand } from '../commands/exit.js';
 import { resumeCommand } from '../commands/resume.js';
 import { diffCommand } from '../commands/diff.js';
 import { pilotCommand } from '../commands/pilot.js';
+import { scheduledTasksCommand } from '../commands/scheduled_tasks.js';
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -62,8 +63,8 @@ export class CommandRegistry {
         this.register('mcp', 'Manage Model Context Protocol', async (args) => {
             // Placeholder if needed, but UI usually handles it
         }, { isView: true, viewId: 'mcp', aliases: ['plugin'] });
-
         this.register('pilot', 'Enable/disable Computer Use mode', pilotCommand, { aliases: ['computer', 'desktop'] });
+        this.register('scheduled_tasks', 'List all scheduled background tasks', scheduledTasksCommand, { aliases: ['tasks'] });
 
         this.register('schedule_test', 'Schedule a test task', async () => {
             const { scheduler } = await import('./scheduler.js');

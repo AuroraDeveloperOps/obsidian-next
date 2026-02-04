@@ -361,13 +361,20 @@ APPROVAL: <yes if destructive, no otherwise>`;
 
         const response = await llm.streamChat(enhancedInput);
 
-        if (response) {
+        // null means actual failure, empty string means LLM returned no text (valid for tool-only responses)
+        if (response !== null) {
+            // Emit the final response as a thought right before 'done' to ensure visibility
+            // This handles cases where LLM only called tools without generating text,
+            // or where tool output thoughts got lost due to consecutive thought handling
+            if (response && response.trim()) {
+                bus.emitAgent({ type: 'thought', content: response });
+            }
             await context.setLastAction(input.slice(0, 50));
             const durationMs = Date.now() - startTime;
             usage.addSessionDuration(durationMs);
             bus.emitAgent({ type: 'done', summary: `Completed in ${(durationMs / 1000).toFixed(1)}s` });
         } else {
-            bus.emitAgent({ type: 'error', message: 'Failed to get response' });
+            bus.emitAgent({ type: 'error', message: 'Failed to get response from LLM' });
         }
     }
 

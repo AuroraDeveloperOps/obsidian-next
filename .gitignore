@@ -53,3 +53,4 @@ test-workspace/
 workspace/
 workspace/*
 ObsidianController.tsx
+temp_gemini/
