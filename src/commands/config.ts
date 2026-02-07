@@ -448,10 +448,10 @@ async function resetConfig(): Promise<void> {
     }
 
     await config.save({
-        model: 'claude-sonnet-4-5-20250929',
+        model: 'claude-opus-4-6-20260207',
         maxTokens: 8192,
         language: 'en',
-        workspaceRoot: process.cwd(),
+        workspaceRoot: os.homedir(),
         executionMode: 'local',
         sandbox: {
             allowedDomains: ['*.github.com', '*.npmjs.org', '*.npmjs.com', 'api.anthropic.com', 'registry.npmjs.org'],
@@ -461,6 +461,7 @@ async function resetConfig(): Promise<void> {
             denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config'],
         },
         summarizerModel: 'claude-haiku-4-5-20251001',
+        thinkingEffort: 'high',
         preCountTokens: true,
     });
 

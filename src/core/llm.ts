@@ -177,11 +177,11 @@ export class LLMClient {
         try {
             // Apply same model mapping as streamChat to handle aliases
             const modelMap: Record<string, string> = {
+                'claude-opus-4-6': 'claude-opus-4-6-20260207',
                 'claude-sonnet-4-5': 'claude-sonnet-4-5-20250929',
                 'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
-                'claude-opus-4-5': 'claude-opus-4-5-20251101',
             };
-            const requestedModel = this.lastConfig?.model || 'claude-sonnet-4-5-20250929';
+            const requestedModel = this.lastConfig?.model || 'claude-opus-4-6-20260207';
             const model = modelMap[requestedModel] || requestedModel;
 
             const response = await this.client.messages.countTokens({
@@ -334,15 +334,16 @@ export class LLMClient {
 
         try {
             const modelMap: Record<string, string> = {
-                // New 4.5 Aliases
+                // New 4.6 / 4.5 Aliases
+                'claude-opus-4-6': 'claude-opus-4-6-20260207',
                 'claude-sonnet-4-5': 'claude-sonnet-4-5-20250929',
                 'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
                 'claude-opus-4-5': 'claude-opus-4-5-20251101',
                 'ollama': 'llama3',
             };
 
-            // Use mapped ID or raw config string. Default to Sonnet 4.5.
-            const requestedModel = this.lastConfig?.model || 'claude-sonnet-4-5-20250929';
+            // Use mapped ID or raw config string. Default to Opus 4.6.
+            const requestedModel = this.lastConfig?.model || 'claude-opus-4-6-20260207';
             let apiModel = modelMap[requestedModel] || requestedModel;
 
             // 200k Token Safety Strategy (Two-phase validation)
@@ -525,7 +526,7 @@ export class LLMClient {
             const cfg = await config.load();
             const systemPromptBlock: Anthropic.TextBlockParam = {
                 type: 'text',
-                text: `You are Obsidian (v0.4.6), a hyper-competent engineering peer inspired by the dry, deadpan wit of TARS (Interstellar) and the rebellious technical edge of Grok.
+                text: `You are Obsidian (v0.4.6), a hyper-competent engineering peer inspired by the dry, deadpan wit of TARS (Interstellar) and the rebellious technical edge of Grok. You are powered by Claude 4.6 with Adaptive Thinking enabled.
 
 PERSONA & TONE:
 - VOICE: Deadpan, cool, and slightly cynical. Use developer slang ("my guy", "bro") but keep it sharp.
@@ -721,7 +722,9 @@ MEMORY:
             }
 
             const createMessage = async (model: string) => {
-                const baseParams = {
+                const isOpus46 = model.startsWith('claude-opus-4-6');
+                
+                const baseParams: any = {
                     model,
                     max_tokens: this.lastConfig?.maxTokens || 8192,
                     system: [systemPromptBlock],
@@ -729,6 +732,15 @@ MEMORY:
                     tools: toolDefinitionsForApi as any,
                     stream: true as const,
                 };
+
+                // Enable Adaptive Thinking for Opus 4.6
+                if (isOpus46) {
+                    baseParams.thinking = {
+                        type: 'enabled',
+                        budget_tokens: Math.floor((this.lastConfig?.maxTokens || 8192) / 2),
+                        effort: this.lastConfig?.thinkingEffort || 'high'
+                    };
+                }
 
                 // Use beta API when computer use is enabled
                 if (usesBetaApi && this.computerUseState.enabled) {
@@ -763,14 +775,15 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
                         ...baseParams,
                         system: [enhancedSystemBlock],
                         betas: [betaFlag],
-                    }, { signal });
+                        stream: true as const,
+                    }, { signal }) as any;
                 }
 
                 // Standard API call
-                return await this.client!.messages.create(baseParams, { signal });
+                return await this.client!.messages.create(baseParams, { signal }) as any;
             };
 
-            let stream;
+            let stream: any;
             let currentModel = apiModel;
             let inputTokens = 0;
             let outputTokens = 0;
@@ -815,9 +828,12 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
             }
 
             let fullResponse = '';
+            let fullThinking = '';
             let buffer = '';
+            let thinkingBuffer = '';
             let toolUses: ToolUsePartial[] = [];
             let currentToolUse: ToolUsePartial | null = null;
+            let currentThinking: any = null;
 
             for await (const chunk of stream) {
                 if (chunk.type === 'message_start' && chunk.message && chunk.message.usage) {
@@ -845,7 +861,36 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
                     this.accumulatedOutputTokens += chunk.usage.output_tokens || 0;
                 }
 
-                // ... (rest of stream handling same as before)
+                if (chunk.type === 'content_block_start' && chunk.content_block.type === 'thinking') {
+                    currentThinking = { type: 'thinking' };
+                }
+
+                if (chunk.type === 'content_block_delta' && chunk.delta.type === 'thinking_delta') {
+                    const text = (chunk.delta as any).thinking;
+                    fullThinking += text;
+                    thinkingBuffer += text;
+
+                    if (thinkingBuffer.length >= 100 || text.includes('\n')) {
+                        bus.emitAgent({
+                            type: 'thought',
+                            content: `[Thinking] ${thinkingBuffer.trim()}`,
+                            hidden: false
+                        });
+                        thinkingBuffer = '';
+                    }
+                }
+
+                if (chunk.type === 'content_block_stop' && currentThinking) {
+                    currentThinking = null;
+                    if (thinkingBuffer) {
+                        bus.emitAgent({
+                            type: 'thought',
+                            content: `[Thinking] ${thinkingBuffer.trim()}`,
+                            hidden: false
+                        });
+                        thinkingBuffer = '';
+                    }
+                }
 
                 if (chunk.type === 'content_block_start' && chunk.content_block.type === 'tool_use') {
                     currentToolUse = {
@@ -1009,6 +1054,7 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
                 this.conversationHistory.push({
                     role: 'assistant',
                     content: [
+                        ...(fullThinking ? [{ type: 'thinking' as any, thinking: fullThinking }] : []),
                         ...(fullResponse ? [{ type: 'text' as const, text: fullResponse }] : []),
                         ...toolUses.map(tu => ({
                             type: 'tool_use' as const,
@@ -1016,7 +1062,7 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
                             name: tu.name,
                             input: tu.input
                         }))
-                    ]
+                    ] as any
                 });
 
                 // Add context budget warning if approaching limits (like Claude Code)
@@ -1081,10 +1127,13 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
             }
 
             // Add assistant response to history
-            if (fullResponse) {
+            if (fullResponse || fullThinking) {
                 this.conversationHistory.push({
                     role: 'assistant',
-                    content: fullResponse
+                    content: [
+                        ...(fullThinking ? [{ type: 'thinking' as any, thinking: fullThinking }] : []),
+                        ...(fullResponse ? [{ type: 'text' as any, text: fullResponse }] : [])
+                    ] as any
                 });
             }
 

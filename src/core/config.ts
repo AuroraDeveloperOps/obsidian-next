@@ -8,7 +8,7 @@ import { z } from 'zod';
 // Do not store API keys in config - use /init to set up secure key storage
 
 export const ConfigSchema = z.object({
-    model: z.string().default('claude-sonnet-4-5-20250929'),
+    model: z.string().default('claude-opus-4-6-20260207'),
     workspaceRoot: z.string().default(os.homedir()),
     maxTokens: z.number().default(8192),
     language: z.string().default('en'),
@@ -28,6 +28,9 @@ export const ConfigSchema = z.object({
     // Context Management
     summarizerModel: z.string().default('claude-haiku-4-5-20251001'),
 
+    // Adaptive Thinking
+    thinkingEffort: z.enum(['low', 'medium', 'high', 'max']).default('high'),
+
     // Token Counting
     // When true, uses Anthropic's countTokens API for accurate pre-request validation
     // Set to false to skip pre-counting (saves ~100-500ms latency per request)
@@ -37,7 +40,7 @@ export const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 
 const DEFAULT_CONFIG: Config = {
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-opus-4-6-20260207',
     maxTokens: 8192,
     language: 'en',
     workspaceRoot: os.homedir(),
@@ -50,6 +53,7 @@ const DEFAULT_CONFIG: Config = {
         denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config'],
     },
     summarizerModel: 'claude-haiku-4-5-20251001',
+    thinkingEffort: 'high',
     preCountTokens: true,
 };
 
