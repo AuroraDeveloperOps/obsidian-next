@@ -10,6 +10,8 @@ import { context } from './context.js';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { pipeline } from '@xenova/transformers';
+import chokidar from 'chokidar';
 
 export type MemoType =
     | 'user_preference'   // User preferences (name, settings, etc.)
@@ -29,11 +31,85 @@ export interface Memo {
 
 export class MemoryManager {
     private initialized = false;
+    private extractor: any = null;
+    private watcher: any = null;
 
     async init(): Promise<void> {
         if (this.initialized) return;
-        // Schema is handled by DatabaseManager and MigrationManager
+        
+        // Load embedding model lazily
+        try {
+            this.extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+        } catch (e) {
+            console.error('Failed to initialize embedding pipeline:', e);
+        }
+
         this.initialized = true;
+        this.startWatcher();
+    }
+
+    private startWatcher() {
+        const memoryPath = path.join(os.homedir(), '.obsidian-next', 'MEMORY.md');
+        
+        if (this.watcher) return;
+
+        this.watcher = chokidar.watch(memoryPath, {
+            persistent: true,
+            ignoreInitial: true
+        });
+
+        this.watcher.on('change', async () => {
+            try {
+                await this.importFromMarkdown(memoryPath);
+            } catch (e) {
+                // Ignore watcher errors
+            }
+        });
+    }
+
+    async importFromMarkdown(filePath: string): Promise<void> {
+        try {
+            const content = await fs.readFile(filePath, 'utf-8');
+            const sections = content.split('## ').slice(1);
+
+            const typeMap: Record<string, MemoType> = {
+                'User Preferences': 'user_preference',
+                'Project Facts': 'project_fact',
+                'Decision Log': 'decision_log',
+                'Learned Patterns': 'learned_pattern',
+                'Daily Summaries': 'daily_summary'
+            };
+
+            for (const section of sections) {
+                const lines = section.split('\n');
+                const typeHeader = lines[0].trim();
+                const type = typeMap[typeHeader];
+                if (!type) continue;
+
+                const memoBlocks = section.split('### ').slice(1);
+                for (const block of memoBlocks) {
+                    const blockLines = block.split('\n');
+                    const key = blockLines[0].trim();
+                    const memoContent = blockLines.slice(1)
+                        .filter(l => !l.trim().startsWith('*Last updated:'))
+                        .join('\n').trim();
+
+                    if (key && memoContent) {
+                        await this.store(type, key, memoContent);
+                    }
+                }
+            }
+        } catch {
+            // Ignore parse errors
+        }
+    }
+
+    private async getEmbedding(text: string): Promise<Float32Array> {
+        await this.init();
+        if (!this.extractor) throw new Error('Embedding pipeline not initialized');
+
+        const output = await this.extractor(text, { pooling: 'mean', normalize: true });
+        return Float32Array.from(output.data);
     }
 
     /**
@@ -44,25 +120,43 @@ export class MemoryManager {
         const sessionId = context.get().session_id;
 
         try {
-            // Check if this key already exists
-            const existing = db.getDb().prepare(`
-                SELECT id FROM memos WHERE type = ? AND key = ?
-            `).get(type, key) as { id: number } | undefined;
+            // Generate embedding first
+            const embedding = await this.getEmbedding(`${key}: ${content}`);
 
-            if (existing) {
-                // Update existing
-                db.getDb().prepare(`
-                    UPDATE memos SET content = ?, updated_at = strftime('%s', 'now'), session_id = ?
-                    WHERE id = ?
-                `).run(content, sessionId, existing.id);
-            } else {
-                // Insert new
-                db.getDb().prepare(`
-                    INSERT INTO memos (session_id, type, key, content)
-                    VALUES (?, ?, ?, ?)
-                `).run(sessionId, type, key, content);
-            }
+            // Use transaction for consistency
+            const transaction = db.getDb().transaction(() => {
+                // Check if this key already exists
+                const existing = db.getDb().prepare(`
+                    SELECT id FROM memos WHERE type = ? AND key = ?
+                `).get(type, key) as { id: number } | undefined;
 
+                let memoId: number;
+
+                if (existing) {
+                    // Update existing
+                    db.getDb().prepare(`
+                        UPDATE memos SET content = ?, updated_at = strftime('%s', 'now'), session_id = ?
+                        WHERE id = ?
+                    `).run(content, sessionId, existing.id);
+                    memoId = existing.id;
+                } else {
+                    // Insert new
+                    const result = db.getDb().prepare(`
+                        INSERT INTO memos (session_id, type, key, content)
+                        VALUES (?, ?, ?, ?)
+                    `).run(sessionId, type, key, content);
+                    memoId = result.lastInsertRowid as number;
+                }
+
+                // Update vector table
+                db.getDb().prepare(`
+                    INSERT INTO vec_memos (memo_id, embedding)
+                    VALUES (?, ?)
+                    ON CONFLICT(memo_id) DO UPDATE SET embedding = excluded.embedding
+                `).run(memoId, embedding);
+            });
+
+            transaction();
             return true;
         } catch (e) {
             console.error('Failed to store memory:', e);
@@ -108,6 +202,45 @@ export class MemoryManager {
         await this.init();
 
         try {
+            // Generate query embedding
+            const embedding = await this.getEmbedding(query);
+
+            // Perform KNN search
+            let sql = `
+                SELECT m.id, m.type, m.key, m.content, m.created_at, m.updated_at,
+                       v.distance
+                FROM vec_memos v
+                JOIN memos m ON v.memo_id = m.id
+                WHERE v.embedding MATCH ?
+            `;
+            const params: any[] = [embedding];
+
+            if (type) {
+                sql += ' AND m.type = ?';
+                params.push(type);
+            }
+
+            sql += ' ORDER BY v.distance ASC LIMIT 20';
+
+            const rows = db.getDb().prepare(sql).all(...params) as any[];
+
+            return rows.map(row => ({
+                id: row.id,
+                type: row.type as MemoType,
+                key: row.key,
+                content: row.content,
+                created_at: new Date(row.created_at * 1000).toISOString(),
+                updated_at: new Date(row.updated_at * 1000).toISOString(),
+            }));
+        } catch (e) {
+            console.error('Failed to search memories:', e);
+            // Fallback to keyword search
+            return this.keywordSearch(query, type);
+        }
+    }
+
+    private async keywordSearch(query: string, type?: MemoType): Promise<Memo[]> {
+        try {
             let sql = `
                 SELECT id, type, key, content, created_at, updated_at
                 FROM memos
@@ -133,7 +266,6 @@ export class MemoryManager {
                 updated_at: new Date(row.updated_at * 1000).toISOString(),
             }));
         } catch (e) {
-            console.error('Failed to search memories:', e);
             return [];
         }
     }

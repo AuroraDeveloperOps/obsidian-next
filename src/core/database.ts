@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { existsSync, mkdirSync } from 'fs';
 import os from 'os';
+import * as sqliteVec from 'sqlite-vec';
 
 const DB_DIR = path.join(os.homedir(), '.obsidian-next');
 const DB_PATH = path.join(DB_DIR, 'state.db');
@@ -19,6 +20,10 @@ export class DatabaseManager {
 
         this.db = new Database(DB_PATH);
         this.db.pragma('journal_mode = WAL'); // High concurrency
+        
+        // Load sqlite-vec extension
+        sqliteVec.load(this.db);
+        
         this.initSchema();
     }
 
@@ -87,6 +92,14 @@ export class DatabaseManager {
                 content TEXT NOT NULL,
                 created_at INTEGER DEFAULT (strftime('%s', 'now')),
                 updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+            );
+        `);
+
+        // Vector Table for Semantic Search
+        this.db.exec(`
+            CREATE VIRTUAL TABLE IF NOT EXISTS vec_memos USING vec0(
+                memo_id INTEGER PRIMARY KEY,
+                embedding FLOAT[384]
             );
         `);
 

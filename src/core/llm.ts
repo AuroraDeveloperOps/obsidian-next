@@ -1212,6 +1212,14 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
             try {
                 const summary = await this.summarizeBlock(messagesToSummarize);
 
+                // Store as episodic memory
+                try {
+                    const { memory } = await import('./memory.js');
+                    await memory.store('daily_summary', `context_compression_${Date.now()}`, summary);
+                } catch (memError) {
+                    // Non-fatal, continue with compression
+                }
+
                 // Construct new history
                 const keptStart = this.conversationHistory.slice(0, CONTEXT.KEEP_FIRST);
                 const keptEnd = this.conversationHistory.slice(summarizeEnd);
