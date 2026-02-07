@@ -5,6 +5,7 @@ import fs from 'fs';
 import { bus } from './bus.js';
 import { agent } from './agent.js';
 import { config } from './config.js';
+import { telegramGateway } from './telegram.js';
 import { AgentEvent, UserEvent } from '../events/types.js';
 import { fileURLToPath } from 'url';
 
@@ -33,6 +34,9 @@ export class Daemon {
 
         // Initialize agent
         await agent.init();
+
+        // Initialize Telegram Gateway
+        await telegramGateway.init();
 
         this.server = net.createServer((socket) => {
             this.handleConnection(socket);
@@ -170,6 +174,7 @@ WantedBy=default.target`;
         if (this.server) {
             this.server.close();
         }
+        await telegramGateway.stop();
         if (fs.existsSync(SOCKET_PATH)) {
             fs.unlinkSync(SOCKET_PATH);
         }

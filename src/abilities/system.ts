@@ -1,12 +1,73 @@
 
 import { bus } from '../core/bus.js';
 import { usage } from '../core/usage.js';
+import { config } from '../core/config.js';
 import { Scheduler } from '../core/scheduler.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 /**
  * Register system capabilities
  */
 export function registerSystemAbilities(sched: Scheduler) {
+
+    // Audit: Proactive security scan
+    sched.registerAbility('system:audit', async () => {
+        const cfg = await config.load();
+        const sensitivePatterns = ['.env', '*.key', '*.pem', 'id_rsa'];
+        
+        bus.emitAgent({ type: 'thought', content: '[Audit] Starting proactive security scan...' });
+
+        try {
+            const { exec } = await import('child_process');
+            const { promisify } = await import('util');
+            const execAsync = promisify(exec);
+
+            // Simple search for sensitive files
+            const found = [];
+            for (const pattern of sensitivePatterns) {
+                try {
+                    const { stdout } = await execAsync(`find ${cfg.workspaceRoot} -name "${pattern}" -not -path "*/node_modules/*"`);
+                    if (stdout.trim()) found.push(...stdout.trim().split('\n'));
+                } catch { }
+            }
+
+            if (found.length > 0) {
+                bus.emitAgent({
+                    type: 'thought',
+                    content: `[Audit] Found ${found.length} potentially sensitive files:\n${found.slice(0, 5).join('\n')}`
+                });
+            } else {
+                bus.emitAgent({ type: 'thought', content: '[Audit] No immediate security risks found in workspace root.' });
+            }
+        } catch (e) {
+            console.error('[Audit] Failed:', e);
+        }
+    });
+
+    // Index: Proactive codebase mapping
+    sched.registerAbility('system:index', async () => {
+        const cfg = await config.load();
+        const mapPath = path.join(cfg.workspaceRoot, 'MAP.md');
+
+        bus.emitAgent({ type: 'thought', content: '[Index] Updating codebase map (MAP.md)...' });
+
+        try {
+            const { exec } = await import('child_process');
+            const { promisify } = await import('util');
+            const execAsync = promisify(exec);
+
+            const { stdout } = await execAsync(`find ${cfg.workspaceRoot} -maxdepth 2 -not -path '*/.*'`);
+            const structure = stdout.trim();
+
+            const markdown = `# Codebase Map\n\nGenerated on: ${new Date().toLocaleString()}\n\n\`\`\`\n${structure}\n\`\`\``;
+            await fs.writeFile(mapPath, markdown);
+
+            bus.emitAgent({ type: 'thought', content: `[Index] MAP.md updated successfully at ${mapPath}` });
+        } catch (e) {
+            console.error('[Index] Failed:', e);
+        }
+    });
 
     // Echo: Simple test function
     sched.registerAbility('system:echo', async (params) => {

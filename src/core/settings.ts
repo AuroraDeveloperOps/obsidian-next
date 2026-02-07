@@ -59,6 +59,13 @@ export const SettingsSchema = z.object({
             sleepTimeout: z.number().default(300000),    // 5m before sleep animation
         }).default({}),
     }).default({}),
+
+    // Remote Gateway (Telegram)
+    telegram: z.object({
+        enabled: z.boolean().default(false),
+        botToken: z.string().optional(),
+        allowedUserIds: z.array(z.string()).default([]),
+    }).default({}),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;
@@ -92,6 +99,10 @@ const DEFAULT_SETTINGS: Settings = {
             idleTimeout: 60000,      // 60s before idle animation
             sleepTimeout: 300000,    // 5m before sleep animation
         },
+    },
+    telegram: {
+        enabled: false,
+        allowedUserIds: [],
     },
 };
 
