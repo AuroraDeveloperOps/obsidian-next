@@ -83,6 +83,7 @@ export const Root = () => {
     const [isSleep, setIsSleep] = useState(false);
     const [latestActivity, setLatestActivity] = useState<{ content: string; color: string; } | undefined>();
     const [lastFileChange, setLastFileChange] = useState<{ path: string; op: string } | null>(null);
+    const [currentActivity, setCurrentActivity] = useState<string | null>(null);
 
     // Update latest activity on any agent event
     useEffect(() => {
@@ -289,6 +290,18 @@ export const Root = () => {
             // Track file changes for footer display
             if (event.type === 'tool_start') {
                 const tool = event.tool;
+                // Update current activity indicator
+                try {
+                    const args = JSON.parse(event.args);
+                    const firstVal = Object.values(args)[0];
+                    const summary = typeof firstVal === 'string'
+                        ? firstVal.length > 30 ? firstVal.slice(0, 30) + '...' : firstVal
+                        : '';
+                    setCurrentActivity(`${tool} ${summary}`.trim());
+                } catch {
+                    setCurrentActivity(tool);
+                }
+
                 if (tool === 'write' || tool === 'edit') {
                     try {
                         const args = JSON.parse(event.args);
@@ -297,6 +310,8 @@ export const Root = () => {
                         setLastFileChange({ path: shortPath, op: tool === 'write' ? 'W' : 'E' });
                     } catch { }
                 }
+            } else if (event.type === 'tool_result' || event.type === 'done' || event.type === 'error') {
+                setCurrentActivity(null);
             }
 
             setEvents(prev => {
@@ -632,7 +647,7 @@ export const Root = () => {
                     {/* Persistent Thinking Indicator - Sticky at bottom */}
                     <Box flexDirection="row" marginBottom={0} marginLeft={2}>
                         {isBusy && !isInitCommand && (
-                            <Glitter>Thinking...</Glitter>
+                            <Glitter>{currentActivity ? `⏳ ${currentActivity}` : 'Thinking...'}</Glitter>
                         )}
                         {isBackgroundBusy && (
                             <Box marginLeft={isBusy ? 4 : 0}>

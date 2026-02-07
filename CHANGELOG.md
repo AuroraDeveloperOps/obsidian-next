@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.7] - 2026-02-07
+
+### Added
+- **Tool Tree Display**: Consecutive tool calls now display with tree connectors (`┌├└`) instead of sequential spam. Groups parallel operations visually.
+- **TaskView Enhancements**:
+  - Progress bar showing completion percentage (`████░░░░░░ 40%`)
+  - Polished checkbox icons (`☐` empty, `☑` done)
+  - Keyboard navigation: `j/k` to move, `x` to mark done
+  - Visual selection indicator with cyan highlighting
+- **Activity Indicator**: Thinking status now shows current operation (e.g., `⏳ read src/config.ts`) instead of generic "Thinking..."
+- **Color-Coded Mode Display**: Footer mode indicator now uses distinct colors:
+  - `▶ AUTO` (green) - Full autonomy
+  - `⏸ PLAN` (yellow) - Review before execute
+  - `⏺ SAFE` (red) - Ask for everything
+
+### Changed
+- **MessageList**: Refactored to group tool batches with visual hierarchy
+- **Anti-Flicker**: Consecutive tool results maintain visual connection with pipe prefix
+
+### Technical
+- Added `groupToolCalls()` function for tool batch detection
+- Enhanced `Root.tsx` with `currentActivity` state tracking
+
+---
+
 ## [0.4.6] - 2026-02-02
 
 ### Added
