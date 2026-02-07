@@ -99,6 +99,44 @@ export class MigrationManager {
 
                 bus.emitAgent({ type: 'thought', content: '[Migration] Added session_permissions table.', hidden: true });
             }
+        },
+        {
+            version: 4,
+            description: 'Add memory graph support: relationships and temporal decay',
+            up: (db: Database) => {
+                // Create memo_relations table for tracking relationships between memos
+                db.exec(`
+                    CREATE TABLE IF NOT EXISTS memo_relations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        source_id INTEGER NOT NULL,
+                        target_id INTEGER NOT NULL,
+                        relation_type TEXT NOT NULL, -- 'related_to', 'derived_from', 'supersedes', 'contradicts'
+                        strength REAL DEFAULT 1.0, -- relationship strength 0.0-1.0
+                        created_at INTEGER DEFAULT (strftime('%s', 'now')),
+                        FOREIGN KEY (source_id) REFERENCES memos(id) ON DELETE CASCADE,
+                        FOREIGN KEY (target_id) REFERENCES memos(id) ON DELETE CASCADE,
+                        UNIQUE(source_id, target_id, relation_type)
+                    );
+                `);
+                db.exec('CREATE INDEX IF NOT EXISTS idx_memo_relations_source ON memo_relations(source_id);');
+                db.exec('CREATE INDEX IF NOT EXISTS idx_memo_relations_target ON memo_relations(target_id);');
+
+                // Add temporal decay columns to memos table
+                const tableInfo = db.prepare("PRAGMA table_info(memos)").all() as any[];
+                const hasAccessCount = tableInfo.some(col => col.name === 'access_count');
+                const hasLastAccessed = tableInfo.some(col => col.name === 'last_accessed');
+
+                if (!hasAccessCount) {
+                    db.exec('ALTER TABLE memos ADD COLUMN access_count INTEGER DEFAULT 0');
+                }
+                if (!hasLastAccessed) {
+                    // SQLite doesn't allow non-constant defaults in ALTER TABLE
+                    // Use NULL as default, will be set on first access
+                    db.exec('ALTER TABLE memos ADD COLUMN last_accessed INTEGER DEFAULT NULL');
+                }
+
+                bus.emitAgent({ type: 'thought', content: '[Migration] Added memory graph support: relations table and temporal decay columns.', hidden: true });
+            }
         }
     ];
 

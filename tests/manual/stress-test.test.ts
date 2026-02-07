@@ -70,7 +70,7 @@ describe('AI Stress Tests', () => {
         it('should handle medium context (10k tokens)', async () => {
             if (!apiKeyAvailable) return;
 
-            // Generate ~10k tokens of context
+            // Generate ~10k tokens of context (~2k words)
             const padding = 'This is a test sentence for context stress testing. '.repeat(200);
 
             const start = Date.now();
@@ -82,7 +82,7 @@ describe('AI Stress Tests', () => {
             console.log(`[10k context] Latency: ${latency}ms`);
 
             expect(response).toBeDefined();
-            expect(latency).toBeLessThan(30000); // Should complete within 30s
+            expect(latency).toBeLessThan(30000);
         }, 60000);
 
         it('should handle large context (50k tokens)', async () => {
@@ -100,8 +100,50 @@ describe('AI Stress Tests', () => {
             console.log(`[50k context] Latency: ${latency}ms`);
 
             expect(response).toBeDefined();
-            expect(latency).toBeLessThan(120000); // Should complete within 2 minutes
+            expect(latency).toBeLessThan(120000);
         }, 180000);
+
+        it('should handle 100k token context (tier 2 mid-range)', async () => {
+            if (!apiKeyAvailable) return;
+
+            // Generate ~100k tokens of context
+            // ~25 tokens per repetition, 4000 reps = 100k tokens
+            const padding = 'This is an extensive test passage designed to stress the context window capabilities of the language model. '.repeat(4000);
+
+            console.log(`[100k context] Sending ~${Math.round(padding.length / 4)} estimated tokens...`);
+            const start = Date.now();
+            const response = await llm.streamChat(
+                `${padding}\n\nYou have received approximately 100,000 tokens of context. Confirm by saying "100k acknowledged".`
+            );
+            const latency = Date.now() - start;
+
+            console.log(`[100k context] Latency: ${latency}ms`);
+
+            expect(response).toBeDefined();
+            expect(latency).toBeLessThan(180000); // 3 minutes
+        }, 300000);
+
+        it('should handle 200k token context (tier 2 maximum)', async () => {
+            if (!apiKeyAvailable) return;
+
+            // Generate ~200k tokens of context (tier 2 max)
+            // ~25 tokens per repetition, 8000 reps = 200k tokens
+            const padding = 'This is an extensive test passage designed to stress the context window capabilities of the language model. '.repeat(8000);
+
+            console.log(`[200k context] Sending ~${Math.round(padding.length / 4)} estimated tokens (TIER 2 MAX)...`);
+            console.log(`[200k context] WARNING: This test will cost approximately $0.60-1.00 in API fees`);
+            const start = Date.now();
+            const response = await llm.streamChat(
+                `${padding}\n\nYou have received approximately 200,000 tokens of context, which is the maximum for tier 2. Confirm by saying "200k tier 2 max acknowledged".`
+            );
+            const latency = Date.now() - start;
+
+            console.log(`[200k context] Latency: ${latency}ms`);
+            console.log(`[200k context] Latency per 10k tokens: ${(latency / 20).toFixed(0)}ms`);
+
+            expect(response).toBeDefined();
+            expect(latency).toBeLessThan(300000); // 5 minutes
+        }, 600000);
     });
 
     describe('Memory Integration', () => {

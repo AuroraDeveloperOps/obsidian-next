@@ -21,6 +21,21 @@ export type MemoType =
     | 'learned_pattern'   // Patterns learned about user's coding style
     | 'daily_summary';    // Session summaries
 
+export type RelationType =
+    | 'related_to'        // General relationship
+    | 'derived_from'      // One memo is derived from another
+    | 'supersedes'        // One memo replaces another
+    | 'contradicts';      // Memos conflict
+
+export interface MemoRelation {
+    id: number;
+    sourceId: number;
+    targetId: number;
+    relationType: RelationType;
+    strength: number;
+    createdAt: string;
+}
+
 export interface Memo {
     id: number;
     type: MemoType;
@@ -28,6 +43,8 @@ export interface Memo {
     content: string;
     created_at: string;
     updated_at: string;
+    access_count?: number;
+    last_accessed?: string;
 }
 
 export class MemoryManager {
@@ -37,7 +54,7 @@ export class MemoryManager {
 
     async init(): Promise<void> {
         if (this.initialized) return;
-        
+
         // Load embedding model lazily
         try {
             this.extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
@@ -51,7 +68,7 @@ export class MemoryManager {
 
     private startWatcher() {
         const memoryPath = path.join(os.homedir(), '.obsidian-next', 'MEMORY.md');
-        
+
         if (this.watcher) return;
 
         this.watcher = chokidar.watch(memoryPath, {
@@ -176,7 +193,7 @@ export class MemoryManager {
 
         try {
             const row = db.getDb().prepare(`
-                SELECT id, type, key, content, created_at, updated_at
+                SELECT id, type, key, content, created_at, updated_at, access_count, last_accessed
                 FROM memos
                 WHERE key = ?
                 ORDER BY updated_at DESC
@@ -192,6 +209,8 @@ export class MemoryManager {
                 content: row.content,
                 created_at: new Date(row.created_at * 1000).toISOString(),
                 updated_at: new Date(row.updated_at * 1000).toISOString(),
+                access_count: row.access_count || 0,
+                last_accessed: row.last_accessed ? new Date(row.last_accessed * 1000).toISOString() : undefined,
             };
         } catch (e) {
             console.error('Failed to recall memory:', e);
@@ -220,7 +239,7 @@ export class MemoryManager {
                 WHERE v.embedding MATCH ?
                 AND k = 20
             `;
-            
+
             const params: any[] = [embedding];
 
             if (type) {
@@ -455,6 +474,187 @@ export class MemoryManager {
             console.error('Failed to export memory:', error);
             throw new Error(`Failed to export memory: ${error.message}`);
         }
+    }
+
+    // ==================== Memory Graph Methods ====================
+
+    /**
+     * Add a relationship between two memos
+     */
+    async addRelation(
+        sourceKey: string,
+        targetKey: string,
+        relationType: RelationType,
+        strength: number = 1.0
+    ): Promise<boolean> {
+        await this.init();
+
+        try {
+            const source = await this.recall(sourceKey);
+            const target = await this.recall(targetKey);
+
+            if (!source || !target) {
+                return false;
+            }
+
+            db.getDb().prepare(`
+                INSERT OR REPLACE INTO memo_relations (source_id, target_id, relation_type, strength)
+                VALUES (?, ?, ?, ?)
+            `).run(source.id, target.id, relationType, Math.max(0, Math.min(1, strength)));
+
+            return true;
+        } catch (e) {
+            console.error('Failed to add memo relation:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Get all relationships for a memo
+     */
+    async getRelations(key: string): Promise<MemoRelation[]> {
+        await this.init();
+
+        try {
+            const memo = await this.recall(key);
+            if (!memo) return [];
+
+            const rows = db.getDb().prepare(`
+                SELECT id, source_id, target_id, relation_type, strength, created_at
+                FROM memo_relations
+                WHERE source_id = ? OR target_id = ?
+            `).all(memo.id, memo.id) as any[];
+
+            return rows.map(row => ({
+                id: row.id,
+                sourceId: row.source_id,
+                targetId: row.target_id,
+                relationType: row.relation_type as RelationType,
+                strength: row.strength,
+                createdAt: new Date(row.created_at * 1000).toISOString(),
+            }));
+        } catch (e) {
+            return [];
+        }
+    }
+
+    /**
+     * Get related memos with their relationships
+     */
+    async getRelatedMemos(key: string): Promise<{ memo: Memo; relation: MemoRelation }[]> {
+        await this.init();
+
+        try {
+            const memo = await this.recall(key);
+            if (!memo) return [];
+
+            const rows = db.getDb().prepare(`
+                SELECT 
+                    m.id, m.type, m.key, m.content, m.created_at, m.updated_at,
+                    m.access_count, m.last_accessed,
+                    r.id as rel_id, r.source_id, r.target_id, r.relation_type, r.strength, r.created_at as rel_created
+                FROM memo_relations r
+                JOIN memos m ON (
+                    (r.source_id = ? AND r.target_id = m.id) OR
+                    (r.target_id = ? AND r.source_id = m.id)
+                )
+                WHERE (r.source_id = ? OR r.target_id = ?)
+                ORDER BY r.strength DESC
+            `).all(memo.id, memo.id, memo.id, memo.id) as any[];
+
+            return rows.map(row => ({
+                memo: {
+                    id: row.id,
+                    type: row.type as MemoType,
+                    key: row.key,
+                    content: row.content,
+                    created_at: new Date(row.created_at * 1000).toISOString(),
+                    updated_at: new Date(row.updated_at * 1000).toISOString(),
+                    access_count: row.access_count || 0,
+                    last_accessed: row.last_accessed ? new Date(row.last_accessed * 1000).toISOString() : undefined,
+                },
+                relation: {
+                    id: row.rel_id,
+                    sourceId: row.source_id,
+                    targetId: row.target_id,
+                    relationType: row.relation_type as RelationType,
+                    strength: row.strength,
+                    createdAt: new Date(row.rel_created * 1000).toISOString(),
+                },
+            }));
+        } catch (e) {
+            return [];
+        }
+    }
+
+    /**
+     * Calculate relevance score with temporal decay
+     * Score decays exponentially based on time since last access and access frequency
+     */
+    getRelevanceScore(memo: Memo): number {
+        const now = Date.now();
+        const lastAccessed = memo.last_accessed ? new Date(memo.last_accessed).getTime() : now;
+        const accessCount = memo.access_count || 1;
+
+        // Decay half-life: 7 days (604800000 ms)
+        const halfLife = 7 * 24 * 60 * 60 * 1000;
+        const timeSinceAccess = now - lastAccessed;
+        const decayFactor = Math.pow(0.5, timeSinceAccess / halfLife);
+
+        // Boost based on access frequency (log scale to prevent runaway)
+        const frequencyBoost = 1 + Math.log10(accessCount + 1) * 0.2;
+
+        return decayFactor * frequencyBoost;
+    }
+
+    /**
+     * Update access stats for a memo (call when memo is retrieved/used)
+     */
+    async updateAccessStats(key: string): Promise<void> {
+        await this.init();
+
+        try {
+            db.getDb().prepare(`
+                UPDATE memos 
+                SET access_count = COALESCE(access_count, 0) + 1,
+                    last_accessed = strftime('%s', 'now')
+                WHERE key = ?
+            `).run(key);
+        } catch (e) {
+            // Silently fail - access stats are not critical
+        }
+    }
+
+    /**
+     * Search with relationship awareness - includes related memos in results
+     */
+    async searchWithRelations(query: string, type?: MemoType): Promise<{ memo: Memo; score: number; related: Memo[] }[]> {
+        await this.init();
+
+        // Get base search results
+        const baseResults = await this.search(query, type);
+
+        // Enrich with relevance scores and related memos
+        const enriched = await Promise.all(baseResults.map(async (memo) => {
+            // Update access stats
+            await this.updateAccessStats(memo.key);
+
+            // Get fresh memo with access stats
+            const freshMemo = await this.recall(memo.key);
+            const memoWithStats = freshMemo || memo;
+
+            // Calculate relevance score
+            const score = this.getRelevanceScore(memoWithStats);
+
+            // Get related memos
+            const relatedResults = await this.getRelatedMemos(memo.key);
+            const related = relatedResults.map(r => r.memo);
+
+            return { memo: memoWithStats, score, related };
+        }));
+
+        // Sort by combined relevance score
+        return enriched.sort((a, b) => b.score - a.score);
     }
 }
 
