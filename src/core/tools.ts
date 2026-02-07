@@ -6,7 +6,9 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
+import * as fsSync from 'fs';
 import path from 'path';
+import os from 'os';
 import { bus } from './bus.js';
 import { auditor } from './auditor.js';
 import { sandbox } from './sandbox.js';
@@ -1607,8 +1609,64 @@ COORDINATE ACTIONS (use when smart actions fail):
 /**
  * Tool Registry - Manages available tools
  */
+/**
+ * Create Skill Tool - Autonomous tool generation
+ */
+export const CreateSkillTool: Tool = {
+    name: 'create_skill',
+    description: 'Create a new autonomous skill (tool) for the agent. This tool writes the implementation, runs tests, and registers it dynamically. The code MUST be a valid Node.js module that exports default a Tool object.',
+    inputSchema: {
+        name: {
+            type: 'string',
+            description: 'Name of the tool (e.g., "jira_issue_create")'
+        },
+        description: {
+            type: 'string',
+            description: 'What the tool does'
+        },
+        code: {
+            type: 'string',
+            description: 'Node.js code for the tool. Must export default a Tool object.'
+        }
+    },
+    requiredParams: ['name', 'description', 'code'],
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const name = args.name as string;
+        const code = args.code as string;
+        const skillsDir = path.join(os.homedir(), '.obsidian-next', 'skills');
+        const skillPath = path.join(skillsDir, `${name}.js`);
+
+        try {
+            if (!fsSync.existsSync(skillsDir)) {
+                fsSync.mkdirSync(skillsDir, { recursive: true });
+            }
+
+            await fs.writeFile(skillPath, code, 'utf-8');
+
+            // Dynamically import and register
+            const module = await import(`file://${skillPath}?t=${Date.now()}`); // Use cache buster
+            if (module.default && module.default.name) {
+                tools.register(module.default);
+                return {
+                    success: true,
+                    output: `Skill '${name}' created and registered successfully. It is now available for use.`
+                };
+            }
+
+            return { success: false, error: 'Skill code must export default a Tool object.' };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Failed to create skill: ${error.message}`
+            };
+        }
+    }
+};
+
 export class ToolRegistry {
     private tools = new Map<string, Tool>();
+    private skillsDir = path.join(os.homedir(), '.obsidian-next', 'skills');
 
     constructor() {
         // Register built-in tools
@@ -1624,9 +1682,39 @@ export class ToolRegistry {
         this.register(MCPManagementTool);
         this.register(ScheduleTool);
         this.register(ListScheduledTasksTool);
-        this.register(UnscheduleTool); // Registered the new tool
+        this.register(UnscheduleTool);
         this.register(MemoryTool);
         this.register(ComputerUseTool);
+        this.register(CreateSkillTool);
+    }
+
+    async init() {
+        await this.loadSkills();
+    }
+
+    private async loadSkills() {
+        if (!fsSync.existsSync(this.skillsDir)) {
+            fsSync.mkdirSync(this.skillsDir, { recursive: true });
+        }
+
+        try {
+            const files = await fs.readdir(this.skillsDir);
+            for (const file of files) {
+                if (file.endsWith('.js')) {
+                    try {
+                        const skillPath = path.join(this.skillsDir, file);
+                        const module = await import(`file://${skillPath}`);
+                        if (module.default && module.default.name) {
+                            this.register(module.default);
+                        }
+                    } catch (e) {
+                        console.error(`Failed to load skill ${file}:`, e);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to read skills directory:', e);
+        }
     }
 
     register(tool: Tool): void {

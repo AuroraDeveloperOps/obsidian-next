@@ -50,6 +50,7 @@ class Agent {
 
         await context.init();
         await mcp.init();
+        await tools.init();
 
         // Initialize Scheduler
         registerAbilities(scheduler);
