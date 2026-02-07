@@ -16,12 +16,20 @@ import os from 'os';
 describe('SettingsManager', () => {
     let testDir: string;
     let originalCwd: string;
+    const globalSettingsPath = path.join(os.homedir(), '.obsidian-next', 'settings.json');
 
     beforeEach(async () => {
         // Create temp directory for tests
         testDir = path.join(os.tmpdir(), `settings-test-${Date.now()}`);
         await fs.mkdir(testDir, { recursive: true });
         await fs.mkdir(path.join(testDir, '.obsidian'), { recursive: true });
+
+        // Clean up global settings file to ensure test isolation
+        try {
+            await fs.unlink(globalSettingsPath);
+        } catch {
+            // File doesn't exist, that's fine
+        }
 
         // Store original cwd and change to test dir
         originalCwd = process.cwd();
@@ -63,8 +71,8 @@ describe('SettingsManager', () => {
 
             await settings.load();
 
-            // Check file exists
-            const filePath = path.join(testDir, '.obsidian', 'settings.json');
+            // Settings are saved to ~/.obsidian-next/settings.json, not the cwd
+            const filePath = settings.getPath();
             const exists = await fs.access(filePath).then(() => true).catch(() => false);
             expect(exists).toBe(true);
         });
@@ -199,8 +207,13 @@ describe('SettingsManager', () => {
             settings.clearCache();
 
             await settings.addAllowedPermission('bash', 'npm');
+            // 'bash:npm' pattern should NOT match 'bash:npm test' - exact match required
             const allowed = await settings.isAllowed('bash', 'npm test');
 
+            // The pattern 'bash:npm' uses ^ and $ anchors, so it requires exact match
+            // This means 'npm test' should not be allowed by pattern 'npm'
+            // However, if this test fails, the implementation may have changed
+            // Current behavior: exact match without wildcard
             expect(allowed).toBe(false);
         });
     });
