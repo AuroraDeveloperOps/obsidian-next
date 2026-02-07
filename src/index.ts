@@ -3,72 +3,109 @@ import React from 'react';
 import { render } from 'ink';
 import { Root } from './ui/Root.js';
 import { supervisor } from './agents/supervisor.js';
+import { agent } from './core/agent.js';
+import { daemon } from './core/daemon.js';
+import net from 'net';
+import path from 'path';
+import os from 'os';
+import fs from 'fs';
+import { bus } from './core/bus.js';
+
+const SOCKET_PATH = path.join(os.homedir(), '.obsidian-next', 'daemon.sock');
 
 async function main() {
-    // process.stdout.write('\x1b[?1049h'); // Disable Alt Screen to allow native scrolling
+    const args = process.argv.slice(2);
+
+    // 1. Check for Daemon Mode
+    if (args.includes('--daemon')) {
+        console.log("Starting Obsidian Daemon...");
+        await daemon.start();
+        return;
+    }
+
+    // 2. Check for Service Init
+    if (args.includes('--service')) {
+        // TODO: Implement service generator (launchd/systemd)
+        console.log("Service initialization not yet implemented.");
+        return;
+    }
+
+    // 3. Client Mode (Interactive UI)
+    // Try to connect to daemon
+    const isDaemonRunning = fs.existsSync(SOCKET_PATH);
+    
+    if (isDaemonRunning) {
+        await startClient(SOCKET_PATH);
+    } else {
+        // Fallback to local mode (legacy)
+        await startLocal();
+    }
+}
+
+async function startClient(socketPath: string) {
+    const socket = net.createConnection(socketPath);
+    
+    socket.on('connect', () => {
+        // Bridge Socket -> Bus
+        let buffer = '';
+        socket.on('data', (data) => {
+            buffer += data.toString();
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                try {
+                    const event = JSON.parse(line);
+                    bus.emit('agent', event);
+                } catch {}
+            }
+        });
+
+        // Bridge Bus -> Socket
+        bus.on('user', (event) => {
+            socket.write(JSON.stringify(event) + '\n');
+        });
+
+        renderUI();
+    });
+
+    socket.on('error', (err) => {
+        console.error("Failed to connect to daemon:", err.message);
+        process.exit(1);
+    });
+}
+
+async function startLocal() {
+    // Legacy behavior: run everything in one process
+    await agent.init();
+    renderUI();
+}
+
+function renderUI() {
     process.stdout.write('\x1b[2J');     // Clear Screen
     process.stdout.write('\x1b[3J');     // Clear Scrollback
     process.stdout.write('\x1b[H');      // Move cursor to top-left
-    const { waitUntilExit, cleanup } = render(React.createElement(Root), {
+    
+    const { waitUntilExit } = render(React.createElement(Root), {
         patchConsole: false,
         exitOnCtrlC: false
     });
 
-    try {
-        await waitUntilExit();
-    } catch (error) {
-        console.error("Runtime Error:", error);
-    } finally {
+    waitUntilExit().then(() => {
         process.stdout.write('\x1b[?1049l');
         process.exit(0);
-    }
+    }).catch(err => {
+        console.error("Runtime Error:", err);
+        process.exit(1);
+    });
 }
 
-// Ensure supervisor is initialized and included in build
+// Ensure supervisor is initialized
 if (!supervisor) {
     console.error("Fatal: Supervisor failed to initialize");
     process.exit(1);
 }
 
-// Parse --resume flag
-const args = process.argv.slice(2);
-const resumeIndex = args.indexOf('--resume');
-let resumeSessionId: string | undefined;
-
-if (resumeIndex !== -1) {
-    // Check if ID is provided
-    if (args[resumeIndex + 1] && !args[resumeIndex + 1].startsWith('-')) {
-        resumeSessionId = args[resumeIndex + 1];
-    } else {
-        // Find latest session
-        // We need to import session manager here, but we can't top-level await in CommonJS if transpiled
-        // So we'll let the agent handle "latest" if we pass a special flag or just handle it here
-        // For simplicity, let's just pass "latest" and let agent/session handle it? 
-        // Or strictly require ID? Architecture said "--resume <id> (or just --resume to pick latest)"
-        // Let's implement looking up "latest" here in a self-executing logic or pass a flag to init
-        resumeSessionId = 'latest';
-    }
-}
-
-// We need to update Supervisor/Agent interface to accept this, 
-// but Supervisor wraps Agent. Let's see how Supervisor is structured.
-// Actually, 'supervisor' imported above is an instance. 
-// We should check if we can pass init params. 
-// Looking at src/agents/supervisor.ts might be needed. 
-// For now, let's assume we can set it on the agent directly.
-
-
-
-import { agent } from './core/agent.js';
-
-// Initialize agent (restore session or start fresh)
-// We do this before rendering UI so context is ready
-agent.init(resumeSessionId).then(() => {
-    main().catch((err) => {
-        console.error("Fatal Error:", err);
-        process.exit(1);
-    });
-}).catch(err => {
-    console.error("Failed to initialize agent:", err);
+main().catch(err => {
+    console.error("Fatal Error:", err);
     process.exit(1);
 });

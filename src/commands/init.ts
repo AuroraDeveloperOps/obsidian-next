@@ -11,6 +11,8 @@
 
 import { bus } from '../core/bus.js';
 import { config } from '../core/config.js';
+import { daemon } from '../core/daemon.js';
+import os from 'os';
 import { keyManager, detectEnvFile } from '../core/keyManager.js';
 import { CommandHandler } from '../core/commands.js';
 import { formatHeader } from '../utils/ui.js';
@@ -87,6 +89,7 @@ export const initCommand: CommandHandler = async (args) => {
             { id: 'setup', label: 'Run Full Setup (Key + Model)' },
             { id: 'key', label: `Update API Key (Current: ${backend || 'Not set'})` },
             { id: 'model', label: `Change Model (Current: ${cfg.model})` },
+            { id: 'service', label: 'Initialize Background Service (Always-On)' },
             { id: 'status', label: 'Show Configuration Status' },
             { id: 'exit', label: 'Exit' }
         ];
@@ -104,6 +107,9 @@ export const initCommand: CommandHandler = async (args) => {
                 break;
             case 'model':
                 await setupModel();
+                break;
+            case 'service':
+                await setupBackgroundService();
                 break;
             case 'status':
                 // Navigate to /config view for detailed configuration
@@ -134,6 +140,36 @@ export const initCommand: CommandHandler = async (args) => {
         summary: 'Configuration closed.',
     });
 };
+
+async function setupBackgroundService(): Promise<void> {
+    bus.emitAgent({
+        type: 'thought',
+        content: '[Setup] Background Service (Always-On)\n',
+    });
+
+    const result = await daemon.setupService();
+
+    if (result.success) {
+        bus.emitAgent({
+            type: 'thought',
+            content: [
+                '[OK] Service configuration generated successfully.',
+                `Path: ${result.path}`,
+                '',
+                'To start the service now:',
+                os.platform() === 'darwin' 
+                    ? `  launchctl load ${result.path}`
+                    : `  systemctl --user enable --now obsidian.service`,
+                '',
+            ].join('\n'),
+        });
+    } else {
+        bus.emitAgent({
+            type: 'error',
+            message: `Failed to generate service configuration: ${result.error}`,
+        });
+    }
+}
 
 async function setupApiKey(forceReset: boolean): Promise<void> {
     const hasKey = await keyManager.hasKey();
