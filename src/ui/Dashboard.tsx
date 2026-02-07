@@ -70,7 +70,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         mode: 'safe',
         keyStatus: 'missing',
         sessionCost: 0,
-        workspace: process.cwd().split('/').slice(-2).join('/'), // Shortened path
+        workspace: 'Loading...',
         user: process.env.USER || 'User',
         version: 'v...',
         owlSettings: {
@@ -103,6 +103,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 mode: s.mode,
                 keyStatus: hasKey ? 'valid' : 'missing',
                 sessionCost: usage.getSessionCost(),
+                workspace: cfg.workspaceRoot.split('/').slice(-2).join('/'),
                 version: ver.startsWith('v') ? ver : `v${ver}`,
                 owlSettings,
             }));
@@ -128,6 +129,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     model: formatModelName(cfg.model),
                     mode: s.mode,
                     sessionCost: usage.getSessionCost(),
+                    workspace: cfg.workspaceRoot.split('/').slice(-2).join('/'),
                     owlSettings,
                 }));
             }

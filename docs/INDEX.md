@@ -2,7 +2,7 @@
 
 Welcome to the comprehensive documentation for **Obsidian Next**.
 
-> Version: 0.4.5 | Updated: 2026-02-02
+> Version: 0.4.6 | Updated: 2026-02-07
 
 ---
 
@@ -13,37 +13,37 @@ Welcome to the comprehensive documentation for **Obsidian Next**.
 
 ## Architecture & Design
 
-- **[Architecture](ARCHITECTURE.md)**: Deep dive into the Supervisor-Agent topology, Event Bus, and Directory Structure.
-- **[Agent Logic](AGENT_ARCHITECTURE.md)**: Understanding Modes (Auto/Plan/Safe) and the Execution Loop.
+- **[Architecture](ARCHITECTURE.md)**: Deep dive into the Always-On Daemon, Supervisor-Agent topology, and Event Bus.
+- **[Agent Logic](AGENT_ARCHITECTURE.md)**: Understanding Adaptive Reasoning (Claude 4.6), Modes (Auto/Plan/Safe), and the Execution Loop.
+- **[Smart Context & Memory](CONTEXT.md)**: Deep dive into 1M context, semantic memory (sqlite-vec), and bidirectional Markdown sync.
 - **[CLI Design System](CLI_DESIGN_SYSTEM.md)**: Visual standards, symbols, and UI component reference.
-- **[Smart Context](CONTEXT.md)**: Deep dive into 100x context, summarization logic, and memory architecture.
 
 ## Tooling & Safety
 
-- **[Tools Reference](TOOLS.md)**: Detailed API reference for the 8 built-in tools (`bash`, `read`, `edit`, etc.) and their safety limits.
-- **[Sandboxing](SANDBOX.md)**: How to configure and verify OS-level isolation (`@anthropic-ai/sandbox-runtime`).
+- **[Tools Reference](TOOLS.md)**: Detailed API reference for the built-in tools and self-improving skill creation.
+- **[Sandboxing](SANDBOX.md)**: How to configure and verify OS-level isolation.
 - **[Security Policy](SECURITY.md)**: Threat model, security features, and vulnerability disclosure.
 
-## Session Management
+## Session & Agent Management
 
-Obsidian Next supports persistent sessions for long-running tasks:
+Obsidian Next operates as a global, system-wide daemon with persistent memory:
 
 | Command | Description |
 |---------|-------------|
-| `/init` | Interactive setup (API key, model selection) |
-| `/exit` | Save session and exit gracefully |
-| `/resume` | List/restore saved sessions |
-| `/diff` | View file change history |
-| `/context` | View context window usage |
-| `/status` | System health check |
+| `/init` | Interactive setup (API key, service initialization) |
+| `/schedule`| Schedule background tasks (proactive heartbeat) |
+| `/memory` | Manage semantic memory and export to `MEMORY.md` |
+| `/status` | Daemon health check and workspace status |
+| `/exit` | Stop the daemon or exit the current CLI view |
+| `/resume` | List/restore saved sessions across workspaces |
 
-Sessions are stored in `.obsidian/state.db` and preserve context, history, tasks, and cost tracking.
+Global state is stored in `~/.obsidian-next/` and preserves context, history, tasks, and cost tracking across all your projects.
 
 ## Planning & Development
 
-- **[Product Requirements (PRD)](PRD.md)**: The "Final" approved specification for Obsidian Next functionality.
+- **[Master Plan](MASTER_PLAN.md)**: The "Final" architectural blueprint for the autonomous restructure.
+- **[Product Requirements (PRD)](PRD.md)**: Approved specification for core functionality.
 - **[Roadmap](ROADMAP.md)**: Development roadmap and planned features.
-- **[Improvement Plan](IMPROVEMENT_PLAN.md)**: Technical analysis and enhancement proposals.
 - **[Git Workflow](GIT_WORKFLOW.md)**: Contribution guidelines and branch conventions.
 
 ## MCP Integration

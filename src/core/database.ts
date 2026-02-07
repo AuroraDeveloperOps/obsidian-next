@@ -2,8 +2,9 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs/promises';
 import { existsSync, mkdirSync } from 'fs';
+import os from 'os';
 
-const DB_DIR = path.join(process.cwd(), '.obsidian');
+const DB_DIR = path.join(os.homedir(), '.obsidian-next');
 const DB_PATH = path.join(DB_DIR, 'state.db');
 
 export class DatabaseManager {

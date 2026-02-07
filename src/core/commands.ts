@@ -17,6 +17,8 @@ import { resumeCommand } from '../commands/resume.js';
 import { diffCommand } from '../commands/diff.js';
 import { pilotCommand } from '../commands/pilot.js';
 import { scheduledTasksCommand } from '../commands/scheduled_tasks.js';
+import { scheduleCommand } from '../commands/schedule.js';
+import { memoryCommand } from '../commands/memory.js';
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -64,7 +66,9 @@ export class CommandRegistry {
             // Placeholder if needed, but UI usually handles it
         }, { isView: true, viewId: 'mcp', aliases: ['plugin'] });
         this.register('pilot', 'Enable/disable Computer Use mode', pilotCommand, { aliases: ['computer', 'desktop'] });
+        this.register('schedule', 'Schedule a background task', scheduleCommand);
         this.register('scheduled_tasks', 'List all scheduled background tasks', scheduledTasksCommand, { aliases: ['tasks'] });
+        this.register('memory', 'Manage agent memory', memoryCommand);
 
         this.register('schedule_test', 'Schedule a test task', async () => {
             const { scheduler } = await import('./scheduler.js');

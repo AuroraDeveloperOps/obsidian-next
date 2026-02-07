@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs/promises';
+import os from 'os';
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -36,11 +37,11 @@ class MCPManager {
     constructor() { }
 
     /**
-     * Load configuration from .obsidian/mcp.json
+     * Load configuration from .obsidian-next/mcp.json
      */
     async init() {
         try {
-            const configPath = path.join(process.cwd(), '.obsidian', 'mcp.json');
+            const configPath = path.join(os.homedir(), '.obsidian-next', 'mcp.json');
             const exists = await fs.stat(configPath).then(() => true).catch(() => false);
 
             if (exists) {
@@ -201,7 +202,7 @@ class MCPManager {
      * Persist current config to disk
      */
     private async saveConfig() {
-        const configPath = path.join(process.cwd(), '.obsidian', 'mcp.json');
+        const configPath = path.join(os.homedir(), '.obsidian-next', 'mcp.json');
         await fs.mkdir(path.dirname(configPath), { recursive: true });
         await fs.writeFile(configPath, JSON.stringify(this.config, null, 2), 'utf-8');
     }

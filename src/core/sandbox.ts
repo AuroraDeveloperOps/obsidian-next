@@ -184,6 +184,7 @@ export class SandboxExecutor {
      */
     private async wrapWithNativeSandbox(command: string): Promise<string> {
         const platform = os.platform();
+        const cfg = await config.load();
 
         if (platform === 'darwin') {
             // macOS: Use sandbox-exec with a permissive profile
@@ -196,7 +197,7 @@ export class SandboxExecutor {
 (allow syscall-unix)
 (allow sysctl-read)
 (deny file-read* (subpath "${os.homedir()}"))
-(allow file-read* (subpath "${process.cwd()}"))
+(allow file-read* (subpath "${cfg.workspaceRoot}"))
 (allow file-read* (subpath "/tmp"))
 (allow file-read* (subpath "/usr"))
 (allow file-read* (subpath "/bin"))
@@ -206,8 +207,8 @@ export class SandboxExecutor {
 (allow file-read* (subpath "/Library/Preferences"))
 (allow file-read* (subpath "/dev"))
 (allow file-write* (subpath "/tmp"))
-(allow file-write* (subpath "${process.cwd()}"))
-(deny file-write* (literal "${process.cwd()}/.env"))
+(allow file-write* (subpath "${cfg.workspaceRoot}"))
+(deny file-write* (literal "${cfg.workspaceRoot}/.env"))
 (allow network-outbound (remote tcp "*:80" "*:443"))
 (allow network*)
 (allow mach-lookup*)

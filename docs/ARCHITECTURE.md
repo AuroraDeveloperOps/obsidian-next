@@ -1,51 +1,34 @@
 # Obsidian Next Architecture
 
-## 1. Directory Structure
+## 1. Directory Structure (Global & System-Wide)
+
+Obsidian Next has transitioned from a project-local bot to a global, system-wide autonomous daemon.
 
 ```
-obsidian-next/
-├── .agent/              # AI Rules & Skills
-├── .obsidian/           # Runtime data (config, context, history, tasks)
-├── docs/                # PRD, Design, Research
-├── src/
-│   ├── agents/          # High-level orchestrators (Supervisor)
-│   ├── commands/        # Slash command handlers (/mode, /init, /resume, etc.)
-│   ├── components/      # Ink UI Components (AgentLine, ToolOutput, SettingsMenu)
-│   ├── core/            # Core System Logic
-│   │   ├── agent.ts     # Main LLM execution loop
-│   │   ├── auditor.ts   # Security & Permission checks
-│   │   ├── bus.ts       # Typed EventBus
-│   │   ├── commands.ts  # Command Registry
-│   │   ├── config.ts    # Enforced Configuration (zod)
-│   │   ├── context.ts   # Working Context Manager
-│   │   ├── database.ts  # [NEW] SQLite Lifecycle Manager
-│   │   ├── diff.ts      # Diff tracking & storage
-│   │   ├── keyManager.ts # Secure API key storage
-│   │   ├── llm.ts       # Anthropic SDK Wrapper
-│   │   ├── memory.ts    # [NEW] Long-term Memory Manager
-│   │   ├── migrations.ts # [NEW] SQLite Schema Migrations
-│   │   ├── sandbox.ts   # Sandbox Executor (Runtime + Fallbacks)
-│   │   ├── session.ts   # Session persistence & restore
-│   │   ├── tasks.ts     # Task Tracker (Now DB backed)
-│   │   ├── tools.ts     # Tool Registry & Implementations
-│   │   ├── undo.ts      # Change tracking & Revert logic
-│   │   └── usage.ts     # [NEW] Usage Tracking (Tokens/Cost)
-│   ├── mcp/             # MCP Server Implementation
-│   ├── ui/              # Main UI Components (Root, Dashboard)
-│   └── index.ts         # Entry Point
-├── tests/               # Vitest Suite
-└── package.json
+~/.obsidian-next/        # Global State Directory
+├── state.db             # Central SQLite store (Sessions, Memos, Tasks, Usage)
+├── settings.json        # Global user preferences and permissions
+├── audit.log            # System-wide security audit trail
+├── mcp.json             # MCP server configurations
+├── MEMORY.md            # Human-readable long-term memory bank
+├── logs/                # Daily Markdown logbooks (YYYY-MM-DD.md)
+└── skills/              # Self-generated autonomous tools
 ```
 
 ```mermaid
 graph TD
     subgraph "Interface Layer"
-        CLI[Obsidian CLI] <--> Dashboard[Ink TUI / Dashboard]
+        CLI[Obsidian CLI] <--> Socket[Unix Domain Socket]
+        Web[Web Dashboard] <--> Socket
+        TG[Telegram Gateway] <--> Socket
     end
 
-    subgraph "Core Orchestration"
-        Supervisor[Supervisor] <--> Agent[Agent Runtime]
+    subgraph "Always-On Daemon (Backend)"
+        Socket <--> LaneQueue[Lane Queue Orchestrator]
+        LaneQueue <--> Supervisor[Supervisor]
+        Supervisor <--> Agent[Agent Runtime]
         Agent <--> Tools[Tool Registry]
+        Scheduler[Heartbeat Scheduler] --> LaneQueue
     end
 
     subgraph "Zero Trust & Security"
@@ -54,59 +37,43 @@ graph TD
         Agent -.-> Redactor[PII Redactor]
     end
 
-    subgraph "State & Persistence"
+    subgraph "Hybrid State & Memory"
         Agent <--> DB[(SQLite state.db)]
-        DB --- Memos[Long-term Memory]
+        DB --- Vector[sqlite-vec Semantic Store]
         DB --- Sessions[Session Store]
         DB --- Tasks[Task Tracker]
-        DB --- Internal[Internal Logs/Usage]
+        Agent <--> MD[MEMORY.md / Daily Logs]
     end
-
-    CLI <--> Supervisor
-    Dashboard <--> bus[Typed Event Bus]
-    Agent <--> bus
 ```
 
-## 2. Event Driven Core
-The system relies on a central `EventBus` (`src/core/bus.ts`) that decouples the UI from the logic.
+## 2. Always-On Daemon
+The system operates as a background service (via `launchd` or `systemd`).
+- **Persistence**: The backend stays alive 24/7, maintaining context even when the terminal is closed.
+- **Inter-Process Communication (IPC)**: Interfaces connect to the daemon via a Unix Domain Socket (`~/.obsidian-next/daemon.sock`).
+- **Lane Queue**: Ensures serial execution of state-changing operations across multiple connected clients to prevent race conditions.
+
+## 3. Event Driven Core
+The system relies on a central `EventBus` (`src/core/bus.ts`) that decouples the backend from the frontend.
 - **Agent** emits `thought`, `tool_start`, `tool_result`, `done`.
-- **UI** listens and renders reactive components (`Root.tsx`).
+- **UI** listens and renders reactive components via the socket bridge.
 
-## 3. Tool System (8 Tools)
-Implemented in `src/core/tools.ts`:
-- `bash`: Shell execution (Audited & Sandboxed).
-- `read`: File reading with line numbers.
-- `write`: File creation (Undoable).
-- `edit`: Search & Replace (Undoable).
-- `list`: Directory listing.
-- `grep`: Regex content search.
-- `glob`: Pattern file search.
-- `web_fetch`: URL content fetching (Safe-guarded).
-- `memory`: Manage long-term session/user memory (store, recall, search).
-
-## 4. MCP Integration
-**Status**: Implemented (Experimental)
-- Location: `src/mcp/`
-- Exposes internal tools via Model Context Protocol.
-- Can be run as a standalone server: `npm run mcp`.
+## 4. Autonomous Skill System
+The agent can autonomously expand its own capabilities:
+- **`create_skill` Tool**: Allows the agent to write, test, and register new TypeScript tools in `~/.obsidian-next/skills/` without restarting the daemon.
+- **Dynamic Registry**: Tools are loaded into the registry at runtime after passing sandboxed unit tests.
 
 ## 5. Security Architecture
-- **Auditor**: Pre-flight checks for all file/shell operations.
-- **Sandboxing**: OS-level isolation via `@anthropic-ai/sandbox-runtime` or native fallbacks (`sandbox-exec` on macOS, `firejail` on Linux).
-- **Permissions**: Granular Allow/Deny list stored in `.obsidian/settings.json`.
-- **KeyManager**: Secure API key storage (Keychain/secret-tool/encrypted file).
-- **PII Redactor**: Real-time sensitive data protection before LLM calls.
-- **Audit Logging**: Complete trail of all operations in `.obsidian/audit.log`.
+- **Global Auditor**: Enforces boundaries relative to the active `workspaceRoot` rather than the CWD.
+- **Sandboxing**: OS-level isolation via native fallbacks (`sandbox-exec` on macOS, `firejail` on Linux).
+- **Permissions**: Global Allow/Deny patterns stored in `~/.obsidian-next/settings.json`.
+- **Kill Switch**: Immediate termination of all OS-level control via signal handling or global hotkeys.
 
-## 6. State Management (SQLite)
-The system transitioned from markdown/JSON files to a centralized SQLite store (`.obsidian/state.db`):
-- **Sessions**: Persistent history and metadata.
-- **Memos**: Long-term "Handoff" context (preferences, facts, patterns).
-- **Tasks**: Structured project tracking.
-- **Usage**: Persistent token and cost tracking per session.
+## 6. Hybrid Memory (Semantic + Relational)
+- **SQLite (Relational)**: High-performance engine for logs, tasks, and state.
+- **sqlite-vec (Semantic)**: Local vector search across past sessions and project files.
+- **Markdown (Human-Readable)**: Bidirectional sync between the database and `MEMORY.md`. Manual edits to the file are indexed back into the agent's brain.
 
-## 7. Session Lifecycle
-Sessions enable persistent, resumable work:
-- **Save**: `/exit` commits all in-memory state to SQLite.
-- **Restore**: `/resume <id>` restores full session state from SQLite.
-- **Diff Tracking**: File changes stored for review via `/diff`.
+## 7. Session & Task Management
+- **Workspaces**: Sessions are associated with specific directories but managed centrally.
+- **Heartbeat**: Background scheduler performs proactive audits, health checks, and codebase indexing.
+- **Restoration**: Full conversation history, including Claude 4.6 "Thinking Blocks," is preserved and restorable.

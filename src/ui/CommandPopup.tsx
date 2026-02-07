@@ -20,6 +20,9 @@ export const COMMANDS = [
     { name: '/resume', desc: 'Restore saved session', isView: true },
     { name: '/diff', desc: 'View file changes' },
     { name: '/mcp', desc: 'Manage Model Context Protocol', isView: true },
+    { name: '/schedule', desc: 'Schedule background tasks' },
+    { name: '/scheduled_tasks', desc: 'View scheduled tasks' },
+    { name: '/memory', desc: 'Manage agent memory' },
 ];
 
 interface CommandPopupProps {

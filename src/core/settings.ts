@@ -6,9 +6,10 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import { z } from 'zod';
 
-const SETTINGS_DIR = '.obsidian';
+const SETTINGS_DIR = '.obsidian-next';
 const SETTINGS_FILE = 'settings.json';
 
 // Schema
@@ -102,7 +103,7 @@ class SettingsManager {
     private sessionDeny = new Set<string>();
 
     constructor() {
-        this.settingsPath = path.join(process.cwd(), SETTINGS_DIR, SETTINGS_FILE);
+        this.settingsPath = path.join(os.homedir(), SETTINGS_DIR, SETTINGS_FILE);
     }
 
     async load(): Promise<Settings> {

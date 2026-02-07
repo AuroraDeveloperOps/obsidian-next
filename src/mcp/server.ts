@@ -12,6 +12,7 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { computer } from '../computer/index.js';
+import { config } from '../core/config.js';
 
 const execAsync = promisify(exec);
 
@@ -63,8 +64,9 @@ export function createMcpServer() {
             }
 
             try {
+                const cfg = await config.load();
                 const { stdout, stderr } = await execAsync(command, {
-                    cwd: process.cwd(),
+                    cwd: cfg.workspaceRoot,
                     timeout: timeout || 30000,
                     maxBuffer: 1024 * 1024,
                 });
@@ -94,10 +96,11 @@ export function createMcpServer() {
         },
         async ({ path: filePath, offset, limit }) => {
             try {
-                const fullPath = path.resolve(process.cwd(), filePath);
+                const cfg = await config.load();
+                const fullPath = path.resolve(cfg.workspaceRoot, filePath);
 
                 // Security: ensure within workspace
-                if (!fullPath.startsWith(process.cwd())) {
+                if (!fullPath.startsWith(cfg.workspaceRoot)) {
                     return {
                         content: [{ type: 'text', text: 'Error: Path outside workspace' }],
                         isError: true,
@@ -147,9 +150,10 @@ export function createMcpServer() {
         },
         async ({ path: filePath, content }) => {
             try {
-                const fullPath = path.resolve(process.cwd(), filePath);
+                const cfg = await config.load();
+                const fullPath = path.resolve(cfg.workspaceRoot, filePath);
 
-                if (!fullPath.startsWith(process.cwd())) {
+                if (!fullPath.startsWith(cfg.workspaceRoot)) {
                     return {
                         content: [{ type: 'text', text: 'Error: Path outside workspace' }],
                         isError: true,
@@ -196,9 +200,10 @@ export function createMcpServer() {
         },
         async ({ path: filePath, search, replace }) => {
             try {
-                const fullPath = path.resolve(process.cwd(), filePath);
+                const cfg = await config.load();
+                const fullPath = path.resolve(cfg.workspaceRoot, filePath);
 
-                if (!fullPath.startsWith(process.cwd())) {
+                if (!fullPath.startsWith(cfg.workspaceRoot)) {
                     return {
                         content: [{ type: 'text', text: 'Error: Path outside workspace' }],
                         isError: true,
@@ -248,9 +253,10 @@ export function createMcpServer() {
         },
         async ({ path: dirPath }) => {
             try {
-                const fullPath = path.resolve(process.cwd(), dirPath || '.');
+                const cfg = await config.load();
+                const fullPath = path.resolve(cfg.workspaceRoot, dirPath || '.');
 
-                if (!fullPath.startsWith(process.cwd())) {
+                if (!fullPath.startsWith(cfg.workspaceRoot)) {
                     return {
                         content: [{ type: 'text', text: 'Error: Path outside workspace' }],
                         isError: true,
@@ -295,6 +301,7 @@ export function createMcpServer() {
         },
         async ({ pattern, path: searchPath, limit }) => {
             try {
+                const cfg = await config.load();
                 const maxResults = limit || 50;
                 const results: string[] = [];
 
@@ -309,7 +316,7 @@ export function createMcpServer() {
                         if (entry.name.startsWith('.') || IGNORED_DIRS.includes(entry.name)) continue;
 
                         const fullPath = path.join(dir, entry.name);
-                        const relativePath = path.relative(process.cwd(), fullPath);
+                        const relativePath = path.relative(cfg.workspaceRoot, fullPath);
 
                         if (entry.isDirectory()) {
                             await searchDir(fullPath, depth + 1);
@@ -334,7 +341,7 @@ export function createMcpServer() {
                     }
                 }
 
-                const startPath = path.resolve(process.cwd(), searchPath || '.');
+                const startPath = path.resolve(cfg.workspaceRoot, searchPath || '.');
                 await searchDir(startPath);
 
                 if (results.length === 0) {
@@ -369,6 +376,7 @@ export function createMcpServer() {
         },
         async ({ pattern, path: basePath }) => {
             try {
+                const cfg = await config.load();
                 const results: string[] = [];
                 const maxResults = 100;
 
@@ -389,7 +397,7 @@ export function createMcpServer() {
                         if (entry.name.startsWith('.') || IGNORED_DIRS.includes(entry.name)) continue;
 
                         const fullPath = path.join(dir, entry.name);
-                        const relativePath = path.relative(process.cwd(), fullPath);
+                        const relativePath = path.relative(cfg.workspaceRoot, fullPath);
 
                         if (entry.isDirectory()) {
                             if (pattern.includes('**') || pattern.includes('/')) {
@@ -403,7 +411,7 @@ export function createMcpServer() {
                     }
                 }
 
-                const startPath = path.resolve(process.cwd(), basePath || '.');
+                const startPath = path.resolve(cfg.workspaceRoot, basePath || '.');
                 await globSearch(startPath);
 
                 if (results.length === 0) {
@@ -596,16 +604,19 @@ export function createMcpServer() {
         {
             description: 'Current workspace information',
         },
-        async () => ({
-            contents: [{
-                uri: 'obsidian://workspace',
-                mimeType: 'application/json',
-                text: JSON.stringify({
-                    cwd: process.cwd(),
-                    name: path.basename(process.cwd()),
-                }, null, 2),
-            }],
-        })
+        async () => {
+            const cfg = await config.load();
+            return {
+                contents: [{
+                    uri: 'obsidian://workspace',
+                    mimeType: 'application/json',
+                    text: JSON.stringify({
+                        cwd: cfg.workspaceRoot,
+                        name: path.basename(cfg.workspaceRoot),
+                    }, null, 2),
+                }],
+            };
+        }
     );
 
     return server;

@@ -1,59 +1,50 @@
 # Obsidian Next - Roadmap v0.5.0
 
-> Updated: 2026-02-02 | Status: Active Development
+> Updated: 2026-02-07 | Status: Autonomous Transformation
 
-This roadmap reflects the comprehensive audit performed on 2026-02-02, identifying critical gaps compared to production-grade AI coding assistants like Claude Code.
-
----
-
-## Current State: v0.4.5
-
-**Test Coverage:** 208 tests passing (10 test files)
-**Architecture Maturity:** 6.5/10 (Good foundation, needs hardening)
-
-### What's Working Well
-- Event-driven architecture with typed EventBus
-- SQLite state persistence (sessions, tasks, memory, usage)
-- Security intent (auditor, sandbox, redactor, PII handling)
-- 8 core tools with approval workflow
-- 17 slash commands
-- Clean separation of concerns
-
-### Critical Gaps Identified
-- Security via patterns, not verification
-- No observability (metrics, tracing)
-- 137 instances of `any` type
-- UI/UX flow issues
-- Testing is unit-heavy, missing integration/E2E
+This roadmap follows the successful implementation of the **Always-On Daemon** and **Claude 4.6** integration.
 
 ---
 
-## Phase 0: Immediate Fixes (P0)
+## Current State: v0.4.6
 
-> Timeline: This Week | Blocking Production
+**Maturity:** 8.5/10 (Architectural shift complete)
 
-### 0.1 Security Hardening
-- [ ] **AST-based command parsing** - Replace regex auditor with proper shell parsing
-  - File: `src/core/auditor.ts`
-  - Risk: Obfuscation bypass possible with current patterns
+### Features Implemented
+- [x] Global State Architecture (`~/.obsidian-next/`)
+- [x] Always-On Heartbeat Scheduler
+- [x] Claude 4.6 Adaptive Thinking & 1M Context Support
+- [x] Semantic Memory Bank (`sqlite-vec`)
+- [x] Bidirectional Markdown Sync (`MEMORY.md`)
 
-- [ ] **Symlink defense** - Add `fs.lstat()` checks to prevent traversal
-  - File: `src/core/auditor.ts:118-138`
-  - Risk: Can read `~/.ssh/id_rsa` via symlink in workspace
+---
 
-- [ ] **MCP binary verification** - Verify server binaries with checksums
-  - File: `src/core/mcp.ts`
-  - Risk: Binary swap attacks on MCP servers
+## Phase 4: Self-Improving Autonomy (P0)
 
-- [ ] **Enable PII redaction by default**
-  - File: `src/core/agent.ts:82`
-  - Current: `redactor.setEnabled(false)` - API keys can leak
+> Timeline: This Month
 
-### 0.2 Critical Bug Fixes
-- [x] ~~Fix auditor test mock (missing `isSessionAuthorized`)~~
-- [x] ~~Fix memory test mock (wrong header text)~~
-- [ ] Fix approval race condition in `ApprovalPrompt.tsx:31-44`
-  - Use `useRef` for single-fire guarantee instead of `useState`
+### 4.1 Skill Expansion
+- [ ] **Autonomous `create_skill` Tool** - Allow the agent to write its own TypeScript tools.
+- [ ] **AST Sanitization** - Verify self-generated code for security risks before execution.
+- [ ] **Dynamic Hot-Reload** - Load new tools into the registry without daemon restart.
+
+### 4.2 Proactive Ghost Work
+- [ ] **Background Code Indexing** - Build a persistent semantic map of all user codebases.
+- [ ] **Nightly Audits** - Proactively search for technical debt and security vulnerabilities.
+
+---
+
+## Phase 5: The Global Gateway (P1)
+
+> Timeline: Next 30 Days
+
+### 5.1 Remote Connectivity
+- [ ] **Telegram Bot Bridge** - First-class mobile interaction and remote approvals.
+- [ ] **Unix Domain Socket Hardening** - Multi-client lane queue management.
+
+### 5.2 Pilot Mode Mastery
+- [ ] **Visual Evaluation Loop** - Native screenshot comparison for GUI tasks.
+- [ ] **Visual Redaction** - Blur sensitive UI elements in the vision pipeline.
 
 ---
 

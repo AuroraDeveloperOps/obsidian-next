@@ -17,6 +17,7 @@ import { settings } from './settings.js';
 import { auditLog } from './auditLog.js';
 import { diffManager } from './diff.js';
 import { redactor } from './redactor.js';
+import { config } from './config.js';
 import { mcp } from './mcp.js';
 import { getRegistryDefinition, listRegistry } from './mcp-registry.js';
 import { UserEvent } from '../events/types.js';
@@ -222,13 +223,14 @@ export const BashTool: Tool = {
 
         // Check if this command should bypass sandbox
         const bypassSandbox = await settings.isUnsandboxed('bash', command);
+        const cfg = await config.load();
 
         try {
             // Wrap command with sandbox if enabled
             const execCommand = await sandbox.wrapCommand(command, bypassSandbox);
 
             const { stdout, stderr } = await execAsync(execCommand, {
-                cwd: process.cwd(),
+                cwd: cfg.workspaceRoot,
                 timeout: 30000, // 30 second timeout
                 maxBuffer: 1024 * 1024, // 1MB buffer (reduced from 10MB)
             });
@@ -295,7 +297,8 @@ export const ReadTool: Tool = {
         }
 
         try {
-            const fullPath = path.resolve(process.cwd(), filePath);
+            const cfg = await config.load();
+            const fullPath = path.resolve(cfg.workspaceRoot, filePath);
             const content = await fs.readFile(fullPath, 'utf-8');
 
             // Add line numbers for better readability
@@ -369,7 +372,8 @@ export const WriteTool: Tool = {
         }
 
         try {
-            const fullPath = path.resolve(process.cwd(), filePath);
+            const cfg = await config.load();
+            const fullPath = path.resolve(cfg.workspaceRoot, filePath);
 
             // Check if file already exists
             try {
@@ -457,7 +461,8 @@ export const EditTool: Tool = {
         }
 
         try {
-            const fullPath = path.resolve(process.cwd(), filePath);
+            const cfg = await config.load();
+            const fullPath = path.resolve(cfg.workspaceRoot, filePath);
             const original = await fs.readFile(fullPath, 'utf-8');
 
             // Check if search string exists
@@ -561,7 +566,8 @@ export const ListTool: Tool = {
         }
 
         try {
-            const fullPath = path.resolve(process.cwd(), dirPath);
+            const cfg = await config.load();
+            const fullPath = path.resolve(cfg.workspaceRoot, dirPath);
             const entries = await fs.readdir(fullPath, { withFileTypes: true });
 
             // Filter out ignored directories
@@ -635,11 +641,12 @@ export const GrepTool: Tool = {
         }
 
         try {
-            const fullPath = path.resolve(process.cwd(), searchPath);
+            const cfg = await config.load();
+            const fullPath = path.resolve(cfg.workspaceRoot, searchPath);
             const results: string[] = [];
 
             // Use recursive search
-            await searchDirectory(fullPath, pattern, results, maxResults);
+            await searchDirectory(fullPath, pattern, results, maxResults, 0, cfg.workspaceRoot);
 
             if (results.length === 0) {
                 return {
@@ -669,7 +676,8 @@ async function searchDirectory(
     pattern: string,
     results: string[],
     maxResults: number,
-    depth: number = 0
+    depth: number = 0,
+    workspaceRoot: string = process.cwd()
 ): Promise<void> {
     if (results.length >= maxResults || depth > 10) return;
 
@@ -681,7 +689,7 @@ async function searchDirectory(
             if (results.length >= maxResults) break;
 
             const fullPath = path.join(dir, entry.name);
-            const relativePath = path.relative(process.cwd(), fullPath);
+            const relativePath = path.relative(workspaceRoot, fullPath);
 
             // Skip ignored directories (node_modules, .git, etc.)
             if (entry.name.startsWith('.') || IGNORED_DIRS.includes(entry.name)) {
@@ -689,7 +697,7 @@ async function searchDirectory(
             }
 
             if (entry.isDirectory()) {
-                await searchDirectory(fullPath, pattern, results, maxResults, depth + 1);
+                await searchDirectory(fullPath, pattern, results, maxResults, depth + 1, workspaceRoot);
             } else if (entry.isFile()) {
                 // Only search text files
                 const ext = path.extname(entry.name).toLowerCase();
@@ -744,10 +752,10 @@ export const GlobTool: Tool = {
         }
 
         try {
+            const cfg = await config.load();
             const results: string[] = [];
-            const fullBase = path.resolve(process.cwd(), basePath);
-
-            await globSearch(fullBase, pattern, results, 100);
+            const fullBase = path.resolve(cfg.workspaceRoot, basePath);
+            await globSearch(fullBase, pattern, results, 100, 0, cfg.workspaceRoot);
 
             if (results.length === 0) {
                 return {
@@ -777,7 +785,8 @@ async function globSearch(
     pattern: string,
     results: string[],
     maxResults: number,
-    depth: number = 0
+    depth: number = 0,
+    workspaceRoot: string = process.cwd()
 ): Promise<void> {
     if (results.length >= maxResults || depth > 15) return;
 
@@ -801,12 +810,12 @@ async function globSearch(
             }
 
             const fullPath = path.join(dir, entry.name);
-            const relativePath = path.relative(process.cwd(), fullPath);
+            const relativePath = path.relative(workspaceRoot, fullPath);
 
             if (entry.isDirectory()) {
                 // If pattern starts with **, search subdirs
                 if (pattern.includes('**') || pattern.includes('/')) {
-                    await globSearch(fullPath, pattern, results, maxResults, depth + 1);
+                    await globSearch(fullPath, pattern, results, maxResults, depth + 1, workspaceRoot);
                 }
             } else if (entry.isFile()) {
                 // Test against pattern

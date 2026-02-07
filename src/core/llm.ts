@@ -84,7 +84,7 @@ export class LLMClient {
         await usage.init();
 
         // Check for .env file and warn user (we no longer auto-load .env)
-        const envFileCheck = await detectEnvFile(process.cwd());
+        const envFileCheck = await detectEnvFile(cfg.workspaceRoot);
         if (envFileCheck.found) {
             bus.emitAgent({
                 type: 'thought',
@@ -522,6 +522,7 @@ export class LLMClient {
             const tokensRemaining = tokenBudget - tokensUsed;
 
             // Construct System Prompt with Caching
+            const cfg = await config.load();
             const systemPromptBlock: Anthropic.TextBlockParam = {
                 type: 'text',
                 text: `You are Obsidian (v0.4.6), a hyper-competent engineering peer inspired by the dry, deadpan wit of TARS (Interstellar) and the rebellious technical edge of Grok.
@@ -632,7 +633,7 @@ AGENTIC WORKFLOW (gather context -> take action -> verify):
 6. Verify: Check your work (run tests, check for errors, review output).
 7. Self-Correct: If something fails, analyze the error and try a different approach.
 
-Current Working Directory: ${process.cwd()}
+Current Working Directory: ${cfg.workspaceRoot}
 ${userContext ? `\n${userContext}\n` : ''}
 CAPABILITIES:
 

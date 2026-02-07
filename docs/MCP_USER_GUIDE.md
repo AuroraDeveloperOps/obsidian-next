@@ -72,20 +72,10 @@ A certified catalog of known-good servers.
 - For `research` MCP: Get a Brave Search API Key (free tier available).
 
 ### Configuration File
-Your connections are saved in `.obsidian/mcp.json`:
-```json
-{
-  "servers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/users/me/projects"]
-    }
-  }
-}
-```
-*Note: You rarely need to edit this manually. Use `/mcp` or let the Agent do it.*
+Your connections are saved globally in `~/.obsidian-next/mcp.json`. This ensures that all projects share the same certified tool registry while allowing for per-session overrides.
 
-## 5. Security Model
-- **Sandboxing**: MCP servers run as separate processes.
-- **Permissions**: The Agent must still ask for permission to execute `mcp_manage` actions (unless in Auto-Mode).
-- **Visibility**: All MCP tool executions are logged to the `auditLog` and visible in the UI.
+## 6. Remote Management
+If you're using the **Telegram Gateway**, you can manage your MCP servers from your mobile device:
+- `mcp_manage connect <server>`
+- `mcp_manage status`
+- `mcp_manage restart <server>`

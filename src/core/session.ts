@@ -11,6 +11,7 @@ import { history } from './history.js';
 import { tasks } from './tasks.js';
 import { usage } from './usage.js';
 import { llm } from './llm.js';
+import { config } from './config.js';
 
 export interface SessionInfo {
     id: string;
@@ -40,6 +41,7 @@ class SessionManager {
      */
     async list(): Promise<SessionInfo[]> {
         try {
+            const cfg = await config.load();
             const rows = db.getDb().prepare(`
                 SELECT id, created_at, workspace 
                 FROM sessions 
@@ -66,7 +68,7 @@ class SessionManager {
                     savedAt: new Date(row.created_at).toISOString(),
                     task: taskRow ? taskRow.title : null,
                     filesModified: modCount ? modCount.count : 0,
-                    workspace: row.workspace || process.cwd(),
+                    workspace: row.workspace || cfg.workspaceRoot,
                 });
             }
 

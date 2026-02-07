@@ -14,6 +14,8 @@ import { redactor } from './redactor.js';
 import { auditLog } from './auditLog.js';
 import { usage } from './usage.js';
 import { mcp } from './mcp.js';
+import { config } from './config.js';
+import { auditor } from './auditor.js';
 import { COMMANDS } from '../ui/CommandPopup.js';
 import { exitCommand } from '../commands/exit.js';
 
@@ -41,6 +43,11 @@ class Agent {
 
     async init(resumeSessionId?: string): Promise<void> {
         if (this.initialized) return;
+        
+        // Load global config and initialize workspace root
+        const cfg = await config.load();
+        auditor.setWorkspaceRoot(cfg.workspaceRoot);
+
         await context.init();
         await mcp.init();
 

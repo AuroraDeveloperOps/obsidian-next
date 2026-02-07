@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 export const ConfigSchema = z.object({
     model: z.string().default('claude-sonnet-4-5-20250929'),
-    workspaceRoot: z.string().default(process.cwd()),
+    workspaceRoot: z.string().default(os.homedir()),
     maxTokens: z.number().default(8192),
     language: z.string().default('en'),
     // Deprecated: apiKey should be managed by KeyManager, not stored in config
@@ -40,7 +40,7 @@ const DEFAULT_CONFIG: Config = {
     model: 'claude-sonnet-4-5-20250929',
     maxTokens: 8192,
     language: 'en',
-    workspaceRoot: process.cwd(),
+    workspaceRoot: os.homedir(),
     executionMode: 'local',
     sandbox: {
         allowedDomains: ['*.github.com', '*.npmjs.org', '*.npmjs.com', 'api.anthropic.com', 'registry.npmjs.org'],
@@ -59,7 +59,7 @@ export class ConfigManager {
     private hasDeprecatedApiKey: boolean = false;
 
     constructor(customPath?: string) {
-        this.configPath = customPath || path.join(os.homedir(), '.obsidian', 'config.json');
+        this.configPath = customPath || path.join(os.homedir(), '.obsidian-next', 'config.json');
     }
 
     async load(): Promise<Config> {
@@ -83,33 +83,6 @@ export class ConfigManager {
             }
         } catch {
             // File missing or invalid, use defaults
-        }
-
-        // Cascade: Check for local .obsidian/config.json in CWD
-        try {
-            const localConfigPath = path.join(process.cwd(), '.obsidian', 'config.json');
-            // Only load if it's different from the global config path
-            if (localConfigPath !== this.configPath) {
-                const localData = await fs.readFile(localConfigPath, 'utf-8');
-                const localParsed = JSON.parse(localData);
-                // Merge local config on top of loaded (global/default) config
-                loadedConfig = { ...loadedConfig, ...localParsed };
-            }
-        } catch {
-            // Local config missing or invalid, ignore
-        }
-
-        // Always ensure workspaceRoot is current CWD unless specifically overridden by the MERGED config
-        // Actually, for safety/consistency, workspaceRoot should typically default to process.cwd()
-        // unless the user *really* managed to set it locally.
-        // But since we excluded it from global save, loadedConfig.workspaceRoot comes from:
-        // 1. DEFAULT_CONFIG (process.cwd())
-        // 2. Global Config (removed now, so falls back to default)
-        // 3. Local Config (if they set it there)
-
-        // Ensure it defaults to actual CWD if missing/empty to fix the "sticky" issue completely
-        if (!loadedConfig.workspaceRoot) {
-            loadedConfig.workspaceRoot = process.cwd();
         }
 
         const finalConfig = ConfigSchema.parse(loadedConfig);

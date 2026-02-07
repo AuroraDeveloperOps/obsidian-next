@@ -9,6 +9,7 @@
 
 import { db } from './database.js';
 import { settings } from './settings.js';
+import { config } from './config.js';
 import path from 'path';
 
 // Context Management Constants
@@ -160,6 +161,7 @@ class ContextManager {
 
     async save(): Promise<void> {
         this.ctx.updated_at = new Date().toISOString();
+        const cfg = await config.load();
 
         try {
             const timestamp = Date.now();
@@ -171,7 +173,7 @@ class ContextManager {
                 ON CONFLICT(id) DO UPDATE SET
                 workspace = excluded.workspace,
                 created_at = excluded.created_at
-            `).run(this.ctx.session_id, timestamp, process.cwd());
+            `).run(this.ctx.session_id, timestamp, cfg.workspaceRoot);
 
             // 2. Upsert Working Set (Transaction)
             const insertFile = db.getDb().prepare(`
@@ -251,7 +253,8 @@ class ContextManager {
 
     // Tracking
     async trackRead(filePath: string, tokenEstimate: number = 0): Promise<void> {
-        const normalized = path.relative(process.cwd(), path.resolve(filePath));
+        const cfg = await config.load();
+        const normalized = path.relative(cfg.workspaceRoot, path.resolve(filePath));
 
         // Memory update
         if (!this.ctx.files_read.includes(normalized)) {
@@ -293,7 +296,8 @@ class ContextManager {
     }
 
     async trackModified(filePath: string, tokenEstimate: number = 0): Promise<void> {
-        const normalized = path.relative(process.cwd(), path.resolve(filePath));
+        const cfg = await config.load();
+        const normalized = path.relative(cfg.workspaceRoot, path.resolve(filePath));
         if (!this.ctx.files_modified.includes(normalized)) {
             this.ctx.files_modified.push(normalized);
         }

@@ -9,7 +9,9 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import { settings } from './settings.js';
+import { config } from './config.js';
 import { redactor } from './redactor.js';
 
 export type AuditEventType =
@@ -41,7 +43,7 @@ export interface AuditEntry {
     metadata?: Record<string, any>;
 }
 
-const LOG_DIR = '.obsidian';
+const LOG_DIR = '.obsidian-next';
 const LOG_FILE = 'audit.log';
 const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB before rotation
 
@@ -53,7 +55,7 @@ class AuditLogger {
     private isWriting: boolean = false;
 
     constructor() {
-        this.logPath = path.join(process.cwd(), LOG_DIR, LOG_FILE);
+        this.logPath = path.join(os.homedir(), LOG_DIR, LOG_FILE);
         this.sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     }
 
@@ -74,11 +76,12 @@ class AuditLogger {
         await this.rotateIfNeeded();
 
         // Log session start
+        const cfg = await config.load();
         await this.log({
             eventType: 'session_start',
             success: true,
             metadata: {
-                cwd: process.cwd(),
+                cwd: cfg.workspaceRoot,
                 pid: process.pid,
                 nodeVersion: process.version,
             },

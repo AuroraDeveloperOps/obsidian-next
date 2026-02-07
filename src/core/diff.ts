@@ -9,8 +9,10 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
+import { config } from './config.js';
 
-const DIFF_DIR = '.obsidian/diffs';
+const DIFF_DIR = '.obsidian-next/diffs';
 const MAX_DIFF_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const MAX_DIFFS = 100;
 
@@ -165,7 +167,7 @@ function hasMoreChanges(
         if (lcsLine === null) return oi < oldLines.length || ni < newLines.length;
 
         if (oi < oldLines.length && oldLines[oi] !== lcsLine) return true;
-        if (ni < newLines.length && newLines[ni] !== lcsLine) return true;
+        if (ni < newLines.length && ni < newLines.length && newLines[ni] !== lcsLine) return true;
     }
 
     return false;
@@ -245,10 +247,14 @@ export function countChanges(diff: string): { additions: number; deletions: numb
  * Diff Manager - Store and retrieve diffs
  */
 class DiffManager {
-    private diffDir: string;
+    private diffDir: string | null = null;
 
-    constructor() {
-        this.diffDir = path.join(process.cwd(), DIFF_DIR);
+    constructor() { }
+
+    private async getDiffDir(): Promise<string> {
+        if (this.diffDir) return this.diffDir;
+        this.diffDir = path.join(os.homedir(), DIFF_DIR);
+        return this.diffDir;
     }
 
     /**
@@ -265,7 +271,8 @@ class DiffManager {
             return null; // No changes
         }
 
-        await fs.mkdir(this.diffDir, { recursive: true });
+        const diffDir = await this.getDiffDir();
+        await fs.mkdir(diffDir, { recursive: true });
 
         const timestamp = new Date().toISOString();
         const { additions, deletions } = countChanges(diff);
@@ -285,7 +292,7 @@ class DiffManager {
         const filename = `${Date.now()}_${sanitizedPath}.diff.json`;
 
         await fs.writeFile(
-            path.join(this.diffDir, filename),
+            path.join(diffDir, filename),
             JSON.stringify(entry, null, 2)
         );
 
@@ -300,8 +307,9 @@ class DiffManager {
      */
     async listDiffs(limit = 20): Promise<DiffEntry[]> {
         try {
-            await fs.mkdir(this.diffDir, { recursive: true });
-            const files = await fs.readdir(this.diffDir);
+            const diffDir = await this.getDiffDir();
+            await fs.mkdir(diffDir, { recursive: true });
+            const files = await fs.readdir(diffDir);
 
             const diffs: DiffEntry[] = [];
 
@@ -310,7 +318,7 @@ class DiffManager {
 
                 try {
                     const content = await fs.readFile(
-                        path.join(this.diffDir, file),
+                        path.join(diffDir, file),
                         'utf-8'
                     );
                     diffs.push(JSON.parse(content));
@@ -341,7 +349,8 @@ class DiffManager {
      */
     async cleanup(): Promise<void> {
         try {
-            const files = await fs.readdir(this.diffDir);
+            const diffDir = await this.getDiffDir();
+            const files = await fs.readdir(diffDir);
             const now = Date.now();
 
             const validFiles: { name: string; time: number }[] = [];
@@ -355,7 +364,7 @@ class DiffManager {
 
                     // Delete if too old
                     if (now - time > MAX_DIFF_AGE_MS) {
-                        await fs.unlink(path.join(this.diffDir, file));
+                        await fs.unlink(path.join(diffDir, file));
                     } else {
                         validFiles.push({ name: file, time });
                     }
@@ -368,7 +377,7 @@ class DiffManager {
                 const toDelete = validFiles.slice(0, validFiles.length - MAX_DIFFS);
 
                 for (const { name } of toDelete) {
-                    await fs.unlink(path.join(this.diffDir, name));
+                    await fs.unlink(path.join(diffDir, name));
                 }
             }
         } catch {
@@ -381,11 +390,12 @@ class DiffManager {
      */
     async clearAll(): Promise<void> {
         try {
-            const files = await fs.readdir(this.diffDir);
+            const diffDir = await this.getDiffDir();
+            const files = await fs.readdir(diffDir);
 
             for (const file of files) {
                 if (file.endsWith('.diff.json')) {
-                    await fs.unlink(path.join(this.diffDir, file));
+                    await fs.unlink(path.join(diffDir, file));
                 }
             }
         } catch {

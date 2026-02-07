@@ -1,127 +1,81 @@
 # Obsidian Next Design System
 
-Based on `cliexample.MD`.
+Based on the **Autonomous Engineering Gateway** visual baseline.
 
-## 1. The Grid Layout
-All output is strictly key-value or bullet-aligned.
+## 1. The Proactive Terminal Layout
+All output is strictly structured to support high-agency engineering.
 
-### 1.1. Agent Bullet (`*`)
-Primary indicator of Agent activity/thought.
+### 1.1. Reasoning Trace (Thinking Block)
+Primary indicator of Agent's internal adaptive thinking (Claude 4.6).
 ```
-* Let me check the current task list...
-```
-
-### 1.2. Tool Output (`⎿`)
-Indicates the result of a tool call (`src/components/ToolOutput.tsx`).
-
-**Standard (Success)**:
-```
-⏺ bash(ls -la)
-  ⎿  total 84
-     drwxr-x ...
+* Thinking (effort: max)...
+  > Analyzed 14 files in the working set.
+  > Identified a race condition in the lane queue.
+  > Designing a mutex-based fix for src/core/bus.ts.
 ```
 
-**Error**:
+### 1.2. Agent Bullet (`*`)
+Indicator of final decisions or direct communication.
 ```
-⏺ bash(mkdir /root/test)
-  ✗  Error: Exit code 1
-     mkdir: cannot create directory '/root/test': Permission denied
-```
-
-### 1.3. The Prompt (`>`)
-Red color (`#FF0000`) for user input area.
-```
-> check the api status
+* I've prepared a plan to fix the race condition. View /task for details.
 ```
 
-## 2. The Spinner
-**Implementation**: `src/components/MorphSpinner.tsx`
-**Visual**: Cyan Braille Dots (`⠋`, `⠙`, `⠹`, `⠸`, `⠼`, `⠴`, `⠦`, `⠧`, `⠇`, `⠏`).
-**Status Text**:
-- `Processing...`
-- `Generating plan...`
-- `Executing tools...`
+### 1.3. Tool Output (`⎿`)
+Indicates the result of an autonomous action.
 
-## 3. Scenarios & Components
-
-### 3.1. Context & History
-Compressed history view on startup.
-
-### 3.2. Structured Choices
-When the agent needs a decision (via `ChoicePrompt`).
+**Success**:
 ```
-  Next step options:
-
-  1. Complete Phase 5 - Implement Resource Quotas
-  2. Skip to Phase 6 - Defer quotas
-  3. Fix health checks - The management-api shows unhealthy
-
-  What's the priority?
+⏺ bash(npm test)
+  ⎿  PASS tests/core/bus.test.ts
+     ✓ should handle concurrent events (142ms)
 ```
 
-### 3.3. Permission / Confirmation
-**Diff View (File Edit)**:
-Uses `ApprovalPrompt` component. Shows diff of pending changes.
+**Autonomous Error (Self-Correction Triggered)**:
 ```
-* The agent wants to edit `src/index.ts`:
-
-  364 -      test: ["CMD", "wget", "-q", "localhost"]
-  364 +      test: ["CMD", "wget", "-q", "localhost/api"]
-
-  1. Approve
-  2. Reject (Press Tab to add reason)
+⏺ edit(src/core/bus.ts)
+  ✗  Error: Search string not found.
+* Thinking (effort: low)...
+  > Search string mismatch likely due to stale read. Re-reading file...
+⏺ read(src/core/bus.ts)
 ```
 
-### 3.4. Footer (StatusBar)
-Always visible at the bottom (Ink `Box` with flex-between).
+## 2. The Status Bar (Footer)
+Visible across all connected interfaces.
 ```
-[ default ] [ Context: 0.0k / 200k (0%) ] [ Model: Claude 4.5 Sonnet ]
+[ autonomous ] [ Context: 142k / 1M (14%) ] [ Model: Opus 4.6 ] [ Daemon: Active ]
 ```
-- **Mode**: "[ default ]" (White), "[ plan mode ]" (Yellow), "[ auto-accept ON ]" (Green).
-- **Context**: Current usage / 200k limit (Percentage).
+- **Mode**: "[ guardian ]" (White), "[ architect ]" (Yellow), "[ autonomous ]" (Green).
+- **Context**: 1M token mastery grid tracking.
+- **Daemon**: Connectivity status to the background service.
 
-### 3.5. Text Input Prompts
-For masked input (API keys) and interactive setup (`TextInputPrompt.tsx`).
+## 3. Advanced Components
+
+### 3.1. 1M Token Mastery Grid
+A high-fidelity visualization of the massive context window.
+- `⛁` **Cached Prefix**: System Persona + Codebase Schema (90% cost reduction).
+- `⛁` **Active Working Set**: Recently modified files.
+- `⛶` **Free Window**: Remaining space in the 1M token window.
+
+### 3.2. Pilot Mode Overlay
+(Conceptual) Red border and blinking indicator when the agent takes GUI control.
 ```
-Enter your Anthropic API key:
-> sk-ant-****************************
-```
-
-### 3.6. Session Summary
-Shown on `/exit` with activity stats.
-```
-==================================================
-SESSION SUMMARY
-==================================================
-
-Session ID: abc123
-Duration:   1h 23m
-
-[Activity]
-  Files read:     12
-  Files modified: 3
-  Tasks done:     2
-  Tasks pending:  1
-
-[Cost]
-  Session total:  $0.0847
-
-Session saved. Resume with: /resume abc123
-==================================================
+[ PILOT MODE ACTIVE ] [ EVALUATING SCREENSHOT... ]
 ```
 
-### 3.7. Session View (Menu)
-Interactive TUI for managing saved sessions (`src/ui/views/SessionView.tsx`).
-
+### 3.3. Multi-Channel Prompts
+Interactive setup for remote gateways.
 ```
-┌────────────────────────────────────────────────────────┐
-│ Saved Sessions                                         │
-├────────────────────────────────────────────────────────┤
-│ ID                   Date                     Task     │
-│ > ml2vm8fw...        1/31, 5:22 PM            Plan...  │
-│   k9s8d7f6...        1/30, 4:00 PM            Fix...   │
-│                                                        │
-├────────────────────────────────────────────────────────┤
-│ Enter to resume · D to delete · Esc to close           │
-└────────────────────────────────────────────────────────┘
+/init-telegram
+Enter Bot Token:
+> 123456789:ABCDEF... (Masked)
+Whitelisting User ID: 987654321 [Verified]
+```
+
+### 3.4. Daily Log Preview
+Shown on `/status` to summarize background heartbeat activity.
+```
+Today's Log: 2026-02-07.md
+- 02:00: Nightly Security Audit [No vulnerabilities]
+- 04:30: Codebase Indexing [Updated MAP.md]
+- 09:15: Proactive Test Run [1 failure in mcp-registry]
 ```

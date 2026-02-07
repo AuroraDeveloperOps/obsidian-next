@@ -1,142 +1,47 @@
-# Obsidian Next - FAANG-Level Improvement Plan
+# Obsidian Next - Autonomous Transformation Plan
 
 ## Executive Summary
 
-After a comprehensive code review, this document outlines critical improvements needed to bring Obsidian Next to production-quality FAANG standards. The focus areas are: **Context Management**, **Reliability**, **Testing**, and **Security**.
+Obsidian Next has transitioned from a terminal tool to an **Autonomous Engineering Gateway**. This plan outlines the final hardening steps to achieve production-grade 24/7 reliability.
 
 ---
 
-## COMPETITIVE ANALYSIS: OpenClaw vs Claude Code vs Obsidian Next
+## ARCHITECTURAL MATURITY: script -> service
 
-### Feature Comparison Matrix
+### Features Implemented (v0.4.6)
 
-| Feature | OpenClaw | Claude Code | Obsidian Next |
-|---------|----------|-------------|---------------|
-| **Core Agent** |
-| Multi-model support | Yes | Yes (Claude 4) | Yes (Claude 4.5) |
-| Streaming responses | Yes | Yes | Yes |
-| Tool execution | Yes | Yes | Yes |
-| Context management | Basic | Advanced | Advanced (time-decay) |
-| Session persistence | Yes | Yes | Yes (SQLite) |
-| **Memory & Learning** |
-| Long-term memory | Yes | Yes (CLAUDE.md) | Yes (SQLite memos) |
-| User preferences | Yes | Yes | Yes |
-| Project context files | No | Yes (CLAUDE.md) | Partial |
-| Learned patterns | Yes | Yes | Yes |
-| **Multi-Channel** |
-| CLI/Terminal | Yes | Yes | Yes |
-| WhatsApp/Telegram | Yes | No | No |
-| Slack/Discord | Yes | Partial | No |
-| Web interface | Yes | Yes (claude.ai) | No |
-| IDE integration | No | Yes (VS Code, JetBrains) | No |
-| **Advanced Features** |
-| Subagents | Partial | Yes | No |
-| Extended thinking | No | Yes | No |
-| Voice interaction | Yes | No | No |
-| Live canvas/visual | Yes | No | No |
-| Cron/scheduled tasks | Yes | No | Yes |
-| **Security** |
-| PII redaction | Basic | Yes | Yes (30+ patterns) |
-| Command auditing | Basic | Yes | Yes |
-| Sandbox execution | No | Yes | Yes |
-| Secure key storage | Basic | Yes | Yes (Keychain) |
+1.  **Always-On Background Service**: The Node.js daemon manages sessions globally.
+2.  **Adaptive Reasoning**: Full integration of Claude 4.6 **Thinking Blocks**.
+3.  **1M Token Window**: Optimized via prompt caching and episodic summarization.
+4.  **Proactive Scheduler**: Background heartbeat for security and maintenance.
+5.  **Hybrid Semantic Memory**: `sqlite-vec` + bidirectional `MEMORY.md` sync.
 
-### Key Features We're Missing (Priority Order)
+### Hardening Targets (Next 30 Days)
 
-1. **Subagents** (HIGH) - Claude Code's killer feature
-   - Specialized sub-agents for specific tasks
-   - Independent context windows
-   - Task-specific permissions
+1. **Self-Improving Skill Safety** (HIGH)
+   - Implement **AST-based sanitization** for autonomous `create_skill` tool.
+   - Enforce "Restricted Mode" for the first 3 executions of any self-generated skill.
 
-2. **Extended Thinking Mode** (HIGH)
-   - Deep reasoning for complex problems
-   - Multiple reasoning passes
+2. **Visual Evaluation Loop** (HIGH)
+   - Finalize the **Pilot Mode** screenshot comparison logic.
+   - Implement real-time PII blurring for vision tasks.
 
-3. **IDE Integration** (MEDIUM)
-   - VS Code extension
-   - JetBrains plugin
-   - Inline diffs and @-mentions
-
-4. **CLAUDE.md/Project Context Files** (MEDIUM)
-   - Auto-discovered project context
-   - Coding standards documentation
-   - Architecture notes
-
-5. **Web Interface** (LOW)
-   - Browser-based access
-   - Remote sessions
-   - Parallel task execution
-
-6. **Multi-Channel Support** (LOW)
-   - Messaging platform integration
-   - Would require significant architecture changes
-
-### Features We Have That Others Don't
-
-1. **Advanced PII Redaction** - 30+ patterns vs basic
-2. **Time-Decayed Context Ranking** - Smart file importance
-3. **Comprehensive Audit Logging** - Full security tracking
-4. **Structured Error Types** - Production-grade error handling
-5. **Unified SQLite State** - All state in one place
+3. **Multi-Channel Scalability** (MEDIUM)
+   - Harden the **Lane Queue** to support 10+ concurrent remote clients.
+   - Implement **Session Handoff**: Start a task on the CLI, approve it on Telegram, view results on the Web dashboard.
 
 ---
 
-## 1. CRITICAL BUGS TO FIX IMMEDIATELY
+## 1. INTELLIGENCE IMPROVEMENTS
 
-### 1.1 Duplicate Tool Registration
-**File:** `src/core/tools.ts:1053-1054`
-```typescript
-this.register(GlobTool);
-this.register(GlobTool); // DUPLICATE - causes issues
-```
-**Fix:** Remove the duplicate registration.
+### 1.1 Effort-Aware Task Routing
+The agent should automatically toggle its `effort` parameter:
+- `low`: Discovery (list, grep), Status checks, Simple edits.
+- `medium`: Feature implementation, Documentation.
+- `max`: Bug investigation, Architecture refactoring, Plan generation.
 
-### 1.2 Memory Leak in LLM Event Listeners
-**File:** `src/core/llm.ts:291-293`
-```typescript
-bus.on('user', (e: any) => {
-    if (e.type === 'user_interrupt') interruptHandler();
-});
-```
-**Issue:** New listener added on every `streamChat()` call, never removed.
-**Fix:** Use `bus.once()` or track and remove listeners.
-
-### 1.3 Context Size Calculation Error
-**File:** `src/core/llm.ts:145`
-```typescript
-const currentUsage = Math.max(this.accumulatedInputTokens, await usage.getContextUsage(apiModel).used);
-```
-**Issue:** `await` on a synchronous method that doesn't return a Promise - causes incorrect context tracking.
-**Fix:** Remove `await` or make `getContextUsage` actually async.
-
----
-
-## 2. CONTEXT MANAGEMENT IMPROVEMENTS
-
-### 2.1 Smart Working Set with Time Decay
-
-**Current Problem:** `rank_score = access_count * 1.0` is too simplistic. Files accessed weeks ago rank the same as recent files.
-
-**FAANG Solution - Exponential Time Decay:**
-```typescript
-// In context.ts
-interface WorkingSetEntry {
-    filePath: string;
-    accessCount: number;
-    lastAccessed: number;
-    recencyScore: number;     // NEW: Time-decayed score
-    importanceScore: number;  // NEW: Semantic importance
-    tokenEstimate: number;    // NEW: Estimated tokens
-}
-
-const DECAY_HALF_LIFE_MS = 3600000; // 1 hour
-
-function calculateRankScore(entry: WorkingSetEntry): number {
-    const ageMs = Date.now() - entry.lastAccessed;
-    const decayFactor = Math.pow(0.5, ageMs / DECAY_HALF_LIFE_MS);
-    return (entry.accessCount * entry.importanceScore * decayFactor);
-}
-```
+### 1.2 Context Distillation (The Background Haiku)
+Every 100k tokens, a background Haiku process must distill raw events into structured "Memos" to prevent context rot in the 1M window.
 
 ### 2.2 Token-Aware Context Management
 

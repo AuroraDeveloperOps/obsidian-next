@@ -1,71 +1,57 @@
-# Smart Context Management
+# Smart Context & Semantic Memory
 
-Obsidian Next employs a sophisticated **Smart Context System** designed to maximize "effective memory" while adhering to the 200k token limits of modern models (Claude 3.5 Sonnet).
+Obsidian Next employs a multi-tiered **Context Mastery System** designed to leverage the 1 million token window of Claude 4.6 while maintaining lightning-fast responses and minimal costs.
 
-Instead of a simple First-In-First-Out (FIFO) buffer which loses important context, or a "scratchpad" which consumes too many output tokens, Obsidian uses a structural compression strategy.
+## Architecture: The 1M Token Strategy
 
-## Architecture
+Instead of overwhelming the model with raw data, Obsidian uses a structural optimization strategy to maximize the value of every token.
 
-The conversation history is segmented into three distinct logical blocks:
+### 1. The Anchor (Prompt Caching)
+*   **Content**: System Persona, Workspace Schema (`MAP.md`), and core constraints.
+*   **Behavior**: Placed at the very beginning of the prompt to hit Anthropic's **Prompt Caching** checkpoints. This reduces input costs by up to 90% for subsequent turns in the same session.
 
-### 1. The Head (Immutable)
-*   **Size**: Fixed (First 2 messages).
-*   **Content**: The User's initial intent and the System's primary constraints.
-*   **Behavior**: NEVER pruned. This ensures the agent never forgets *why* it is here or *who* it is.
+### 2. The Active Working Set
+*   **Content**: Files currently being read or modified.
+*   **Ranking**: Uses a time-decayed scoring algorithm. Files edited in the last 5 minutes get 2x weight; common entry points (e.g., `index.ts`) get 1.5x.
+*   **Pruning**: Automatically drops low-score files from the active window to stay within the preferred performance bracket (sub-200k tokens) unless deep reasoning is required.
 
-### 2. The Body (Compressible)
-*   **Size**: Variable (The middle 70-80% of history).
-*   **Content**: The "journey" of the session—reasoning steps, tool executions, and intermediate results.
-*   **Behavior**: **Semantic Summarization**.
-    *   When the context limit approaches (e.g., >160k tokens), Obsidian identifies the oldest chunks of the "Body".
-    *   It dispatches these chunks to a high-speed, low-cost model (Claude 3 Haiku).
-    *   The model generates a concise bulleted summary of key decisions, file changes, and discoveries.
-    *   The original high-token messages are replaced by a single `[Context Summary]` message.
-
-### 3. The Tail (Active)
-*   **Size**: Fixed (Last 10-15 messages).
-*   **Content**: The immediate context—current error messages, file contents being edited, and the very last user prompt.
-*   **Behavior**: Protected from pruning to maintain immediate conversational fluidity.
+### 3. Episodic Summarization (The Distiller)
+*   **Behavior**: When the "Body" of the conversation exceeds 100k tokens, a background process (`claude-haiku-4-5`) distills the intermediate steps into high-fidelity "Episodic Memos."
+*   **Result**: Raw history is replaced by structured summaries, preventing "Context Rot" where the model loses track of early instructions in massive windows.
 
 ---
 
-## Tiered Long-term Memory (The Handoff)
+## Semantic Memory (sqlite-vec)
 
-While history manages the *current session*, Obsidian uses an SQLite-backed memory system for *cross-session* awareness:
+While the working set manages the *current session*, Obsidian uses **`sqlite-vec`** for global, cross-workspace awareness:
 
-### 1. User Preferences (`user_preference`)
-*   Implicitly or explicitly learned facts about the user (name, coding style, tech stack).
-*   Injected into every System Prompt for high personalization.
+### 1. Local Vector Store
+*   Every session, decision, and learned pattern is embedded locally and stored in `~/.obsidian-next/state.db`.
+*   **Semantic Retrieval**: When you ask a question, Obsidian performs a K-Nearest Neighbor (KNN) search to find the most relevant past experiences, injecting them into the current prompt as `[RECALL]` blocks.
 
-### 2. Project Facts (`project_fact`)
-*   Key architectural decisions, library choices, and workspace quirks.
-*   Helps the agent avoid asking the same discovery questions twice.
-
-### 3. Learned Patterns (`learned_pattern`)
-*   Repeated bug fixes or common refactor requests are distilled into patterns.
-*   The agent proactively applies these patterns to new work.
+### 2. Bidirectional Markdown Sync (`MEMORY.md`)
+*   The "Brain" of the agent is exposed as a human-readable Markdown file.
+*   **User Intervention**: You can manually edit `MEMORY.md` to correct the agent's assumptions or provide new project-wide rules.
+*   **Sync Logic**: The daemon watches for changes to `MEMORY.md` and automatically re-indexes edited sections into the semantic store.
 
 ---
 
-## Visualization
+## Performance Monitoring
 
-The Obsidian UI provides a 10x10 token verification grid (`/context` or `ESC` > Usage) to visualize this structure:
+The Obsidian UI provides real-time context verification (`/status` or `ESC` > Usage):
 
 | Symbol | Meaning | Category |
 |:---:|---|---|
-| `⛁` | **Static Context** | System Prompt, cached Tools, and Immutable Head. |
-| `⛁` | **Active Messages** | The dynamic Body and Tail messages. |
-| `⛶` | **Free Space** | Available capacity before warning/pruning triggers. |
-| `⛝` | **Safety Buffer** | Reserved space (top 2-5%) to prevent API hard-limits. |
+| `⛁` | **Cached Prefix** | System Prompt and Static Schema (Cost optimized). |
+| `⛁` | **Dynamic Body** | The reasoning loop and tool outputs. |
+| `⛶` | **Free Window** | Available space in the 1M token beta window. |
+| `⛝` | **Redacted** | Areas masked by the PII Redactor or visual guard. |
 
 ---
 
-## Pruning Triggers
+## Safety & Redaction
 
-*   **Warning (80%)**: UI alerts the user that context is filling up.
-*   **Compression (90%)**: The "Body" summarization logic triggers automatically.
-*   **Hard Stop (98%)**: Agent halts to prevent context overflow errors, requesting manual intervention (rare).
-
-## Session Persistence
-
-The entire context structure—including the compressed summaries—is preserved when using `/exit` and `/resume`. This allows you to pause a multi-day engineering task and resume with the AI fully "aware" of previous structural decisions without re-reading the entire raw history.
+Before any context is sent to the LLM, it passes through the **Privacy Guard**:
+1.  **PII Redaction**: Regular expressions and NER models strip emails, keys, and tokens.
+2.  **Screenshot Masking**: (Pilot Mode) Blurs sensitive GUI areas before sending images to the vision model.
+3.  **Audit Trail**: All redacted data is logged locally in `~/.obsidian-next/audit.log` but never reaches the cloud.

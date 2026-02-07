@@ -1,85 +1,48 @@
 # Product Requirements Document (PRD): Obsidian Next
 
-**Project**: Obsidian Next (formerly Aurora/Obsidian)
-**Status**: Active Development
-**Reference**: `cliexample.MD` (Visual Baseline)
+**Project**: Obsidian Next
+**Status**: Autonomous Transformation (Feb 2026)
+**Version**: 0.4.6
 
-## 1. Core Philosophy
-1.  **Structure over Stream**: The Agent does NOT stream raw Markdown. It emits **Structured Events** (`Reasoning`, `ToolCall`, `ChoiceRequest`) which the CLI renders.
-2.  **Visual Hierarchy**:
-    - **Agent Thought**: `*` Bullet points.
-    - **Tool Output**: `⎿` Indented blocks (Success) / `✗` (Error).
-    - **User Input**: `>` Red prompt.
-3.  **Modes (Shift+Tab)**:
-    - **[Default]**: Ask for permission on sensitive actions.
-    - **[Plan Mode]**: Only generate tasks/plans, no execution.
-    - **[Auto-Accept]**: Execute trusted tools without confirmation (High Agency).
+## 1. Core Philosophy: The Autonomous Gateway
+1.  **Always-On Background Service**: Obsidian is a global daemon, not a project-bound script. It runs 24/7, performing proactive maintenance while the user is away.
+2.  **Adaptive Thinking (Claude 4.6)**: The agent utilizes the latest "Reasoning Blocks" to plan complex engineering tasks. It modulates `effort` based on task difficulty.
+3.  **1M Token Context Mastery**: Leveraging the massive context window to hold entire codebases in active memory, optimized with deep-history summarization and prompt caching.
+4.  **Self-Improving Capabilities**: The agent autonomously writes, tests, and registers its own skills to overcome capability gaps.
 
-## 2. Professional Loading State
-- **Requirement**: Standard, non-distracting activity indicator.
-- **Implementation**: A cyan braille spinner (`dots`) from `ink-spinner`.
-- **Status Text**: Clear, static status messages (e.g., "Processing...", "Generating plan...").
+## 2. Infrastructure Requirements
+- **Daemon Process**: Persistent Node.js service started on boot (via `launchd`/`systemd`).
+- **IPC Layer**: High-speed communication via Unix Domain Sockets (`~/.obsidian-next/daemon.sock`).
+- **Global Store**: All state (history, memory, tasks) centralized in `~/.obsidian-next/`.
+- **Lane Queue**: Orchestrates concurrent requests from CLI, mobile (Telegram), and web interfaces.
 
-## 3. Structured Interaction
-The Agent must support a `Choice` tool that forces the UI to render a selectable list.
+## 3. Autonomous Features
+- **Proactive Heartbeat**: Scheduled background tasks (`/schedule`) for security audits, test runs, and codebase indexing.
+- **Remote Gateway**: Secure Telegram integration for remote status checks and approvals.
+- **Hybrid Memory Sync**: Bidirectional sync between SQLite and a human-readable `MEMORY.md` file.
+- **Pilot Mode**: Secure GUI automation with a visual evaluation loop and real-time PII redaction on screenshots.
 
-**Tab-to-Context**:
-- If a user selects a "Reject" or "Modify" option, they can press `TAB`.
-- This opens an input line.
-- The input is sent as a `UserMessage` to the Event Bus *before* the `ToolResult`.
-- The Agent sees: `[User rejected tool call with reason: "Variable name is wrong"]`.
+## 4. Interaction Standards
+- **Thinking Trace**: Real-time streaming of "Reasoning" blocks before the tool call.
+- **Structured Choices**: Selectable lists for permissions, model selection, and workspace navigation.
+- **Tab-to-Context**: If a user rejects a plan, they can press `TAB` to provide detailed feedback which is fed back into the reasoning loop.
 
-**Example**:
-```json
-{
-  "type": "choice",
-  "question": "Permission Request",
-  "options": [
-    { "id": "1", "label": "Approve" },
-    { "id": "2", "label": "Reject", "allow_context": true }
-  ]
-}
-```
-
-## 4. Slash Commands (Open Source Standard)
-We must implement a `CommandRegistry` to handle these local-only ops.
+## 5. Built-in Commands (The Autonomous Toolkit)
 
 | Command | Description |
 |---------|-------------|
-| `/help` | Show available commands. |
-| `/init` | Initialize configuration. |
-| `/mode` | Set execution mode (auto/plan/safe). |
-| `/status`| Show system status. |
-| `/context`| Analyze context usage & cost (10x10 Grid). |
-| `/doctor`| Debug connectivity. |
-| `/clear` | Clear context window. |
-| `/task` | Manage tasks. |
-| `/tool` | Manual tool execution. |
-| `/sandbox`| Switch execution mode to/from sandbox. |
-| `/undo` | Undo recent file changes. |
+| `/init` | Setup global service and API keys. |
+| `/schedule`| Schedule background tasks (cron-based). |
+| `/memory` | Manage long-term knowledge and export to MD. |
+| `/workspace`| Switch between multiple active projects. |
+| `/pilot` | Enable/Disable secure GUI automation. |
+| `/mode` | Set agent agency level (auto/plan/safe). |
+| `/status` | Daemon health, task progress, and usage grid. |
+| `/undo` | Revert any file modification across the system. |
 
-**Note**: Git operations (commit, push, etc.) are handled by the AI via the bash tool.
-
-
-## 5. Strict Event Protocol (JSON Schema)
-To ensure the AI "adheres to these outputs", the Supervisor logic must enforce this JSON schema for **all** agent emissions.
-
-```typescript
-type AgentEvent =
-  | { type: "thought"; content: string; hidden?: boolean }
-  | { type: "tool_start"; tool: string; args: string }
-  | { type: "tool_result"; tool: string; output: string; isError?: boolean }
-  | { type: "choice_request"; question: string; options: Option[] }
-  | { type: "approval_request"; context: string; diff?: string }
-  | { type: "done"; summary: string };
-
-// The AI is FORBIDDEN from streaming raw text outside of "content" fields.
-```
-
-## 6. Architecture Specs
-- **Folder**: `obsidian/obsidian-next`
-- **Tech**: TypeScript, Ink, Node.js EventBus (Zero-Dep), Sandbox Runtime.
-- **Diff View**:
-  - unified diff format with `+`/`-` indicators.
-  - Interactive "Y/n" or "Select Lines" (future).
+## 6. Execution Protocol
+To ensure safety in an autonomous environment, the daemon enforces:
+1. **Auditor Pre-flight**: Every tool call is vetted against global security rules.
+2. **Sandbox Isolation**: OS-level boundaries for shell and file operations.
+3. **Emergency Kill Switch**: Immediate cessation of all autonomous activity via local or remote trigger.
 

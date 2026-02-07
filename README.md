@@ -2,28 +2,29 @@
 
 ![Obsidian Next](assets/obsidianboxes.png)
 
-> This README was written by Obsidian (v0.4.6) - a self-aware AI agent with full OS access, persistent memory, and autonomous task execution.
+> This README was written by Obsidian (v0.4.6) - a global, always-on autonomous engineering daemon with adaptive reasoning and system-wide persistent memory.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-0.4.6-blue)](package.json)
-[![Status](https://img.shields.io/badge/Status-Stable-green)](CHANGELOG.md)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
+[![Status](https://img.shields.io/badge/Status-Autonomous-green)](CHANGELOG.md)
+[![Claude 4.6](https://img.shields.io/badge/Model-Claude_4.6-purple)](docs/PRD.md)
 
-**Obsidian Next** is a terminal-native AI engineering assistant with full operating system access, persistent memory, and structured task execution.
+**Obsidian Next** is a global, always-on autonomous engineering partner. It runs as a system-wide background service, managing multiple codebases and performing proactive engineering tasks while you're away.
 
-Built for developers who need an agent that can actually *do things* - not just chat about them.
+Built for engineers who need an agent that lives in their system - not just in a terminal window.
 
 ---
 
-## What Makes Obsidian Different
+## What Makes Obsidian Autonomous
 
-| Feature | Obsidian | Other Assistants |
-|---------|----------|------------------|
-| **OS Access** | Full bash, file system, app control | Sandboxed or none |
-| **Memory** | Persistent across sessions (SQLite) | Per-conversation only |
-| **Task Tracking** | Built-in plan mode with step completion | Manual or none |
-| **Session Resume** | Full state restoration | Start fresh each time |
-| **Security** | Auditor + PII redaction + approval prompts | Trust the model |
+| Feature | Obsidian Next | Other Assistants |
+|---------|---------------|------------------|
+| **Lifecycle** | Always-on Daemon (Service) | Script / Process-bound |
+| **Reasoning** | Claude 4.6 Adaptive Thinking | Standard Chat |
+| **Context** | 1 Million Token Mastery | 128k - 200k fixed |
+| **Memory** | Semantic Vector Store (Hybrid) | Simple Chat History |
+| **Proactivity** | Heartbeat Background Tasks | Reactive Only |
+| **Scope** | Global (System-wide) | Project-locked |
 
 ---
 
@@ -33,65 +34,39 @@ Built for developers who need an agent that can actually *do things* - not just 
 # Install globally
 npm install -g @aurora-foundation/obsidian-next
 
-# Run
-obsidian
+# Initialize global daemon and services
+obsidian init --service
 
-# First time setup
-/init
+# Check daemon status
+obsidian status
 ```
 
 ---
 
-## Core Features
+## Core Capabilities
 
-### Full OS Access
-Obsidian has unrestricted access to your operating system via bash. It can:
-- Open applications (`open`, `osascript`)
-- Control system settings
-- Run any shell command
-- Speak text aloud (`say` on macOS)
-- Manage clipboard (`pbcopy`/`pbpaste`)
+### Always-On Autonomy
+Obsidian runs as a background service (`launchd` or `systemd`). It doesn't die when you close your terminal. It keeps reasoning, indexing, and auditing in the background.
 
-```
-> open spotify and play some music
-> say "build complete" when the tests pass
-> organize my Downloads folder
-```
+### Claude 4.6 Adaptive Reasoning
+Utilizing the latest **Thinking Blocks**, Obsidian modulates its reasoning effort based on task complexity. You can see its "Thinking Trace" in real-time before it acts.
 
-### Three Execution Modes
+### 1M Token Context window
+Hold entire repositories in active memory. Obsidian uses **Prompt Caching** and **Context Distillation** to keep massive windows cheap, fast, and coherent.
 
-| Mode | Description | Use Case |
-|------|-------------|----------|
-| **Safe** (default) | Approval required for writes/commands | Daily use |
-| **Plan** | Read-only exploration, creates execution plan | Complex tasks |
-| **Auto** | Full autonomy, no confirmations | Trusted workflows |
-
-Toggle modes with `Shift+Tab` or `/mode`.
-
-### Persistent Memory
-Obsidian remembers you across sessions:
-- User preferences and project facts
-- Learned patterns and decisions
-- Session history with full restoration
+### Proactive Heartbeat (The Scheduler)
+Schedule background tasks to keep your systems healthy:
+- **Nightly Audits**: Scan for security vulnerabilities or dead code.
+- **Auto-Documentation**: Generate docstrings for new functions.
+- **Health Checks**: Run tests and notify you via Telegram if they break.
 
 ```
-> remember that I prefer tabs over spaces
-> what's my preferred testing framework?
+/schedule "0 2 * * *" system:audit
+/schedule "*/30 * * * *" system:sync_index
 ```
 
-### Task Tracking
-Built-in task management for multi-step work:
-- Automatic step creation in plan mode
-- Progress tracking with visual indicators
-- Resume incomplete tasks across sessions
-
-View tasks with `Ctrl+T` or `/task`.
-
-### Session Management
-Never lose your work:
-- `/exit` - Save session and quit
-- `/resume` - Browse and restore saved sessions
-- Full context, history, and task restoration
+### Self-Improving Skills
+Obsidian can autonomously expand its own toolbox. If it hits a capability gap, it writes, tests, and registers a new TypeScript tool in `~/.obsidian-next/skills/` without a restart.
 
 ---
 
@@ -99,93 +74,54 @@ Never lose your work:
 
 | Command | Description |
 |---------|-------------|
-| `/help` | Show all commands |
-| `/init` | Configure API key and model |
-| `/mode` | Switch execution mode |
-| `/context` | View token usage and session stats |
-| `/task` | View current task progress |
-| `/resume` | Restore a saved session |
-| `/mcp` | Manage Model Context Protocol servers |
-| `/clear` | Clear conversation history |
-| `/exit` | Save session and exit |
+| `/schedule` | Manage proactive background tasks |
+| `/memory` | Export/sync the Semantic Knowledge Bank |
+| `/workspace`| Focus the agent on a specific project root |
+| `/pilot` | Secure GUI automation (Computer Use) |
+| `/status` | Monitor daemon health and 1M context usage |
+| `/resume` | Restore sessions from any workspace |
 
 ---
 
-## Keyboard Shortcuts
+## Architecture (The Gateway Pattern)
 
-| Shortcut | Action |
-|----------|--------|
-| `Shift+Tab` | Cycle execution mode |
-| `Ctrl+T` | Open task view |
-| `Ctrl+C` | Exit (saves session) |
-| `Escape` | Interrupt current operation |
-| `Tab` | Autocomplete command |
-| `Up/Down` | Navigate command suggestions |
+Obsidian Next operates via a central backend service connected to multiple frontends:
 
----
+```mermaid
+graph TD
+    subgraph "Interfaces"
+        CLI[CLI Frontend]
+        TG[Telegram Bot]
+        Web[Web UI]
+    end
 
-## Architecture
+    subgraph "Always-On Daemon (Backend)"
+        Socket[Unix Domain Socket] <--> LaneQueue[Lane Queue]
+        LaneQueue <--> Agent[Agent Core]
+        Agent <--> Claude[Claude 4.6]
+        Agent <--> Tools[Self-Improving Tools]
+    end
 
-```
-User Input
-    |
-    v
-[Supervisor] --> /command --> [Command Registry]
-    |
-    v
-[Agent Runtime]
-    |
-    +---> [Auditor] --> Security checks
-    |
-    +---> [Tools] --> bash, read, write, edit, grep, glob, web_fetch
-    |
-    +---> [Memory] --> SQLite persistent store
-    |
-    v
-[Event Bus] --> [Terminal UI]
+    subgraph "System State (~/.obsidian-next/)"
+        DB[(SQLite state.db)]
+        Vector[Semantic Memory]
+        MD[MEMORY.md / Logs]
+    end
+
+    CLI <--> Socket
+    TG <--> Socket
+    Web <--> Socket
+    Agent <--> DB
 ```
 
-All state is stored locally in `.obsidian/state.db` (SQLite).
-
 ---
 
-## Security
+## Security & Safety
 
-- **Auditor**: Pre-flight validation of all commands and file operations
-- **PII Redaction**: Automatic sanitation of sensitive data from LLM context
-- **Approval Prompts**: Explicit confirmation for destructive operations
-- **Secure Storage**: System Keychain integration for API keys
-- **Audit Logging**: Complete trail of all agent actions
-
----
-
-## Model Support
-
-Obsidian works with Claude 4.5 models:
-
-| Model | Best For |
-|-------|----------|
-| **Opus 4.5** | Complex reasoning, architecture decisions |
-| **Sonnet 4.5** | Balanced performance (default) |
-| **Haiku 4.5** | Fast responses, simple tasks |
-
-Configure with `/init` or `/models`.
-
----
-
-## MCP Integration
-
-Extend Obsidian with Model Context Protocol servers:
-
-```
-/mcp
-```
-
-Install certified tools:
-- `filesystem` - Enhanced file operations
-- `git` - Repository management
-- `research` - Web search and analysis
-- `context7` - Documentation lookup
+- **Global Auditor**: Centralized security policy for all projects.
+- **Lane Queue**: Prevents race conditions during concurrent access.
+- **Visual Privacy Guard**: Redacts sensitive data from screenshots in Pilot Mode.
+- **Kill Switch**: Immediate local or remote termination of all autonomous activity.
 
 ---
 
@@ -193,10 +129,10 @@ Install certified tools:
 
 | Resource | Description |
 |----------|-------------|
-| [Architecture](docs/ARCHITECTURE.md) | System internals and design |
-| [Tools Reference](docs/TOOLS.md) | Built-in tool documentation |
-| [Sandboxing](docs/SANDBOX.md) | OS-level isolation setup |
-| [CLI Design](docs/CLI_DESIGN_SYSTEM.md) | UI specifications |
+| [Master Plan](docs/MASTER_PLAN.md) | The Autonomous Roadmap |
+| [Architecture](docs/ARCHITECTURE.md) | The Daemon & Gateway System |
+| [Smart Context](docs/CONTEXT.md) | 1M Token & Semantic Memory |
+| [Security Policy](docs/SECURITY.md) | Global Zero Trust Model |
 
 ---
 
@@ -204,9 +140,8 @@ Install certified tools:
 
 ```bash
 npm run dev      # Watch mode
-npm run build    # Build distribution
-npm test         # Run tests
-npm start        # Run locally
+npm run build    # Build daemon and frontend
+npm test         # Full suite (vitest)
 ```
 
 ---

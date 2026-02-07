@@ -70,10 +70,9 @@ We strictly enforce **[Conventional Commits 1.0.0](https://www.conventionalcommi
 3.  **No Dead Code**: Remove debug logs (`console.log`) and commented-out blocks.
 4.  **Documentation**: Update `README.md` and `docs/` if behavior changes.
 
-## 4. Release Process
+## 4. Release & Daemon Lifecycle
 
 1.  **Version Bump**: `npm version <major|minor|patch>`
 2.  **Changelog**: Update `CHANGELOG.md` with new version header.
-3.  **Build**: `npm run build`
-4.  **Publish**: `npm publish --access public`
-5.  **Tag**: `git push origin vX.Y.Z`
+3.  **Daemon Update**: The daemon detects binary updates and requests a graceful restart via the IPC socket.
+4.  **Daily Log Commits**: (Optional) The agent can be scheduled to commit the day's `logs/*.md` to a private `obsidian-memory` repository.

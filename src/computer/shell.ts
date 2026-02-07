@@ -1,7 +1,7 @@
 // src/computer/shell.ts
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { ExecutionError } from './errors';
+import { ExecutionError } from './errors.js';
 
 const execAsync = promisify(exec);
 

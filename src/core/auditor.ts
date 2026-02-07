@@ -50,6 +50,10 @@ export class Auditor {
         this.workspaceRoot = path.resolve(root);
     }
 
+    setWorkspaceRoot(root: string): void {
+        this.workspaceRoot = path.resolve(root);
+    }
+
     async checkCommand(command: string): Promise<AuditResult> {
         const s = await settings.load();
         const lowerCommand = command.toLowerCase();

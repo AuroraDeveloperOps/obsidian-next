@@ -461,6 +461,7 @@ async function resetConfig(): Promise<void> {
             denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config'],
         },
         summarizerModel: 'claude-haiku-4-5-20251001',
+        preCountTokens: true,
     });
 
     await settings.save({

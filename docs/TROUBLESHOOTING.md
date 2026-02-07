@@ -4,34 +4,63 @@
 
 ---
 
-## Quick Diagnostics
+## Daemon & Service Issues
 
-Run the built-in doctor command to check system health:
+### "Cannot connect to Obsidian daemon"
 
+**Cause:** The background service isn't running or the socket file is inaccessible.
+
+**Solution:**
 ```bash
-obsidian
-/status
+# Check if the process is running
+ps aux | grep obsidian
+
+# Verify the socket file
+ls -la ~/.obsidian-next/daemon.sock
+
+# Restart the service
+# macOS:
+launchctl load ~/Library/LaunchAgents/com.obsidian.daemon.plist
+# Linux:
+systemctl --user restart obsidian
+```
+
+### "Another instance is running"
+
+**Cause:** A legacy project-local `.obsidian` instance is conflicting with the global daemon.
+
+**Solution:**
+```bash
+# Clean up legacy folders
+rm -rf .obsidian
+
+# Stop all instances and restart the global daemon
+pkill -f obsidian
+obsidian status
 ```
 
 ---
 
-## Installation Issues
+## Global State Issues
 
-### "obsidian: command not found"
+### "Permissions reset on restart"
 
-**Cause:** Global npm installation not in PATH.
+**Cause:** Global `settings.json` is being overwritten by a local config.
+
+**Solution:** Obsidian Next v0.4.6 ignore local `.obsidian` folders by default. Ensure your permissions are added via `/settings` in an active session, which commits them to `~/.obsidian-next/settings.json`.
+
+---
+
+## Remote Gateway Issues
+
+### "Telegram Bot not responding"
+
+**Cause:** Bot token invalid or daemon has no internet access.
 
 **Solution:**
-```bash
-# Check npm global bin location
-npm bin -g
-
-# Add to PATH (bash/zsh)
-export PATH="$(npm bin -g):$PATH"
-
-# Or reinstall with explicit global flag
-npm install -g @aurora-foundation/obsidian-next
-```
+1.  Run `/init-telegram --reset` to re-enter your token.
+2.  Verify the daemon can reach `api.telegram.org`.
+3.  Check `~/.obsidian-next/audit.log` for connection errors.
 
 ### "better-sqlite3 compilation failed"
 

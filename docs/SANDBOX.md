@@ -35,20 +35,20 @@ The system attempts to use the best available isolation method:
 
 ### Configuration
 
-Managed via `/sandbox` command or `.obsidian/config.json`.
+Managed globally via `~/.obsidian-next/settings.json`.
 
 ```json
 {
   "executionMode": "sandbox",
   "sandbox": {
-    "allowedDomains": ["*.github.com", "npmjs.org"],
-    "denyRead": ["~/.ssh", "~/.aws"],
-    "allowWrite": ["."]
+    "allowedDomains": ["*.github.com", "npmjs.org", "api.anthropic.com"],
+    "denyRead": ["~/.ssh", "~/.aws", "~/.obsidian-next"],
+    "allowWrite": ["/tmp"]
   }
 }
-
-> **Note**: The sandbox now enforces a **Strict Allowlist** policy by default. It denies read access to the User Home directory and only explicitly allows the Workspace, `/tmp`, and essential system paths (`/usr`, `/bin`, etc.).
 ```
+
+> **Note**: The sandbox now enforces a **System-Wide Boundary** policy. It denies access to the user's private configuration (`~/.obsidian-next`) and only grants write access to the active project `workspaceRoot` and `/tmp`.
 
 ## Usage
 

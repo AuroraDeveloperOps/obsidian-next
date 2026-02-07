@@ -7,6 +7,9 @@
 
 import { db } from './database.js';
 import { context } from './context.js';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
 
 export type MemoType =
     | 'user_preference'   // User preferences (name, settings, etc.)
@@ -252,6 +255,64 @@ export class MemoryManager {
             };
         } catch (e) {
             return { total: 0, byType: {} };
+        }
+    }
+
+    /**
+     * Export all memories to a Markdown file for human readability
+     */
+    async exportToMarkdown(): Promise<string> {
+        await this.init();
+
+        try {
+            const rows = db.getDb().prepare(`
+                SELECT type, key, content, updated_at 
+                FROM memos 
+                ORDER BY type, key
+            `).all() as any[];
+
+            if (rows.length === 0) {
+                return 'No memories to export.';
+            }
+
+            let markdown = '# Obsidian Memory Bank\n\n';
+            markdown += `Generated on: ${new Date().toLocaleString()}\n\n`;
+
+            const grouped: Record<string, any[]> = {};
+            for (const row of rows) {
+                if (!grouped[row.type]) grouped[row.type] = [];
+                grouped[row.type].push(row);
+            }
+
+            const typeNames: Record<string, string> = {
+                'user_preference': 'User Preferences',
+                'project_fact': 'Project Facts',
+                'decision_log': 'Decision Log',
+                'learned_pattern': 'Learned Patterns',
+                'daily_summary': 'Daily Summaries'
+            };
+
+            for (const type of Object.keys(grouped)) {
+                markdown += `## ${typeNames[type] || type}\n\n`;
+                for (const memo of grouped[type]) {
+                    markdown += `### ${memo.key}\n`;
+                    markdown += `${memo.content}\n\n`;
+                    markdown += `*Last updated: ${new Date(memo.updated_at * 1000).toLocaleString()}*\n\n`;
+                }
+            }
+
+            const { config } = await import('./config.js');
+            const cfg = await config.load();
+            const exportDir = path.join(os.homedir(), '.obsidian-next');
+            const exportPath = path.join(exportDir, 'MEMORY.md');
+
+            await fs.mkdir(exportDir, { recursive: true });
+            await fs.writeFile(exportPath, markdown, 'utf-8');
+
+            return exportPath;
+        } catch (error: any) {
+            console.error('Failed to export memory:', error);
+            throw new Error(`Failed to export memory: ${error.message}`);
         }
     }
 }
