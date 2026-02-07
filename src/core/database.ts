@@ -96,9 +96,9 @@ export class DatabaseManager {
         `);
 
         // Vector Table for Semantic Search
+        this.db.exec('DROP TABLE IF EXISTS vec_memos');
         this.db.exec(`
-            CREATE VIRTUAL TABLE IF NOT EXISTS vec_memos USING vec0(
-                memo_id INTEGER PRIMARY KEY,
+            CREATE VIRTUAL TABLE vec_memos USING vec0(
                 embedding FLOAT[384]
             );
         `);

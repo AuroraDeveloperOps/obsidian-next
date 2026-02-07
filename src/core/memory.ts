@@ -6,6 +6,7 @@
  */
 
 import { db } from './database.js';
+import { bus } from './bus.js';
 import { context } from './context.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -121,7 +122,9 @@ export class MemoryManager {
 
         try {
             // Generate embedding first
-            const embedding = await this.getEmbedding(`${key}: ${content}`);
+            const embeddingArray = await this.getEmbedding(`${key}: ${content}`);
+            // Convert Float32Array to Buffer for SQLite storage
+            const embedding = Buffer.from(embeddingArray.buffer);
 
             // Use transaction for consistency
             const transaction = db.getDb().transaction(() => {
@@ -145,21 +148,22 @@ export class MemoryManager {
                         INSERT INTO memos (session_id, type, key, content)
                         VALUES (?, ?, ?, ?)
                     `).run(sessionId, type, key, content);
-                    memoId = result.lastInsertRowid as number;
+                    memoId = Number(result.lastInsertRowid);
                 }
 
                 // Update vector table
+                db.getDb().prepare('DELETE FROM vec_memos WHERE rowid = ?').run(BigInt(memoId));
                 db.getDb().prepare(`
-                    INSERT INTO vec_memos (memo_id, embedding)
+                    INSERT INTO vec_memos (rowid, embedding)
                     VALUES (?, ?)
-                    ON CONFLICT(memo_id) DO UPDATE SET embedding = excluded.embedding
-                `).run(memoId, embedding);
+                `).run(BigInt(memoId), embedding);
             });
 
             transaction();
             return true;
         } catch (e) {
             console.error('Failed to store memory:', e);
+            bus.emitAgent({ type: 'error', message: `Memory Store Error: ${e instanceof Error ? e.message : String(e)}` });
             return false;
         }
     }
@@ -196,33 +200,39 @@ export class MemoryManager {
     }
 
     /**
-     * Search memories by type or content
+     * Search memories by type or content (Semantic Search)
      */
     async search(query: string, type?: MemoType): Promise<Memo[]> {
         await this.init();
 
         try {
             // Generate query embedding
-            const embedding = await this.getEmbedding(query);
+            const embeddingArray = await this.getEmbedding(query);
+            const embedding = Buffer.from(embeddingArray.buffer);
 
-            // Perform KNN search
+            // Perform KNN search using rowid join
+            // Note: In some versions of sqlite-vec, k=? must be in the WHERE clause with MATCH
             let sql = `
                 SELECT m.id, m.type, m.key, m.content, m.created_at, m.updated_at,
                        v.distance
                 FROM vec_memos v
-                JOIN memos m ON v.memo_id = m.id
+                JOIN memos m ON v.rowid = m.id
                 WHERE v.embedding MATCH ?
+                AND k = 20
             `;
+            
             const params: any[] = [embedding];
 
             if (type) {
-                sql += ' AND m.type = ?';
+                sql = sql.replace('AND k = 20', 'AND m.type = ? AND k = 20');
                 params.push(type);
             }
 
-            sql += ' ORDER BY v.distance ASC LIMIT 20';
-
             const rows = db.getDb().prepare(sql).all(...params) as any[];
+
+            if (rows.length === 0) {
+                return this.keywordSearch(query, type);
+            }
 
             return rows.map(row => ({
                 id: row.id,
@@ -233,8 +243,7 @@ export class MemoryManager {
                 updated_at: new Date(row.updated_at * 1000).toISOString(),
             }));
         } catch (e) {
-            console.error('Failed to search memories:', e);
-            // Fallback to keyword search
+            console.error('Failed to semantic search memories:', e);
             return this.keywordSearch(query, type);
         }
     }

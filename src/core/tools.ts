@@ -1172,13 +1172,32 @@ const MemoryTool: Tool = {
         }
 
         if (action === 'list') {
-            const memoType = (type as any) || 'user_preference';
-            const memos = await memory.getByType(memoType);
-            if (memos.length === 0) {
-                return { success: true, output: `No ${memoType} memories found` };
+            const memoType = (type as any);
+            let memos: any[];
+            
+            if (memoType) {
+                memos = await memory.getByType(memoType);
+                if (memos.length === 0) {
+                    return { success: true, output: `No ${memoType} memories found` };
+                }
+                const lines = memos.map(m => `- ${m.key}: ${m.content}`);
+                return { success: true, output: `${memoType} memories:\n${lines.join('\n')}` };
+            } else {
+                // List summary of everything
+                const stats = await memory.getStats();
+                const allMemos: string[] = [];
+                
+                for (const t of Object.keys(stats.byType)) {
+                    const typeMemos = await memory.getByType(t as any);
+                    if (typeMemos.length > 0) {
+                        allMemos.push(`--- ${t} ---`);
+                        allMemos.push(...typeMemos.map(m => `- ${m.key}: ${m.content}`));
+                    }
+                }
+                
+                if (allMemos.length === 0) return { success: true, output: 'No memories found in any category.' };
+                return { success: true, output: `Current Memory Bank:\n${allMemos.join('\n')}` };
             }
-            const lines = memos.map(m => `- ${m.key}: ${m.content}`);
-            return { success: true, output: `${memoType} memories:\n${lines.join('\n')}` };
         }
 
         if (action === 'forget') {

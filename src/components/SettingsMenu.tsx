@@ -91,9 +91,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
             case 'models':
                 const currentModel = currentConfig.model;
                 return [
-                    { key: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', type: 'select', value: currentModel.includes('sonnet'), description: 'Balanced' },
-                    { key: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', type: 'select', value: currentModel.includes('haiku'), description: 'Fastest' },
-                    { key: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', type: 'select', value: currentModel.includes('opus'), description: 'Most capable' },
+                    { key: 'claude-opus-4-6-20260207', label: 'Claude Opus 4.6', type: 'select', value: currentModel === 'claude-opus-4-6-20260207', description: 'Intelligence King' },
+                    { key: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', type: 'select', value: currentModel === 'claude-opus-4-5-20251101', description: 'Deep reasoning' },
+                    { key: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', type: 'select', value: currentModel === 'claude-sonnet-4-5-20250929', description: 'Balanced' },
+                    { key: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', type: 'select', value: currentModel === 'claude-haiku-4-5-20251001', description: 'Fastest' },
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
             case 'security':
