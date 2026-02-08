@@ -13,9 +13,22 @@ export async function modeCommand(args: string[]): Promise<void> {
 
     if (!mode) {
         const current = agent.getMode();
+        const content = [
+            `Execution Mode: ${current}`,
+            `   ⎿  auto    Execute without confirmation`,
+            `   ⎿  plan    Think -> Approve -> Execute`,
+            `   ⎿  safe    Auto reads, approve writes (default)`,
+            '',
+        ].join('\n');
+
         bus.emitAgent({
             type: 'thought',
-            content: `Current mode: ${current}\n\nAvailable modes:\n- auto: Execute without confirmation\n- plan: Think -> Approve -> Execute\n- safe: Auto reads, approve writes (default)`
+            content
+        });
+
+        bus.emitAgent({
+            type: 'done',
+            summary: 'Mode settings displayed'
         });
         return;
     }
@@ -29,4 +42,9 @@ export async function modeCommand(args: string[]): Promise<void> {
     }
 
     await agent.setMode(mode as Mode);
+
+    bus.emitAgent({
+        type: 'done',
+        summary: `Mode set to ${mode}`
+    });
 }

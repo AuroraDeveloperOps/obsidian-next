@@ -5,6 +5,149 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.7] - 2026-02-07
+
+### Added
+- **Tool Tree Display**: Consecutive tool calls now display with tree connectors (`┌├└`) instead of sequential spam. Groups parallel operations visually.
+- **TaskView Enhancements**:
+  - Progress bar showing completion percentage (`████░░░░░░ 40%`)
+  - Polished checkbox icons (`☐` empty, `☑` done)
+  - Keyboard navigation: `j/k` to move, `x` to mark done
+  - Visual selection indicator with cyan highlighting
+- **Activity Indicator**: Thinking status now shows current operation (e.g., `⏳ read src/config.ts`) instead of generic "Thinking..."
+- **Color-Coded Mode Display**: Footer mode indicator now uses distinct colors:
+  - `▶ AUTO` (green) - Full autonomy
+  - `⏸ PLAN` (yellow) - Review before execute
+  - `⏺ SAFE` (red) - Ask for everything
+
+### Changed
+- **MessageList**: Refactored to group tool batches with visual hierarchy
+- **Anti-Flicker**: Consecutive tool results maintain visual connection with pipe prefix
+
+### Technical
+- Added `groupToolCalls()` function for tool batch detection
+- Enhanced `Root.tsx` with `currentActivity` state tracking
+
+---
+
+## [0.4.6] - 2026-02-02
+
+### Added
+- **Keyboard Shortcuts**:
+  - `Ctrl+T`: Open Task View from anywhere in chat mode.
+  - Command input now works seamlessly with autocomplete popup visible.
+- **Smart Command Highlighting**:
+  - Recognized commands display in **red** (e.g., `/mcp`, `/help`).
+  - Partial matches display in **yellow** (e.g., `/m` matching `/mode`, `/mcp`).
+  - Unknown commands remain uncolored for clear visual feedback.
+- **Session Restoration**:
+  - `/resume <id>` now properly restores sessions when selected from the session browser.
+  - Added `restore_history` event to hydrate UI without clearing database.
+  - LLM conversation history is validated on restore to prevent orphaned `tool_use` API errors.
+- **Owl Animation Settings**:
+  - New `ui.owlAnimation` settings: `enabled`, `flyWhenIdle`, `idleTimeout`, `sleepTimeout`.
+  - Settings accessible via Settings > UI Preferences > Owl Animation.
+  - Toggle owl on/off, control flying behavior, and adjust timeouts.
+- **File Diff Indicator**:
+  - Footer now shows last file change with `[W]` (write) or `[E]` (edit) indicator.
+  - Displays shortened file path for quick reference during operations.
+
+### Changed
+- **Plan Mode Execution**:
+  - Enhanced task tracking prompts with explicit 0-based step indexing instructions.
+  - Clearer guidance for LLM to mark steps complete immediately after execution.
+- **Agent System Prompt**:
+  - Added explicit "Full OS Access" section documenting bash capabilities.
+  - Included macOS-specific commands (`open`, `osascript`, `say`, clipboard).
+  - Added guidance on handling harmless system stderr noise (keychain errors, etc.).
+- **View Command Routing**:
+  - Commands with arguments (e.g., `/resume abc123`) now execute directly instead of opening views.
+  - Commands without arguments open their respective views as expected.
+- **Tool Output Spacing**:
+  - Removed visual gaps between step descriptions and tool executions.
+  - Tool start and tool result now display as a single cohesive action group.
+  - Spacing only appears between different actions, not within them.
+
+### Fixed
+- **Session Browser** (`/resume`):
+  - Pressing Enter now properly closes the session list and restores the selected session.
+  - Fixed input handler conflict where Root.tsx was capturing keys meant for child views.
+- **Command Input**:
+  - Fixed typing being blocked when command autocomplete popup was visible.
+  - Backspace and character input now work correctly with popup open.
+- **Bash Tool Output**:
+  - Added `filterSystemNoise()` to strip harmless macOS stderr messages:
+    - `aks:aks_get_lock_state` (keychain noise)
+    - Objective-C runtime warnings
+    - Mesa/EGL graphics warnings
+    - Fontconfig warnings
+- **Audit Log**:
+  - Removed duplicate `getRecentActivities` method that was causing build warnings.
+- **Init Command**:
+  - "Show Configuration Status" now navigates to settings view instead of looping to menu top.
+- **Settings Menu**:
+  - Updated deprecated `/cost` command to `/context`.
+- **Dashboard**:
+  - Recent activity text now truncates at 60 characters to prevent overflow.
+- **LLM History Restoration**:
+  - Added validation to strip orphaned `tool_use` blocks missing `tool_result` responses.
+  - Prevents "tool_use ids were found without tool_result blocks" API errors on session resume.
+- **Session Events Preservation**:
+  - Fixed `history.clear()` deleting events on exit that were needed for `/resume`.
+  - Events now persist in database for proper session restoration.
+- **LLM History Corruption Recovery**:
+  - Added `verifyHistoryIntegrity()` post-validation check for orphaned tool blocks.
+  - Auto-recovery on API 400 errors: clears corrupted history and retries request.
+  - Handles both orphaned `tool_use` and orphaned `tool_result` blocks.
+- **Owl Animation Color**:
+  - Main logo sprite now stays red when owl animation is disabled.
+  - Grey color only applies when owl mode is active and idle/sleeping.
+
+### Technical
+- **Event Types**: Added `restore_history` event type for session restoration.
+- **Input Handling**: Root.tsx now skips input handling when `activeView !== 'chat'`, allowing child views to manage their own keyboard input.
+- **Command Registry**: `execute()` now checks `args.length` before emitting `view_request` to support action vs. view distinction.
+
+---
+
+## [0.4.5] - 2026-02-02
+
+### Added
+- **SQLite State Overhaul**: 
+  - Migrated all session, task, usage, and memory state to a centralized **SQLite Database** (`.obsidian/state.db`).
+  - Implemented **Migration Manager** (`src/core/migrations.ts`) to handle safe schema updates.
+  - Added structured `memos` table for long-term "Handoff" context.
+- **Memory Tooling**: 
+  - Enhanced `memory` tool with `store`, `recall`, `search`, `list`, and `forget` actions.
+  - Integrated persistent memory into the LLM system prompt for deep personalization across sessions.
+- **Stability**: Added `Migration 1` to fix legacy schema issues in the `memos` table.
+
+### Changed
+- **Architecture**: Unified the core data layer. `src/core/database.ts` now orchestrates all persistent state.
+- **Documentation**: Comprehensive update of `docs/ARCHITECTURE.md`, `docs/CONTEXT.md`, and `docs/TOOLS.md` for the SQLite era.
+
+### Fixed
+- **Usage Tracking**: Fixed "System/Tools" usage display showing `0.0k` on cache misses. Now strictly tracks creation tokens to ensure accurate visibility.
+
+### Documentation
+- **New Guide**: Added `docs/CONTEXT.md` detailing the Smart Context architecture.
+- **Updates**: Refined `README.md` and `INDEX.md` to reflect semantic summarization capabilities.
+
+## [0.4.3] - 2026-02-01
+
+### Added
+- **100x Context Architecture**:
+  - **High-Fidelity Grid**: 10x10 visualization (`⛁`) in `/context` and usage views.
+  - **200k Token Strategy**: Tiered warning (160k), pruning (180k), and hard stop (196k) limits.
+  - **Memory Manager**: Persistent session context tracking (`src/core/memory.ts`).
+- **Resume 2.0**:
+  - Full restoration of session costs, token usage, and context stats.
+  - Fixed sync issues where context appeared as 0.0k after resumption.
+
+### Changed
+- **Commands**: Deprecated `/cost` and `/usage` in favor of unified `/context` command.
+- **Documentation**: Updated all docs to reflect 'Claude 4.5' model baseline.
+
 ## [0.4.2] - 2026-02-01
 
 ### Security Hardening
@@ -169,7 +312,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Workspace**: Dedicated `workspace/` environment for Polyoxy benchmarking and evaluation.
-- **Documentation**: Comprehensive directory index at `docs/README.md`.
+- **Documentation**: Comprehensive directory index at `docs/INDEX.md`.
 - **MCP**: Experimental MCP configuration (`mcp-config.example.json`).
 
 ### Changed

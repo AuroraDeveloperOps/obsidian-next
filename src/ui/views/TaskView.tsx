@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { tasks, Task } from '../../core/tasks.js';
 
@@ -6,8 +6,38 @@ interface TaskViewProps {
     onClose: () => void;
 }
 
+// Checkbox icons
+const CHECKBOX = {
+    empty: '☐',
+    checked: '☑',
+    inProgress: '◐',
+} as const;
+
+/**
+ * Render a progress bar
+ */
+const ProgressBar: React.FC<{ done: number; total: number; width?: number }> = ({
+    done,
+    total,
+    width = 20
+}) => {
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    const filled = Math.round((done / total) * width) || 0;
+    const empty = width - filled;
+
+    return (
+        <Text>
+            <Text color="green">{'█'.repeat(filled)}</Text>
+            <Text color="gray">{'░'.repeat(empty)}</Text>
+            <Text dimColor> {percent}%</Text>
+            <Text color="gray"> {done} of {total} done</Text>
+        </Text>
+    );
+};
+
 export const TaskView: React.FC<TaskViewProps> = ({ onClose }) => {
     const [task, setTask] = useState<Task | null>(tasks.get());
+    const [selectedIndex, setSelectedIndex] = useState(0);
 
     useEffect(() => {
         // Refresh on mount
@@ -16,15 +46,37 @@ export const TaskView: React.FC<TaskViewProps> = ({ onClose }) => {
         });
     }, []);
 
-    useInput((_, key) => {
+    const subtasks = task?.subtasks || [];
+    const doneCount = subtasks.filter(t => t.done).length;
+    const totalCount = subtasks.length;
+
+    // Keyboard navigation
+    useInput((input, key) => {
         if (key.escape) {
             onClose();
+            return;
+        }
+
+        if (!task || subtasks.length === 0) return;
+
+        // j/k or arrow navigation
+        if (input === 'j' || key.downArrow) {
+            setSelectedIndex(prev => Math.min(prev + 1, subtasks.length - 1));
+        } else if (input === 'k' || key.upArrow) {
+            setSelectedIndex(prev => Math.max(prev - 1, 0));
+        } else if (input === 'x' || key.return) {
+            // Toggle selected task (mark done via API)
+            if (!subtasks[selectedIndex].done) {
+                tasks.completeSubtask(selectedIndex).then(() => {
+                    setTask(tasks.get());
+                });
+            }
         }
     });
 
     return (
         <Box flexDirection="column" width="100%" height="100%" paddingX={1} paddingY={0}>
-            {/* Minimal Header */}
+            {/* Header */}
             <Box marginBottom={1}>
                 <Text bold color="white">[ Current Task ]</Text>
             </Box>
@@ -36,10 +88,17 @@ export const TaskView: React.FC<TaskViewProps> = ({ onClose }) => {
                 </Box>
             ) : (
                 <Box flexDirection="column" flexGrow={1}>
-                    {/* Header */}
+                    {/* Title */}
                     <Box marginBottom={1}>
                         <Text bold color="red">{task.title}</Text>
                     </Box>
+
+                    {/* Progress Bar */}
+                    <Box marginBottom={1}>
+                        <ProgressBar done={doneCount} total={totalCount} />
+                    </Box>
+
+                    {/* Status Badge */}
                     <Box marginBottom={1}>
                         <Text color="gray">Status: </Text>
                         <Text color={
@@ -51,31 +110,44 @@ export const TaskView: React.FC<TaskViewProps> = ({ onClose }) => {
                         </Text>
                     </Box>
 
-                    {/* Progress - Checklist Style */}
+                    {/* Divider */}
+                    <Box marginBottom={1}>
+                        <Text color="gray">{'─'.repeat(40)}</Text>
+                    </Box>
+
+                    {/* Subtasks with selection */}
                     <Box flexDirection="column" marginBottom={1}>
-                        <Text color="gray" bold>
-                            Tasks ({task.subtasks.filter(t => t.done).length} done, {task.subtasks.filter(t => !t.done).length} open)
-                        </Text>
-                        {task.subtasks.map((st, i) => (
-                            <Box key={i} marginLeft={0}>
-                                <Text color={st.done ? 'green' : 'white'}>
-                                    {st.done ? '  ✔ ' : '  ◻ '} {st.text}
-                                </Text>
-                            </Box>
-                        ))}
+                        {subtasks.map((st, i) => {
+                            const isSelected = i === selectedIndex;
+                            const icon = st.done ? CHECKBOX.checked : CHECKBOX.empty;
+                            const textColor = st.done ? 'green' : isSelected ? 'cyan' : 'white';
+
+                            return (
+                                <Box key={i} marginLeft={0}>
+                                    <Text color={isSelected ? 'cyan' : 'gray'}>
+                                        {isSelected ? '▸ ' : '  '}
+                                    </Text>
+                                    <Text color={st.done ? 'green' : 'gray'}>
+                                        {icon}{' '}
+                                    </Text>
+                                    <Text color={textColor} strikethrough={st.done}>
+                                        {st.text}
+                                    </Text>
+                                </Box>
+                            );
+                        })}
                     </Box>
 
                     {/* Context - Tree Style */}
                     {task.context.length > 0 && (
                         <Box flexDirection="column" marginTop={1}>
                             <Text color="gray" bold>Context</Text>
-                            {task.context.slice(0, 15).map((ctx, i, arr) => {
+                            {task.context.slice(0, 10).map((ctx, i, arr) => {
                                 const isLast = i === arr.length - 1;
                                 return (
                                     <Box key={i} flexDirection="column">
-                                        {/* Main Line */}
                                         <Box flexDirection="row">
-                                            <Text color="gray">{isLast ? ' └─ ● ' : ' ├─ ● '}</Text>
+                                            <Text color="gray">{isLast ? ' └─ ' : ' ├─ '}</Text>
                                             <Text dimColor>{ctx}</Text>
                                         </Box>
                                     </Box>
@@ -86,9 +158,11 @@ export const TaskView: React.FC<TaskViewProps> = ({ onClose }) => {
                 </Box>
             )}
 
-            {/* Minimal Footer */}
+            {/* Footer with keybindings */}
             <Box marginTop={1}>
-                <Text color="gray" dimColor>Esc to close</Text>
+                <Text color="gray" dimColor>
+                    j/k: navigate  x: toggle  Esc: close
+                </Text>
             </Box>
         </Box>
     );

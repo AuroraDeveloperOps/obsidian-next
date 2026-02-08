@@ -7,13 +7,36 @@ import { keyManager } from '../core/keyManager.js';
 import { usage } from '../core/usage.js';
 import { AgentEvent } from '../events/types.js';
 
-// Character sprite for header
+// Character sprite for header (Terminal/Active)
 const SPRITE = [
     "▐▛█████████▜▌",
     "▐██▄     ▄██▌",
     "▐██   ▄   ██▌",
     "▐▙▄▄▄▄▄▄▄▄▄▟▌",
 ];
+
+// Sleeping/Flying Owl sprite frames
+const OWL_FRAMES = {
+    sleep: [
+        "    ,___,    ",
+        "    {O,O}    ",
+        "    /)__)    ",
+        "     \"\"\"     "
+    ],
+    flap: [
+        "    ,___,    ",
+        "   <{O,O}>   ",
+        "    /)__)    ",
+        "     \"\"\"     "
+    ]
+};
+
+interface OwlSettings {
+    enabled: boolean;
+    flyWhenIdle: boolean;
+    idleTimeout: number;
+    sleepTimeout: number;
+}
 
 interface DashboardState {
     model: string;
@@ -23,22 +46,39 @@ interface DashboardState {
     workspace: string;
     user: string;
     version: string;
+    owlSettings: OwlSettings;
 }
 
 interface DashboardProps {
     isBusy?: boolean;
+    isBackgroundBusy?: boolean;
+    isIdle?: boolean;
+    isSleep?: boolean;
+    latestActivity?: { content: string; color: string; };
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
+export const Dashboard: React.FC<DashboardProps> = ({
+    isBusy = false,
+    isBackgroundBusy = false,
+    isIdle = false,
+    isSleep = false,
+    latestActivity
+}) => {
     const [columns, setColumns] = useState(process.stdout.columns || 80);
     const [state, setState] = useState<DashboardState>({
         model: 'Loading...',
         mode: 'safe',
         keyStatus: 'missing',
         sessionCost: 0,
-        workspace: process.cwd().split('/').slice(-2).join('/'), // Shortened path
+        workspace: 'Loading...',
         user: process.env.USER || 'User',
-        version: 'v0.4.2',
+        version: 'v...',
+        owlSettings: {
+            enabled: true,
+            flyWhenIdle: true,
+            idleTimeout: 60000,
+            sleepTimeout: 300000,
+        },
     });
 
     // Load initial state
@@ -47,6 +87,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
             const cfg = await config.load();
             const s = await settings.load();
             const hasKey = await keyManager.hasKey();
+            const ver = await config.getVersion();
+
+            // Get owl settings with defaults
+            const owlSettings = s.ui?.owlAnimation || {
+                enabled: true,
+                flyWhenIdle: true,
+                idleTimeout: 60000,
+                sleepTimeout: 300000,
+            };
 
             setState(prev => ({
                 ...prev,
@@ -54,6 +103,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
                 mode: s.mode,
                 keyStatus: hasKey ? 'valid' : 'missing',
                 sessionCost: usage.getSessionCost(),
+                workspace: cfg.workspaceRoot.split('/').slice(-2).join('/'),
+                version: ver.startsWith('v') ? ver : `v${ver}`,
+                owlSettings,
             }));
         };
 
@@ -66,11 +118,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
             if (['done', 'tool_result', 'session_saved', 'shutdown_complete'].includes(event.type)) {
                 const cfg = await config.load();
                 const s = await settings.load();
+                const owlSettings = s.ui?.owlAnimation || {
+                    enabled: true,
+                    flyWhenIdle: true,
+                    idleTimeout: 60000,
+                    sleepTimeout: 300000,
+                };
                 setState(prev => ({
                     ...prev,
                     model: formatModelName(cfg.model),
                     mode: s.mode,
                     sessionCost: usage.getSessionCost(),
+                    workspace: cfg.workspaceRoot.split('/').slice(-2).join('/'),
+                    owlSettings,
                 }));
             }
             if (event.type === 'thought') {
@@ -90,7 +150,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
     }, []);
 
     // Responsive: Track terminal width using Ink's hook
-    // This avoids double-render glitches by aligning with Ink's internal resize logic
     const { stdout } = useStdout();
 
     useEffect(() => {
@@ -117,23 +176,49 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
 
     // Animation State
     const [frame, setFrame] = useState(0);
+    const [spriteX, setSpriteX] = useState(0);
+    const [targetX, setTargetX] = useState(0);
 
     // Sprite Animation Loop
     useEffect(() => {
-        // Only run full animation when busy, or slow idle animation
-        const interval = isBusy ? 100 : 3000;
+        let interval = 3000; // Idle
+        if (isBusy) interval = 100;
+        else if (isBackgroundBusy) interval = 300;
+        else if (isIdle && !isSleep) interval = 200; // Faster flap while flying
 
         const timer = setInterval(() => {
-            setFrame(f => {
-                // If not busy, only occasionally glitch (e.g. at frame 0)
-                if (!isBusy) return 0; // Reset to 0 (stable) when not busy
-                return (f + 1) % 30;
-            });
+            setFrame(f => (f + 1) % 120);
         }, interval);
         return () => clearInterval(timer);
-    }, [isBusy]);
+    }, [isBusy, isBackgroundBusy, isIdle, isSleep]);
 
-    // ... (rest of render)
+    // Spatial Movement Logic (Gliding/Flying)
+    useEffect(() => {
+        if (!isIdle || isBusy || isBackgroundBusy) {
+            setTargetX(0); // Return to center station
+        } else if (isIdle && state.owlSettings.enabled && state.owlSettings.flyWhenIdle && frame % 40 === 0) {
+            // Randomly move while idle - wider range (only if owl flying is enabled)
+            const maxTravel = Math.floor(columns / 2) - 20;
+            // Move between -maxTravel and +maxTravel for a wide sweep
+            setTargetX(Math.floor(Math.random() * maxTravel * 2) - maxTravel);
+        } else if (!state.owlSettings.flyWhenIdle) {
+            setTargetX(0); // Stay centered if flying is disabled
+        }
+    }, [isIdle, isBusy, isBackgroundBusy, frame, columns, state.owlSettings.enabled, state.owlSettings.flyWhenIdle]);
+
+    // Smooth movement interpolation
+    useEffect(() => {
+        const moveTimer = setInterval(() => {
+            setSpriteX(current => {
+                const diff = targetX - current;
+                if (Math.abs(diff) < 0.1) return targetX;
+                // Fluid "gliding" speed
+                const speed = targetX === 0 ? 0.15 : 0.08;
+                return current + diff * speed;
+            });
+        }, 50);
+        return () => clearInterval(moveTimer);
+    }, [targetX]);
 
     return (
         <Box
@@ -143,7 +228,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
             paddingX={0}
             paddingY={0}
         >
-            {/* Title Bar - Unchanged */}
+            {/* Title Bar */}
             <Box
                 borderStyle="single"
                 borderTop={false}
@@ -160,7 +245,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
             {/* Content Area */}
             <Box flexDirection={isNarrow ? 'column' : 'row'} padding={1}>
 
-                {/* LEFT COLUMN: Identity & Status */}
+                {/* LEFT COLUMN: Stage & Identity */}
                 <Box
                     flexDirection="column"
                     width={leftWidth}
@@ -180,24 +265,56 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
                         <Text>!</Text>
                     </Box>
 
-                    {/* Sprite with Animation */}
-                    <Box justifyContent="center" marginBottom={1}>
-                        <Box flexDirection="column">
-                            {SPRITE.map((line, i) => {
-                                // Animation Logic
-                                // Scanline effect: A white line moves down the sprite every ~3 seconds
-                                const isScanline = frame === i;
-                                // Glitch effect: Randomly invert a character (simulated by color change)
-                                const isGlitch = frame === 25 && i === 2;
+                    {/* Sprite with Animation Area (The Stage) */}
+                    <Box height={6} alignItems="flex-start" width="100%" justifyContent="center">
+                        <Box marginLeft={Math.floor(spriteX)}>
+                            <Box flexDirection="column">
+                                {(() => {
+                                    // Determine which sprite to show based on settings
+                                    const showOwl = state.owlSettings.enabled && (isIdle || isSleep);
+                                    const owlFrame = frame % 4 < 2 ? OWL_FRAMES.sleep : OWL_FRAMES.flap;
+                                    return showOwl ? owlFrame : SPRITE;
+                                })().map((line, i) => {
+                                    // Animation Logic
+                                    const isScanline = (isBusy || isBackgroundBusy) && (frame % 30 === i);
+                                    const isGlitch = isBusy && (frame % 30 === 25) && i === 2;
+                                    const showOwl = state.owlSettings.enabled && (isIdle || isSleep);
 
-                                let color = "red";
-                                if (isScanline) color = "white";
-                                if (isGlitch) color = "magenta";
+                                    let color = "red";
+                                    // Only turn grey for owl mode, keep red for main logo
+                                    if (showOwl && isSleep) color = "gray";
+                                    else if (showOwl && isIdle && !isBackgroundBusy) color = "gray";
 
-                                return (
-                                    <Text key={i} color={color} bold={isScanline}>{line}</Text>
-                                );
-                            })}
+                                    if (isScanline) color = "white";
+                                    if (isGlitch) color = "magenta";
+
+                                    if (isBackgroundBusy && !isBusy && !isScanline && !isGlitch) {
+                                        color = frame % 2 === 0 ? "cyan" : "blue";
+                                    }
+
+                                    // Breathing/Flying Vertical Offset
+                                    const isMoving = Math.abs(spriteX - targetX) > 1;
+                                    const isFlapFrame = (isIdle || isSleep) && frame % 4 >= 2;
+
+                                    // Vertical bobbing while flying or breathing
+                                    let yOffset = 0;
+                                    if (isIdle || isSleep) {
+                                        if (isMoving) {
+                                            // "Fly" up on flap frames
+                                            yOffset = isFlapFrame ? -1 : 0;
+                                        } else {
+                                            // Breathe/Rest bob
+                                            yOffset = frame % 20 > 10 ? 0.3 : 0;
+                                        }
+                                    }
+
+                                    return (
+                                        <Box key={i} marginTop={Math.max(0, Math.floor(yOffset))}>
+                                            <Text color={color} bold={isScanline}>{line}</Text>
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
                         </Box>
                     </Box>
 
@@ -218,7 +335,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
                         <Text>✔ <Text color="cyan">Shift+Tab</Text> to toggle modes ({state.mode})</Text>
                     </Box>
 
-                    {/* Separator - Dashed line to match mock */}
+                    {/* Separator */}
                     <Box marginY={1}>
                         <Text color="gray">────────────────────────────────────────────────────────</Text>
                     </Box>
@@ -226,7 +343,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ isBusy = false }) => {
                     {/* Recent Activity */}
                     <Box flexDirection="column">
                         <Text>Recent activity</Text>
-                        <Text dimColor>No recent activity</Text>
+                        {latestActivity ? (
+                            <Text color={latestActivity.color as any}>
+                                {latestActivity.content.length > 60
+                                    ? latestActivity.content.slice(0, 57) + '...'
+                                    : latestActivity.content}
+                            </Text>
+                        ) : (
+                            <Text dimColor>No recent activity</Text>
+                        )}
                     </Box>
                 </Box>
             </Box>

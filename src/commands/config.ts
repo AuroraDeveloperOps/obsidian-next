@@ -268,25 +268,6 @@ async function configureSecurity(): Promise<void> {
 async function configurePermissions(): Promise<void> {
     const s = await settings.load();
 
-    const lines = [
-        'Current Permissions:',
-        '',
-        '[Allow List]',
-        s.permissions.allow.length > 0
-            ? s.permissions.allow.map(p => `  + ${p}`).join('\n')
-            : '  (empty)',
-        '',
-        '[Deny List]',
-        s.permissions.deny.length > 0
-            ? s.permissions.deny.map(p => `  - ${p}`).join('\n')
-            : '  (empty)',
-    ];
-
-    bus.emitAgent({
-        type: 'thought',
-        content: lines.join('\n'),
-    });
-
     const options = [
         { id: 'add-allow', label: 'Add to allow list' },
         { id: 'add-deny', label: 'Add to deny list' },
@@ -294,7 +275,27 @@ async function configurePermissions(): Promise<void> {
         { id: 'clear-deny', label: 'Clear deny list' },
     ];
 
-    const selection = await waitForChoice('Permission Actions', options);
+    const content = [
+        'Current Permission Policy',
+        '',
+        '   [Allow List]',
+        ...(s.permissions.allow.length > 0
+            ? s.permissions.allow.map(p => `   ⎿  + ${p}`)
+            : ['   ⎿  (empty)']),
+        '',
+        '   [Deny List]',
+        ...(s.permissions.deny.length > 0
+            ? s.permissions.deny.map(p => `   ⎿  - ${p}`)
+            : ['   ⎿  (empty)']),
+        '',
+    ].join('\n');
+
+    const question = [
+        content,
+        'Permission Actions'
+    ].join('\n');
+
+    const selection = await waitForChoice(question, options);
 
     if (selection === 'cancel') {
         return;
@@ -334,37 +335,36 @@ async function showConfig(): Promise<void> {
     const s = await settings.load();
     const backend = keyManager.getBackend();
 
-    const lines = [
-        '='.repeat(50),
-        'CONFIGURATION',
-        '='.repeat(50),
+    const content = [
+        'Configuration Overview',
         '',
-        '[Core]',
-        `  Model:       ${cfg.model}`,
-        `  Max Tokens:  ${cfg.maxTokens}`,
-        `  Language:    ${cfg.language}`,
+        '   [Core System]',
+        `   ⎿  Model       ${cfg.model}`,
+        `   ⎿  Tokens      Max ${cfg.maxTokens}`,
+        `   ⎿  Language    ${cfg.language}`,
         '',
-        '[Mode]',
-        `  Execution:   ${s.mode}`,
+        '   [Execution]',
+        `   ⎿  Mode        ${s.mode}`,
+        `   ⎿  Sandbox     ${s.mode === 'safe' ? 'ON' : 'OFF'}`,
         '',
-        '[Security]',
-        `  API Key:     ${backend ? `Stored in ${backend}` : 'Not configured'}`,
-        `  PII Redact:  ${s.security.piiRedaction ? 'ON' : 'OFF'}`,
-        `  Audit Log:   ${s.security.auditLogging ? 'ON' : 'OFF'}`,
+        '   [Security]',
+        `   ⎿  API Key     ${backend ? `Stored in ${backend}` : 'Not configured'}`,
+        `   ⎿  PII Redact  ${s.security.piiRedaction ? 'ON' : 'OFF'}`,
+        `   ⎿  Audit Log   ${s.security.auditLogging ? 'ON' : 'OFF'}`,
         '',
-        '[Permissions]',
-        `  Allow:       ${s.permissions.allow.length} patterns`,
-        `  Deny:        ${s.permissions.deny.length} patterns`,
+        '   [Permissions]',
+        `   ⎿  Allow       ${s.permissions.allow.length} patterns`,
+        `   ⎿  Deny        ${s.permissions.deny.length} patterns`,
         '',
-        '[Paths]',
-        `  Config:      ${config.getPath()}`,
-        `  Settings:    ${settings.getPath()}`,
-        '='.repeat(50),
-    ];
+        '   [System Paths]',
+        `   ⎿  Config      ${path.basename(config.getPath())}`,
+        `   ⎿  Settings    ${path.basename(settings.getPath())}`,
+        '',
+    ].join('\n');
 
     bus.emitAgent({
         type: 'thought',
-        content: lines.join('\n'),
+        content,
     });
 
     bus.emitAgent({
@@ -448,17 +448,29 @@ async function resetConfig(): Promise<void> {
     }
 
     await config.save({
-        model: 'claude-sonnet-4-5-20250929',
+        model: 'claude-opus-4-6-20260207',
         maxTokens: 8192,
         language: 'en',
+        workspaceRoot: os.homedir(),
+        executionMode: 'local',
+        sandbox: {
+            allowedDomains: ['*.github.com', '*.npmjs.org', '*.npmjs.com', 'api.anthropic.com', 'registry.npmjs.org'],
+            deniedDomains: [],
+            denyRead: ['~/.ssh', '~/.aws', '~/.config/gcloud', '~/.kube', '~/.gnupg'],
+            allowWrite: ['.', '/tmp'],
+            denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config'],
+        },
+        summarizerModel: 'claude-haiku-4-5-20251001',
+        thinkingEffort: 'high',
+        preCountTokens: true,
     });
 
     await settings.save({
         mode: 'safe',
         autoAccept: { enabled: false, readOperations: false, safeCommands: false },
-        permissions: { allow: [], deny: [] },
-        security: { piiRedaction: true, auditLogging: true, keyBackend: 'auto' },
-        ui: { syntaxHighlight: true, diffColors: true, showLineNumbers: true },
+        permissions: { allow: [], allowUnsandboxed: [], deny: [] },
+        security: { piiRedaction: true, auditLogging: true, keyBackend: 'auto', sandbox: false },
+        ui: { syntaxHighlight: true, diffColors: true, showLineNumbers: true, owlAnimation: { enabled: true, flyWhenIdle: true, idleTimeout: 60000, sleepTimeout: 300000 } },
     });
 
     bus.emitAgent({
@@ -547,12 +559,8 @@ async function importConfig(filepath?: string): Promise<void> {
 }
 
 async function rotateKey(): Promise<void> {
-    bus.emitAgent({
-        type: 'thought',
-        content: 'API Key Rotation\n\nThis will replace your current API key with a new one.',
-    });
-
-    const { value: newKey, cancelled } = await waitForTextInput('Enter new API key:', true);
+    const prompt = 'API Key Rotation\n\nThis will replace your current API key with a new one.\n\nEnter new API key:';
+    const { value: newKey, cancelled } = await waitForTextInput(prompt, true);
 
     if (cancelled || !newKey) {
         bus.emitAgent({ type: 'done', summary: 'Key rotation cancelled.' });

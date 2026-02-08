@@ -63,11 +63,8 @@ export const AgentLine: React.FC<AgentLineProps> = ({ content, isStreaming }) =>
         : content;
 
     return (
-        <Box flexDirection="column" paddingX={1}>
+        <Box flexDirection="column" paddingX={0}>
             <Box flexDirection="row">
-                <Box marginRight={1}>
-                    <Text color="white">●</Text>
-                </Box>
                 <Box flexGrow={1} flexDirection="column">
                     {renderedContent.split('\n').map((line, i) => (
                         <Text key={i} color={showGlitter ? "gray" : "white"}>

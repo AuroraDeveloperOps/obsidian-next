@@ -9,7 +9,9 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import { settings } from './settings.js';
+import { config } from './config.js';
 import { redactor } from './redactor.js';
 
 export type AuditEventType =
@@ -41,7 +43,7 @@ export interface AuditEntry {
     metadata?: Record<string, any>;
 }
 
-const LOG_DIR = '.obsidian';
+const LOG_DIR = '.obsidian-next';
 const LOG_FILE = 'audit.log';
 const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB before rotation
 
@@ -53,7 +55,7 @@ class AuditLogger {
     private isWriting: boolean = false;
 
     constructor() {
-        this.logPath = path.join(process.cwd(), LOG_DIR, LOG_FILE);
+        this.logPath = path.join(os.homedir(), LOG_DIR, LOG_FILE);
         this.sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     }
 
@@ -74,11 +76,12 @@ class AuditLogger {
         await this.rotateIfNeeded();
 
         // Log session start
+        const cfg = await config.load();
         await this.log({
             eventType: 'session_start',
             success: true,
             metadata: {
-                cwd: process.cwd(),
+                cwd: cfg.workspaceRoot,
                 pid: process.pid,
                 nodeVersion: process.version,
             },
@@ -168,6 +171,18 @@ class AuditLogger {
             command,
             success: false,
             reason,
+        });
+    }
+
+    /**
+     * Log a system event
+     */
+    async logSystemEvent(event: string, metadata: Record<string, any>): Promise<void> {
+        await this.log({
+            eventType: 'security_violation', // Mapping generic system events to generic log type for now, or add new type
+            command: event,
+            success: false, // Usually error events
+            reason: JSON.stringify(metadata),
         });
     }
 
@@ -274,7 +289,86 @@ class AuditLogger {
     }
 
     /**
-     * Read recent audit entries
+     * Get recent audit entries formatted for display
+     */
+    async getRecentActivities(count: number = 50): Promise<Array<{ timestamp: string; content: string; color: string }>> {
+        const entries = await this.getRecentEntries(count);
+        return entries.map(entry => {
+            let content = '';
+            let color = 'white'; // Default color
+
+            // Basic formatting based on eventType
+            switch (entry.eventType) {
+                case 'command_executed':
+                    content = `CMD: ${entry.command || 'unknown command'}`;
+                    color = 'blue';
+                    break;
+                case 'command_blocked':
+                case 'command_denied':
+                case 'security_violation':
+                    content = `SECURITY: ${entry.reason || entry.command || 'security event'}`;
+                    color = 'red';
+                    break;
+                case 'approval_requested':
+                    content = `APPROVAL: Requested for "${entry.command || 'action'}"`;
+                    color = 'yellow';
+                    break;
+                case 'approval_granted':
+                    content = `APPROVAL: Granted for "${entry.command || 'action'}"`;
+                    color = 'green';
+                    break;
+                case 'approval_denied':
+                    content = `APPROVAL: Denied for "${entry.command || 'action'}"`;
+                    color = 'red';
+                    break;
+                case 'file_read':
+                    content = `FILE: Read ${entry.filePath}`;
+                    color = 'cyan';
+                    break;
+                case 'file_write':
+                    content = `FILE: Wrote ${entry.filePath}`;
+                    color = 'magenta';
+                    break;
+                case 'file_edit':
+                    content = `FILE: Edited ${entry.filePath}`;
+                    color = 'magentaBright';
+                    break;
+                case 'file_delete':
+                    content = `FILE: Deleted ${entry.filePath}`;
+                    color = 'redBright';
+                    break;
+                case 'session_start':
+                    content = `SESSION: Started`;
+                    color = 'green';
+                    break;
+                case 'session_end':
+                    content = `SESSION: Ended`;
+                    color = 'gray';
+                    break;
+                case 'pii_redacted':
+                    content = `SECURITY: PII Redacted (${entry.metadata?.count || 0} items)`;
+                    color = 'yellow';
+                    break;
+                default:
+                    content = `EVENT: ${entry.eventType}`;
+                    break;
+            }
+
+            // Shorten file paths for readability if they are very long
+            if (entry.filePath && entry.filePath.length > 50) {
+                content = content.replace(entry.filePath, `...${entry.filePath.slice(-47)}`);
+            }
+
+            return {
+                timestamp: new Date(entry.timestamp).toLocaleTimeString(),
+                content: content,
+                color: color,
+            };
+        }).reverse(); // Display newest first
+    }
+
+    /**
+     * Get recent audit entries
      */
     async getRecentEntries(count: number = 100): Promise<AuditEntry[]> {
         try {

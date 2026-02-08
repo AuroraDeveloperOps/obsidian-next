@@ -1,11 +1,13 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Create a strict, reproducible report to help us improve
 title: '[BUG] '
 labels: bug
 assignees: ''
 
 ---
+
+**Note**: Low-effort bug reports will be closed. Please provide all details below.
 
 **Describe the bug**
 A clear and concise description of what the bug is.
@@ -17,14 +19,14 @@ Steps to reproduce the behavior:
 3. See error
 
 **Expected behavior**
-A clear and concise description of what you expected to happen.
+A clear description of what you expected to happen.
 
 **Screenshots/Logs**
-If applicable, add terminal logs or screenshots to help explain your problem.
+ATTACH LOGS (`.obsidian/audit.log`) OR SCREENSHOTS. Do not paste raw unformatted text.
 
-**Environment (please complete the following information):**
+**Environment (Required):**
  - OS: [e.g. macOS Sonoma]
- - Version: [e.g. v0.4.2]
+ - Obsidian Version: [e.g. v0.4.3]
  - Node Version: [e.g. v20.x.x]
 
 **Additional context**

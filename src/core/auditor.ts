@@ -50,7 +50,12 @@ export class Auditor {
         this.workspaceRoot = path.resolve(root);
     }
 
+    setWorkspaceRoot(root: string): void {
+        this.workspaceRoot = path.resolve(root);
+    }
+
     async checkCommand(command: string): Promise<AuditResult> {
+        const s = await settings.load();
         const lowerCommand = command.toLowerCase();
 
         // Check for blocked string patterns (always denied - hardcoded safety)
@@ -80,12 +85,22 @@ export class Auditor {
             };
         }
 
-        // Check settings allow list - if allowed, skip approval
-        if (await settings.isAllowed('bash', command)) {
-            return {
-                approved: true,
-                autoApproved: true
-            };
+        // Check mode - in safe mode, everything needs approval UNLESS already session-authorized
+        if (s.mode === 'safe') {
+            if (await settings.isSessionAuthorized('bash', command)) {
+                return {
+                    approved: true,
+                    autoApproved: true
+                };
+            }
+            // Otherwise, fall through to prompt (persistent allow list is ignored in safe mode)
+        } else {
+            if (await settings.isAllowed('bash', command)) {
+                return {
+                    approved: true,
+                    autoApproved: true
+                };
+            }
         }
 
         // Check for patterns that require approval
@@ -101,28 +116,29 @@ export class Auditor {
             }
         }
 
-        // Check mode - in safe mode, everything needs approval
-        const s = await settings.load();
-        if (s.mode === 'safe') {
-            // Return approved: false to enforce approval in safe mode
-            return {
-                approved: false,
-                requiresApproval: true,
-                reason: 'Safe mode requires approval for all commands'
-            };
-        }
-
         return { approved: true };
     }
 
     checkPath(filePath: string): AuditResult {
-        const resolved = path.resolve(this.workspaceRoot, filePath);
-        const relative = path.relative(this.workspaceRoot, resolved);
+        try {
+            const resolved = path.resolve(this.workspaceRoot, filePath);
+            const relative = path.relative(this.workspaceRoot, resolved);
 
-        if (relative.startsWith('..') || path.isAbsolute(relative)) {
-            return { approved: false, reason: `Path outside workspace: ${filePath}`, isCritical: true };
+            // Path Traversal Check: Must not start with .. and must be inside workspaceRoot
+            if (relative.startsWith('..') || path.isAbsolute(relative)) {
+                return { approved: false, reason: `Access denied: Path '${filePath}' is outside the workspace.`, isCritical: true };
+            }
+
+            // Hidden Files Check (optional policy, but usually safe for MVP)
+            const parts = relative.split(path.sep);
+            if (parts.some(p => p.startsWith('.') && p !== '.obsidian' && p !== '.agent' && p !== '.claude')) {
+                // We allow .obsidian, .agent, .claude for internal use, but could block others
+            }
+
+            return { approved: true };
+        } catch (error) {
+            return { approved: false, reason: `Invalid path: ${filePath}`, isCritical: false };
         }
-        return { approved: true };
     }
 
     async checkFileEdit(filePath: string): Promise<AuditResult> {

@@ -9,7 +9,7 @@ export interface Option {
     allow_context?: boolean; // If true, user can press TAB to add context
 }
 
-export type AgentEvent =
+export type AgentEventUnion =
     // 1. Thought (Internal Monologue)
     | { type: "thought"; content: string; hidden?: boolean }
 
@@ -26,6 +26,9 @@ export type AgentEvent =
     | { type: "error"; message: string; code?: string }
     | { type: "done"; summary: string }
     | { type: "clear_history" }
+    | { type: "restore_history"; events: AgentEvent[] }
+    | { type: "view_request"; viewId: string; command?: string; params?: any }
+    | { type: "command_executed"; command: string; args: string[] }
 
     // 5. Session Management
     | { type: "shutdown_request" }
@@ -33,7 +36,17 @@ export type AgentEvent =
     | { type: "shutdown_complete"; summary: SessionSummary }
 
     // 6. Task Management
-    | { type: "task_update"; task: any | null }; // Using 'any' to avoid circular dependency with tasks.ts, or simpler: import type { Task } from '../core/tasks';
+    | { type: "task_update"; task: any | null }
+
+    // 7. Scheduler
+    | { type: "scheduler_task_started"; taskId: string; command: string }
+    | { type: "scheduler_task_completed"; taskId: string; command: string }
+    | { type: "scheduler_task_failed"; taskId: string; command: string; error: string }
+
+    // 8. Computer Use
+    | { type: "computer_scale_update"; scale: number; scaledWidth: number; scaledHeight: number; nativeWidth: number; nativeHeight: number };
+
+export type AgentEvent = AgentEventUnion & { timestamp?: number };
 
 /**
  * Session summary for graceful shutdown
@@ -49,8 +62,8 @@ export interface SessionSummary {
 }
 
 export type UserEvent =
-    | { type: "user_input"; content: string }
+    | { type: "user_input"; content: string; silent?: boolean }
     | { type: "user_choice"; selectionId: string; context?: string }
     | { type: "user_interrupt" }
-    | { type: "approval_response"; approved: boolean; requestId: string }
+    | { type: "approval_response"; approved: boolean; requestId: string; scope: 'session' | 'persistent'; bypass?: boolean }
     | { type: "text_input_response"; requestId: string; value: string; cancelled?: boolean };

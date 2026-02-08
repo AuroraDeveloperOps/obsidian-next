@@ -17,23 +17,24 @@ export async function taskCommand(args: string[]): Promise<void> {
             return;
         }
 
-        const lines = [
-            `Task: ${task.title}`,
-            `Status: ${task.status}`,
+        const content = [
+            `Current Task: ${task.title}`,
+            `   ⎿  Status      ${task.status}`,
             '',
-            'Progress:'
+            '   [Progress]',
+            ...task.subtasks.map((st, i) =>
+                `   ⎿  ${st.done ? '✔' : '☐'} ${st.text}`
+            ),
+            '',
         ];
 
-        task.subtasks.forEach((st, i) => {
-            lines.push(`  ${st.done ? '[x]' : '[ ]'} ${st.text}`);
-        });
-
         if (task.context.length > 0) {
-            lines.push('', 'Context:');
-            task.context.forEach(c => lines.push(`  - ${c}`));
+            content.push('   [Context]');
+            task.context.forEach(c => content.push(`   ⎿  ${c}`));
+            content.push('');
         }
 
-        bus.emitAgent({ type: 'thought', content: lines.join('\n') });
+        bus.emitAgent({ type: 'thought', content: content.join('\n') });
         return;
     }
 

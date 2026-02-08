@@ -11,6 +11,8 @@
 
 import { bus } from '../core/bus.js';
 import { config } from '../core/config.js';
+import { daemon } from '../core/daemon.js';
+import os from 'os';
 import { keyManager, detectEnvFile } from '../core/keyManager.js';
 import { CommandHandler } from '../core/commands.js';
 import { formatHeader } from '../utils/ui.js';
@@ -43,7 +45,7 @@ function waitForTextInput(requestId: string): Promise<{ value: string; cancelled
 }
 
 // Helper to wait for choice selection
-function waitForChoice(options: Array<{ id: string; label: string }>): Promise<string> {
+function waitForChoice(options: Array<{ id: string; label: string }>, title?: string): Promise<string> {
     return new Promise((resolve) => {
         const handler = (event: any) => {
             if (event.type === 'user_choice') {
@@ -56,7 +58,7 @@ function waitForChoice(options: Array<{ id: string; label: string }>): Promise<s
         // Emit choice request
         bus.emitAgent({
             type: 'choice_request',
-            question: 'Select an option:',
+            question: title ? `${title}\nSelect an option:` : 'Select an option:',
             options: options.map(o => ({ id: o.id, label: o.label })),
         });
 
@@ -87,16 +89,12 @@ export const initCommand: CommandHandler = async (args) => {
             { id: 'setup', label: 'Run Full Setup (Key + Model)' },
             { id: 'key', label: `Update API Key (Current: ${backend || 'Not set'})` },
             { id: 'model', label: `Change Model (Current: ${cfg.model})` },
+            { id: 'service', label: 'Initialize Background Service (Always-On)' },
             { id: 'status', label: 'Show Configuration Status' },
             { id: 'exit', label: 'Exit' }
         ];
 
-        bus.emitAgent({
-            type: 'thought',
-            content: formatHeader('Configuration Menu')
-        });
-
-        const choice = await waitForChoice(options);
+        const choice = await waitForChoice(options, formatHeader('Configuration Menu'));
 
         switch (choice) {
             case 'setup':
@@ -110,12 +108,22 @@ export const initCommand: CommandHandler = async (args) => {
             case 'model':
                 await setupModel();
                 break;
-            case 'status':
-                await showSetupSummary();
-                // Pause to let user read
-                bus.emitAgent({ type: 'thought', content: 'Press any key to continue...' }); // Placeholder, actually just loops
-                // In a real TUI we'd wait, here we just loop and the menu re-prints
+            case 'service':
+                await setupBackgroundService();
                 break;
+            case 'status':
+                // Navigate to /config view for detailed configuration
+                running = false;
+                bus.emitAgent({
+                    type: 'view_request',
+                    viewId: 'settings',
+                    command: 'config',
+                });
+                bus.emitAgent({
+                    type: 'done',
+                    summary: 'Opening configuration...',
+                });
+                return; // Exit early to prevent double done message
             case 'exit':
             case 'cancel':
                 running = false;
@@ -132,6 +140,36 @@ export const initCommand: CommandHandler = async (args) => {
         summary: 'Configuration closed.',
     });
 };
+
+async function setupBackgroundService(): Promise<void> {
+    bus.emitAgent({
+        type: 'thought',
+        content: '[Setup] Background Service (Always-On)\n',
+    });
+
+    const result = await daemon.setupService();
+
+    if (result.success) {
+        bus.emitAgent({
+            type: 'thought',
+            content: [
+                '[OK] Service configuration generated successfully.',
+                `Path: ${result.path}`,
+                '',
+                'To start the service now:',
+                os.platform() === 'darwin' 
+                    ? `  launchctl load ${result.path}`
+                    : `  systemctl --user enable --now obsidian.service`,
+                '',
+            ].join('\n'),
+        });
+    } else {
+        bus.emitAgent({
+            type: 'error',
+            message: `Failed to generate service configuration: ${result.error}`,
+        });
+    }
+}
 
 async function setupApiKey(forceReset: boolean): Promise<void> {
     const hasKey = await keyManager.hasKey();

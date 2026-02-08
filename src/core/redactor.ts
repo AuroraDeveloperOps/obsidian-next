@@ -99,10 +99,10 @@ const BUILTIN_RULES: RedactionRule[] = [
         description: 'Anthropic API keys',
     },
 
-    // OpenAI API Keys (start with sk- but not sk-ant-)
+    // OpenAI API Keys (start with sk- but not sk-ant-, may contain hyphens)
     {
         name: 'openai-key',
-        pattern: /sk-(?!ant)[a-zA-Z0-9]{20,}/g,
+        pattern: /sk-(?!ant)[a-zA-Z0-9-]{20,}/g,
         replacement: '[REDACTED:openai-key]',
         enabled: true,
         description: 'OpenAI API keys',
@@ -175,6 +175,105 @@ const BUILTIN_RULES: RedactionRule[] = [
         replacement: '[REDACTED:private-ip]',
         enabled: false, // Disabled by default - may cause issues with code
         description: 'Private IP addresses',
+    },
+
+    // GitHub Fine-grained Personal Access Tokens (newer format)
+    {
+        name: 'github-fine-grained-pat',
+        pattern: /github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}/g,
+        replacement: '[REDACTED:github-pat]',
+        enabled: true,
+        description: 'GitHub fine-grained personal access tokens',
+    },
+
+    // Slack tokens (various types)
+    {
+        name: 'slack-token',
+        pattern: /xox[baprs]-[a-zA-Z0-9-]{10,}/g,
+        replacement: '[REDACTED:slack-token]',
+        enabled: true,
+        description: 'Slack API tokens',
+    },
+
+    // Discord tokens
+    {
+        name: 'discord-token',
+        pattern: /[MN][A-Za-z\d]{23,}\.[\w-]{6}\.[\w-]{27}/g,
+        replacement: '[REDACTED:discord-token]',
+        enabled: true,
+        description: 'Discord bot tokens',
+    },
+
+    // Google API keys
+    {
+        name: 'google-api-key',
+        pattern: /AIza[0-9A-Za-z\\-_]{35}/g,
+        replacement: '[REDACTED:google-api-key]',
+        enabled: true,
+        description: 'Google API keys',
+    },
+
+    // Twilio keys
+    {
+        name: 'twilio-key',
+        pattern: /SK[a-f0-9]{32}/g,
+        replacement: '[REDACTED:twilio-key]',
+        enabled: true,
+        description: 'Twilio API keys',
+    },
+
+    // SendGrid keys
+    {
+        name: 'sendgrid-key',
+        pattern: /SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}/g,
+        replacement: '[REDACTED:sendgrid-key]',
+        enabled: true,
+        description: 'SendGrid API keys',
+    },
+
+    // NPM tokens
+    {
+        name: 'npm-token',
+        pattern: /npm_[a-zA-Z0-9]{36}/g,
+        replacement: '[REDACTED:npm-token]',
+        enabled: true,
+        description: 'NPM access tokens',
+    },
+
+    // PyPI tokens
+    {
+        name: 'pypi-token',
+        pattern: /pypi-[a-zA-Z0-9_-]{100,}/g,
+        replacement: '[REDACTED:pypi-token]',
+        enabled: true,
+        description: 'PyPI API tokens',
+    },
+
+    // Database connection strings
+    {
+        name: 'db-connection-string',
+        pattern: /(mongodb(\+srv)?|postgres(ql)?|mysql|redis):\/\/[^\s'"]+/gi,
+        replacement: '[REDACTED:db-connection-string]',
+        enabled: true,
+        description: 'Database connection strings',
+    },
+
+    // Bearer tokens in headers
+    {
+        name: 'bearer-token',
+        pattern: /Bearer\s+[a-zA-Z0-9_-]{20,}/gi,
+        replacement: 'Bearer [REDACTED:bearer-token]',
+        enabled: true,
+        description: 'Bearer authentication tokens',
+    },
+
+    // Basic auth in URLs
+    {
+        name: 'basic-auth-url',
+        pattern: /:\/\/[^:]+:[^@]+@/g,
+        replacement: '://[REDACTED:credentials]@',
+        enabled: true,
+        description: 'Basic auth credentials in URLs',
     },
 ];
 

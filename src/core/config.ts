@@ -1,14 +1,15 @@
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { fileURLToPath } from 'url';
 import { z } from 'zod';
 
 // NOTE: API keys are managed exclusively by KeyManager (src/core/keyManager.ts)
 // Do not store API keys in config - use /init to set up secure key storage
 
 export const ConfigSchema = z.object({
-    model: z.string().default('claude-sonnet-4-5-20250929'),
-    workspaceRoot: z.string().default(process.cwd()),
+    model: z.string().default('claude-opus-4-6-20260207'),
+    workspaceRoot: z.string().default(os.homedir()),
     maxTokens: z.number().default(8192),
     language: z.string().default('en'),
     // Deprecated: apiKey should be managed by KeyManager, not stored in config
@@ -23,15 +24,26 @@ export const ConfigSchema = z.object({
         allowWrite: z.array(z.string()).default(['.', '/tmp']),
         denyWrite: z.array(z.string()).default(['.env', '.env.*', '*.key', '*.pem', '.git/config']),
     }).default({}),
+
+    // Context Management
+    summarizerModel: z.string().default('claude-haiku-4-5-20251001'),
+
+    // Adaptive Thinking
+    thinkingEffort: z.enum(['low', 'medium', 'high', 'max']).default('high'),
+
+    // Token Counting
+    // When true, uses Anthropic's countTokens API for accurate pre-request validation
+    // Set to false to skip pre-counting (saves ~100-500ms latency per request)
+    preCountTokens: z.boolean().default(true),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
 
 const DEFAULT_CONFIG: Config = {
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-opus-4-6-20260207',
     maxTokens: 8192,
     language: 'en',
-    workspaceRoot: process.cwd(),
+    workspaceRoot: os.homedir(),
     executionMode: 'local',
     sandbox: {
         allowedDomains: ['*.github.com', '*.npmjs.org', '*.npmjs.com', 'api.anthropic.com', 'registry.npmjs.org'],
@@ -40,6 +52,9 @@ const DEFAULT_CONFIG: Config = {
         allowWrite: ['.', '/tmp'],
         denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config'],
     },
+    summarizerModel: 'claude-haiku-4-5-20251001',
+    thinkingEffort: 'high',
+    preCountTokens: true,
 };
 
 export class ConfigManager {
@@ -48,7 +63,7 @@ export class ConfigManager {
     private hasDeprecatedApiKey: boolean = false;
 
     constructor(customPath?: string) {
-        this.configPath = customPath || path.join(os.homedir(), '.obsidian', 'config.json');
+        this.configPath = customPath || path.join(os.homedir(), '.obsidian-next', 'config.json');
     }
 
     async load(): Promise<Config> {
@@ -72,33 +87,6 @@ export class ConfigManager {
             }
         } catch {
             // File missing or invalid, use defaults
-        }
-
-        // Cascade: Check for local .obsidian/config.json in CWD
-        try {
-            const localConfigPath = path.join(process.cwd(), '.obsidian', 'config.json');
-            // Only load if it's different from the global config path
-            if (localConfigPath !== this.configPath) {
-                const localData = await fs.readFile(localConfigPath, 'utf-8');
-                const localParsed = JSON.parse(localData);
-                // Merge local config on top of loaded (global/default) config
-                loadedConfig = { ...loadedConfig, ...localParsed };
-            }
-        } catch {
-            // Local config missing or invalid, ignore
-        }
-
-        // Always ensure workspaceRoot is current CWD unless specifically overridden by the MERGED config
-        // Actually, for safety/consistency, workspaceRoot should typically default to process.cwd()
-        // unless the user *really* managed to set it locally.
-        // But since we excluded it from global save, loadedConfig.workspaceRoot comes from:
-        // 1. DEFAULT_CONFIG (process.cwd())
-        // 2. Global Config (removed now, so falls back to default)
-        // 3. Local Config (if they set it there)
-
-        // Ensure it defaults to actual CWD if missing/empty to fix the "sticky" issue completely
-        if (!loadedConfig.workspaceRoot) {
-            loadedConfig.workspaceRoot = process.cwd();
         }
 
         const finalConfig = ConfigSchema.parse(loadedConfig);
@@ -168,6 +156,34 @@ export class ConfigManager {
 
     getPath(): string {
         return this.configPath;
+    }
+
+    /**
+     * Dynamically get the project version from package.json
+     */
+    async getVersion(): Promise<string> {
+        try {
+            const selfPath = fileURLToPath(import.meta.url);
+            let currentDir = path.dirname(selfPath);
+
+            // Search upwards for package.json
+            for (let i = 0; i < 5; i++) {
+                const pkgPath = path.join(currentDir, 'package.json');
+                try {
+                    const data = await fs.readFile(pkgPath, 'utf-8');
+                    const pkg = JSON.parse(data);
+                    if (pkg.name === '@aurora-foundation/obsidian-next') {
+                        return pkg.version;
+                    }
+                } catch {
+                    // Not in this dir, go up
+                }
+                currentDir = path.dirname(currentDir);
+            }
+            return '0.4.5'; // Fallback
+        } catch {
+            return '0.4.5';
+        }
     }
 }
 

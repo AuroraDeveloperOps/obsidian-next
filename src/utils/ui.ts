@@ -9,15 +9,9 @@ import chalk from 'chalk';
  * Style: --- [ Title ] ---
  */
 export function formatHeader(title: string): string {
-    // Minimal standard: [ Title ]
-    // No massive dashed lines, just simple clean text
-    const text = chalk.bold.white(`[ ${title} ]`);
-    return `\n ${text}\n`;
+    return `${chalk.bold.white(title)}\n`;
 }
 
-/**
- * Format a standardized section footer
- */
 export function formatFooter(): string {
-    return `\n${chalk.gray('='.repeat(50))}\n`;
+    return ''; // Footers are discouraged in the new aesthetic
 }

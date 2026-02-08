@@ -1,6 +1,6 @@
 {
     "name": "@aurora-foundation/obsidian-next",
-    "version": "0.4.2",
+    "version": "0.4.7",
     "description": "Next-gen AI Agent CLI",
     "main": "dist/index.js",
     "type": "module",
@@ -44,21 +44,27 @@
         "@inkjs/ui": "^1.0.0",
         "@modelcontextprotocol/sdk": "^1.0.1",
         "@vscode/ripgrep": "^1.15.9",
+        "@xenova/transformers": "^2.17.2",
+        "better-sqlite3": "^12.6.2",
         "chalk": "^5.3.0",
+        "chokidar": "^5.0.0",
+        "cron-parser": "^5.5.0",
+        "grammy": "^1.39.3",
         "ink": "^4.4.1",
         "ink-spinner": "^5.0.0",
         "ink-text-input": "^5.0.1",
         "react": "^18.3.1",
+        "sqlite-vec": "^0.1.7-alpha.2",
         "zod": "^3.23.8"
     },
     "devDependencies": {
+        "@types/better-sqlite3": "^7.6.13",
         "@types/node": "^20.14.9",
         "@types/react": "^18.3.3",
         "ink-testing-library": "^3.0.0",
-        "pkg": "^5.8.1",
         "tsup": "^8.1.0",
         "typescript": "^5.5.3",
-        "vitest": "^2.0.1"
+        "vitest": "^4.0.18"
     },
     "author": "Aurora Labs <aurora.foundation.labs@gmail.com>",
     "contributors": [

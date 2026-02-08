@@ -11,14 +11,17 @@ import { ChoicePrompt } from '../components/ChoicePrompt.js';
 import { TextInputPrompt } from '../components/TextInputPrompt.js';
 import { Dashboard } from './Dashboard.js';
 import { CommandPopup, COMMANDS } from './CommandPopup.js';
+import { MessageList } from './MessageList.js';
 import { EphemeralItem } from '../components/EphemeralItem.js';
 import { Footer } from '../components/Footer.js';
 import { DoctorView } from './views/DoctorView.js';
 import { HelpView } from './views/HelpView.js';
+import { InitView } from './views/InitView.js';
 import { UsageView } from './views/UsageView.js';
 import { TaskView } from './views/TaskView.js';
 import { SessionView } from './views/SessionView.js';
 import { MCPView } from './views/MCPView.js';
+import { ContextView } from './views/ContextView.js';
 import { SettingsMenu, MenuView } from '../components/SettingsMenu.js';
 
 import { history } from '../core/history.js';
@@ -68,15 +71,79 @@ export const Root = () => {
     const [stats, setStats] = useState({ cost: 0, model: 'Loading...', mode: 'safe' as 'auto' | 'plan' | 'safe' });
 
     // Active View State Machine
-    type ActiveView = 'chat' | 'settings' | 'doctor' | 'help' | 'usage' | 'task' | 'sessions' | 'mcp';
+    type ActiveView = 'chat' | 'settings' | 'doctor' | 'help' | 'init' | 'usage' | 'task' | 'context' | 'sessions' | 'mcp';
     const [activeView, setActiveView] = useState<ActiveView>('chat');
     const [settingsTab, setSettingsTab] = useState<MenuView | undefined>();
 
     const [isBusy, setIsBusy] = useState(false);
+    const [isInitCommand, setIsInitCommand] = useState(false);
+    const [isBackgroundBusy, setIsBackgroundBusy] = useState(false);
+    const [lastActivity, setLastActivity] = useState(Date.now());
+    const [isIdle, setIsIdle] = useState(false);
+    const [isSleep, setIsSleep] = useState(false);
+    const [latestActivity, setLatestActivity] = useState<{ content: string; color: string; } | undefined>();
+    const [lastFileChange, setLastFileChange] = useState<{ path: string; op: string } | null>(null);
+    const [currentActivity, setCurrentActivity] = useState<string | null>(null);
+
+    // Update latest activity on any agent event
+    useEffect(() => {
+        const updateActivity = async () => {
+            const { auditLog } = await import('../core/auditLog.js');
+            const activities = await auditLog.getRecentActivities(1);
+            if (activities.length > 0) {
+                setLatestActivity(activities[0]);
+            }
+        };
+        const sub = (event: AgentEvent) => {
+            // Only update on meaningful events to avoid flicker
+            if (event.type !== 'thought') {
+                updateActivity();
+            }
+        };
+
+        bus.on('agent', sub);
+        // Also fetch on initial load
+        updateActivity();
+
+        return () => {
+            bus.off('agent', sub);
+        };
+    }, []);
+
+    // Idle/Sleep detection
+    useEffect(() => {
+        const checkIdle = () => {
+            const now = Date.now();
+            const diff = now - lastActivity;
+
+            // 60s for idle, 5m for sleep
+            if (diff > 300000) {
+                setIsSleep(true);
+                setIsIdle(true);
+            } else if (diff > 60000) {
+                setIsIdle(true);
+                setIsSleep(false);
+            } else {
+                setIsIdle(false);
+                setIsSleep(false);
+            }
+        };
+
+        const timer = setInterval(checkIdle, 5000);
+        return () => clearInterval(timer);
+    }, [lastActivity]);
+
+    // Reset activity on input
+    useEffect(() => {
+        if (input.length > 0) {
+            setLastActivity(Date.now());
+        }
+    }, [input]);
 
     // Handle prompt resolution
     const handlePromptResolve = useCallback(() => {
         setPendingPrompt(null);
+        setLastActivity(Date.now());
     }, []);
 
     // Load initial footer data and subscribe to updates
@@ -131,23 +198,40 @@ export const Root = () => {
                 return;
             }
 
+            // Handle session restore - set events directly without clearing DB
+            if (event.type === 'restore_history') {
+                const restored = (event as any).events || [];
+                setEvents(restored);
+                setPendingPrompt(null);
+                return;
+            }
+
             // Handle shutdown - exit after rendering final messages
-            if (event.type === 'shutdown_complete') {
+            // Handle thinking/busy state
+            const completionTypes: string[] = ['done', 'error', 'command_executed', 'shutdown_complete'];
+            const startTypes: string[] = ['tool_start', 'thought'];
+
+            if (completionTypes.includes(event.type)) {
                 setIsBusy(false);
+                setIsInitCommand(false);
+            } else if (startTypes.includes(event.type)) {
+                setIsBusy(true);
+            }
+
+            if (event.type === 'shutdown_complete') {
+                setIsBackgroundBusy(false);
                 // Delay exit to allow final render
                 setTimeout(() => {
                     exit();
                 }, 200);
                 return;
             }
-
-            // Stop busy state on done/error
-            if (event.type === 'done' || event.type === 'error') {
-                setIsBusy(false);
+            // Background task state
+            else if (event.type === 'scheduler_task_started') {
+                setIsBackgroundBusy(true);
             }
-            // Keep busy state for tool_start, thought, tool_result
-            else if (event.type === 'tool_start' || event.type === 'thought') {
-                setIsBusy(true);
+            else if (event.type === 'scheduler_task_completed' || event.type === 'scheduler_task_failed') {
+                setIsBackgroundBusy(false);
             }
             // Update task progress
             else if (event.type === 'task_update') {
@@ -185,6 +269,51 @@ export const Root = () => {
                 return;
             }
 
+            if (event.type === 'view_request') {
+                setActiveView(event.viewId as any);
+                if (event.viewId === 'settings') {
+                    // Map specific commands to tabs
+                    const trigger = event.command || '';
+                    if (trigger === 'sandbox') setSettingsTab('security');
+                    else if (trigger === 'mode') setSettingsTab('mode');
+                    else if (trigger === 'models') setSettingsTab('models');
+                    else if (trigger === 'config') setSettingsTab('categories');
+                    else if (event.params?.includes('sandbox')) setSettingsTab('security');
+                    else if (event.params?.includes('mode')) setSettingsTab('mode');
+                    else if (event.params?.includes('model') || event.params?.includes('models')) setSettingsTab('models');
+                    else if (event.params?.includes('config')) setSettingsTab('categories');
+                    else setSettingsTab(undefined);
+                }
+                return;
+            }
+
+            // Track file changes for footer display
+            if (event.type === 'tool_start') {
+                const tool = event.tool;
+                // Update current activity indicator
+                try {
+                    const args = JSON.parse(event.args);
+                    const firstVal = Object.values(args)[0];
+                    const summary = typeof firstVal === 'string'
+                        ? firstVal.length > 30 ? firstVal.slice(0, 30) + '...' : firstVal
+                        : '';
+                    setCurrentActivity(`${tool} ${summary}`.trim());
+                } catch {
+                    setCurrentActivity(tool);
+                }
+
+                if (tool === 'write' || tool === 'edit') {
+                    try {
+                        const args = JSON.parse(event.args);
+                        const filePath = args.file_path || args.path || '';
+                        const shortPath = filePath.split('/').slice(-2).join('/');
+                        setLastFileChange({ path: shortPath, op: tool === 'write' ? 'W' : 'E' });
+                    } catch { }
+                }
+            } else if (event.type === 'tool_result' || event.type === 'done' || event.type === 'error') {
+                setCurrentActivity(null);
+            }
+
             setEvents(prev => {
                 // If it's a thought and the last event was also a thought, UPDATE it for streaming effect
                 const last = prev[prev.length - 1];
@@ -197,14 +326,24 @@ export const Root = () => {
                 }
                 return [...prev, event];
             });
+
+            // Any agent activity resets idle timer
+            setLastActivity(Date.now());
         };
 
         const userHandler = (event: any) => {
             if (event.type === 'user_input') {
-                setEvents(prev => [...prev, { type: 'user_input', content: event.content } as any]);
+                if (event.content.trim().startsWith('/init')) {
+                    setIsInitCommand(true);
+                }
+                if (!event.silent) {
+                    setEvents(prev => [...prev, { type: 'user_input', content: event.content } as any]);
+                }
                 setIsBusy(true); // User input starts the busy state
+                setLastActivity(Date.now());
             }
         };
+
 
         bus.on('agent', handler);
         bus.on('user', userHandler);
@@ -216,6 +355,15 @@ export const Root = () => {
     }, []);
 
     const [inputKey, setInputKey] = useState(0);
+    const [cursorVisible, setCursorVisible] = useState(true);
+
+    // Blinking cursor effect
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCursorVisible(v => !v);
+        }, 500);
+        return () => clearInterval(timer);
+    }, []);
 
     // --------------- POPUP LOGIC START ---------------
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -257,9 +405,8 @@ export const Root = () => {
             bus.emitAgent({ type: 'error', message: `Failed to save session: ${err}` });
         }
 
-        // Clear the active history file so next boot is fresh
-        await history.clear();
-
+        // Clear UI state but preserve DB events for session restoration
+        // Note: history.clear() was removed here - it was deleting events needed for /resume
         bus.emitAgent({ type: 'clear_history' });
 
         setTimeout(() => {
@@ -267,9 +414,9 @@ export const Root = () => {
         }, 800);
     }, [exit]);
 
-    useInput((input, key) => {
-        // Graceful Exit - Ctrl+C
-        if (input === '\x03' || (key.ctrl && input === 'c')) {
+    useInput((inputChar, key) => {
+        // Graceful Exit - Ctrl+C (global, works in any view)
+        if (inputChar === '\x03' || (key.ctrl && inputChar === 'c')) {
             // Prevent multiple triggers
             if (activeView === 'chat' && pendingPrompt === null) {
                 handleExit();
@@ -280,6 +427,12 @@ export const Root = () => {
             return;
         }
 
+        // Skip all other input handling when not in chat view
+        // Let child views (SessionView, SettingsMenu, etc.) handle their own input
+        if (activeView !== 'chat') {
+            return;
+        }
+
         // Global Interrupt - Escape
         if (key.escape && isBusy) {
             bus.emitUser({ type: 'user_interrupt' });
@@ -287,146 +440,94 @@ export const Root = () => {
             return;
         }
 
-        // Mode Toggle - Shift+Tab
-        if (key.shift && key.tab) {
+        // Escape to close popup without executing
+        if (key.escape && matches.length > 0) {
+            setInput('');
+            return;
+        }
+
+        // Mode Toggle - Shift+Tab (only when not in popup)
+        if (key.shift && key.tab && matches.length === 0) {
             cycleMode();
             return;
         }
 
-        if (matches.length === 0) return;
-
-        if (key.upArrow) {
-            setSelectedIndex(prev => (prev > 0 ? prev - 1 : matches.length - 1));
+        // Task View Toggle - Ctrl+T
+        if (key.ctrl && inputChar === 't') {
+            setActiveView('task');
+            return;
         }
 
-        if (key.downArrow) {
-            setSelectedIndex(prev => (prev < matches.length - 1 ? prev + 1 : 0));
-        }
+        if (pendingPrompt || isBusy) return;
 
-        if (key.return || key.tab) {
-            // Handle Selection
-            const selected = matches[selectedIndex];
-
-            if (selected) {
-                // Determine if we should execute immediately (Enter) or just autofill (Tab)
-                // User requested "straight tap" -> Instant execution on Enter
-                if (key.return) {
-                    setInput(selected.name);
-                    handleSubmit(selected.name);
-                    return;
-                }
-
-                // For Tab, just autofill and let user edit if needed
-                if (input !== selected.name) {
-                    setInput(selected.name);
-                    setInputKey(prev => prev + 1); // Force remount to fix cursor position
-                }
+        // Popup navigation - only when popup is visible
+        if (matches.length > 0) {
+            if (key.upArrow) {
+                setSelectedIndex(prev => (prev > 0 ? prev - 1 : matches.length - 1));
+                return;
             }
-        }
-    });
-    // --------------- POPUP LOGIC END ---------------
 
-    const handleSubmit = (value: string) => {
-        if (!value.trim()) return;
+            if (key.downArrow) {
+                setSelectedIndex(prev => (prev < matches.length - 1 ? prev + 1 : 0));
+                return;
+            }
 
-        // RACE CONDITION FIX with Debugging
-        if (matches.length > 0 && value !== matches[selectedIndex]?.name) {
-            const selected = matches[selectedIndex];
-            if (selected && selected.name.startsWith(value) && selected.name !== value) {
-                // Debugging why send fails - but blocking partial submission is intended.
+            // Tab to autocomplete without executing
+            if (key.tab && !key.shift) {
+                const selected = matches[selectedIndex];
+                if (selected && input !== selected.name) {
+                    setInput(selected.name);
+                    setInputKey(prev => prev + 1);
+                }
+                return;
+            }
+
+            // Enter to execute selected command from popup
+            if (key.return) {
+                const selected = matches[selectedIndex];
+                if (selected) {
+                    setInput('');
+                    handleSubmit(selected.name);
+                }
                 return;
             }
         }
 
-        // View Route Handlers
-        if (value.trim() === '/settings') {
-            setSettingsTab(undefined);
-            setActiveView('settings');
-            setInput('');
+        // Regular text input - works with or without popup
+        if (key.return) {
+            handleSubmit(input);
             return;
         }
-        if (value.trim() === '/doctor') {
-            setActiveView('doctor');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/help') {
-            setActiveView('help');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/status') {
-            setActiveView('doctor');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/usage' || value.trim() === '/cost') {
-            setActiveView('usage');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/task') {
-            setActiveView('task');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/resume' || value.trim() === '/sessions') {
-            setActiveView('sessions');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/sandbox') {
-            setSettingsTab('security');
-            setActiveView('settings');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/mode') {
-            setSettingsTab('mode');
-            setActiveView('settings');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/models' || value.trim() === '/model') {
-            setSettingsTab('models');
-            setActiveView('settings');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/config') {
-            setSettingsTab('categories');
-            setActiveView('settings');
-            setInput('');
-            return;
-        }
-        if (value.trim() === '/mcp') {
-            setActiveView('mcp');
-            setInput('');
+        if (key.backspace || key.delete) {
+            setInput(prev => prev.slice(0, -1));
             return;
         }
 
-        // Destructive Commands Interception
-        if (value.trim() === '/clear') {
-            setPendingPrompt({
-                type: 'approval',
-                requestId: 'ui:clear',
-                context: 'Flush session history? This cannot be undone.',
-            });
-            setInput('');
-            return;
+        // Paste and regular input
+        if (!key.ctrl && !key.meta && inputChar) {
+            setInput(prev => prev + inputChar);
         }
+    });
+    // --------------- POPUP LOGIC END ---------------
 
-        if (value.trim() === '/exit') {
-            setPendingPrompt({
-                type: 'approval',
-                requestId: 'ui:exit',
-                context: 'Terminate session? Progress will be archived.',
-            });
-            setInput('');
-            return;
-        }
+    const lastSubmitTime = React.useRef(0);
 
-        bus.emitUser({ type: 'user_input', content: value });
+    const handleSubmit = (value: string) => {
+        if (!value.trim()) return;
+
+        // Debounce double-submissions
+        const now = Date.now();
+        if (now - lastSubmitTime.current < 150) return;
+        lastSubmitTime.current = now;
+
+        const trimmed = value.trim();
+
+        // 2. Determine if this is a view command (silent - no echo)
+        const matchingCommand = COMMANDS.find(c => c.name === trimmed);
+        const silent = matchingCommand?.isView || false;
+
+        // 3. Emit the user input and clear
+        bus.emitUser({ type: 'user_input', content: trimmed, silent });
         setInput('');
     };
 
@@ -456,12 +557,51 @@ export const Root = () => {
         };
     }, [handleExit]);
 
+    const renderInput = () => {
+        const placeholder = isBusy ? 'Thinking...' : (pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...');
+
+        if (input.length === 0) {
+            return <Text color="gray">{placeholder}</Text>;
+        }
+
+        const commandMatch = input.match(/^\/([a-zA-Z0-9_-]+)/);
+        if (commandMatch) {
+            const command = commandMatch[0];
+            const rest = input.slice(command.length);
+            // Check if this is a recognized command
+            const isValidCommand = COMMANDS.some(c => c.name === command || c.name.startsWith(command));
+            const isExactMatch = COMMANDS.some(c => c.name === command);
+            return (
+                <Text>
+                    <Text color={isExactMatch ? 'red' : isValidCommand ? 'yellow' : undefined}>{command}</Text>
+                    {rest}
+                    {cursorVisible && <Text>_</Text>}
+                </Text>
+            );
+        }
+
+        return (
+            <Text>
+                {input}
+                {cursorVisible && <Text>_</Text>}
+            </Text>
+        );
+    };
+
     return (
         <Box flexDirection="column" height="100%">
-            {/* Header / Dashboard - Fixed Height */}
-            <Box flexShrink={0}>
-                <Dashboard isBusy={isBusy} />
-            </Box>
+            {/* Header / Dashboard - Hidden when overlay views are active */}
+            {activeView === 'chat' && (
+                <Box flexShrink={0}>
+                    <Dashboard
+                        isBusy={isBusy}
+                        isBackgroundBusy={isBackgroundBusy}
+                        isIdle={isIdle}
+                        isSleep={isSleep}
+                        latestActivity={latestActivity}
+                    />
+                </Box>
+            )}
 
             {/* Active View Area */}
             <Box flexDirection="column" flexGrow={1} overflowY={activeView === 'chat' ? undefined : 'hidden'} justifyContent={activeView !== 'chat' ? "flex-start" : "flex-end"} marginY={1}>
@@ -471,10 +611,14 @@ export const Root = () => {
                     <DoctorView onClose={() => setActiveView('chat')} />
                 ) : activeView === 'help' ? (
                     <HelpView onClose={() => setActiveView('chat')} />
+                ) : activeView === 'init' ? (
+                    <InitView onClose={() => setActiveView('chat')} />
                 ) : activeView === 'usage' ? (
                     <UsageView onClose={() => setActiveView('chat')} />
                 ) : activeView === 'task' ? (
                     <TaskView onClose={() => setActiveView('chat')} />
+                ) : activeView === 'context' ? (
+                    <ContextView onClose={() => setActiveView('chat')} />
                 ) : activeView === 'sessions' ? (
                     <SessionView
                         onClose={() => setActiveView('chat')}
@@ -493,211 +637,136 @@ export const Root = () => {
                 ) : activeView === 'mcp' ? (
                     <MCPView onExit={() => setActiveView('chat')} />
                 ) : (
-                    events.slice(-MAX_EVENTS).map((event: any, i) => {
-                        let content = null;
-                        // ... (keep mapping logic)
-                        if (event.type === 'user_input') {
-                            content = (
-                                <Box key={i} flexDirection="row" paddingX={1} marginBottom={0}>
-                                    <Text backgroundColor="#222222">
-                                        <Text color="gray">{' > '}</Text>
-                                        <Text color="white">{event.content}</Text>
-                                        <Text>{' '}</Text>
-                                    </Text>
-                                </Box>
-                            );
-                        } else if (event.type === 'thought') {
-                            // Filter out "Mode: ..." thoughts as they are now shown in the UI
-                            if (event.content.startsWith('Mode:')) return null;
-                            if (event.hidden) return null;
-
-                            // Check if this is the latest event and if we should consider it streaming
-                            // Since we don't track 'isAgentBusy' globally here easily, we assume the LAST thought
-                            // in the list is streaming if it hasn't been followed by a result/error/done event.
-                            // But actually, the events list updates as we go.
-                            // A simple heuristic: if it's the very last event in the list, it might be streaming.
-                            const isLast = i === events.slice(-MAX_EVENTS).length - 1;
-                            content = <AgentLine key={i} content={event.content} isStreaming={isLast} />;
-                        } else if (event.type === 'tool_start') {
-                            // Format: ⏺ ToolName(args summary) with background
-                            let argsSummary = '';
-                            try {
-                                const args = JSON.parse(event.args);
-                                const firstVal = Object.values(args)[0];
-                                if (typeof firstVal === 'string') {
-                                    argsSummary = firstVal.length > 60
-                                        ? firstVal.slice(0, 60) + '...'
-                                        : firstVal;
-                                }
-                            } catch { }
-
-                            // Check if this tool is the latest event (active)
-                            const isLast = i === events.slice(-MAX_EVENTS).length - 1;
-
-                            content = (
-                                <Box key={i}>
-                                    <Text backgroundColor="#1a1a2e" color="white">
-                                        ⏺
-                                    </Text>
-                                    <Text backgroundColor="#1a1a2e" color="white" bold>{event.tool}</Text>
-                                    <Text backgroundColor="#1a1a2e" color="gray">({argsSummary.trim()}) </Text>
-                                </Box>
-                            );
-                        } else if (event.type === 'tool_result') {
-                            content = <ToolOutput key={i} tool={event.tool} output={event.output} isError={event.isError} />;
-                        } else if (event.type === 'done') {
-                            content = (
-                                <EphemeralItem delay={5000}>
-                                    <Text key={i} color="green">[OK] {event.summary}</Text>
-                                </EphemeralItem>
-                            );
-                        } else if (event.type === 'error') {
-                            content = <Text key={i} color="red">[ERR] {event.message}</Text>;
-                        } else if (event.type === 'clear_history') {
-                            content = (
-                                <EphemeralItem delay={3000}>
-                                    <Text key={i} color="gray">[SYS] History cleared</Text>
-                                </EphemeralItem>
-                            );
-                        }
-
-                        if (!content) return null;
-
-                        return (
-                            <Box key={i} marginTop={1}>
-                                {content}
-                            </Box>
-                        );
-                    })
+                    <MessageList events={events} maxEvents={MAX_EVENTS} />
                 )}
             </Box>
 
-            {/* Input & Footer - Fixed Height at Bottom */}
-            <Box flexDirection="column" flexShrink={0}>
-                {/* Persistent Thinking Indicator - Sticky at bottom */}
-                {isBusy && (
-                    <Box marginBottom={0} marginLeft={2}>
-                        <Glitter>Thinking...</Glitter>
-                    </Box>
-                )}
-
-                {/* Interactive Prompts */}
-                {/* ... prompts ... */}
-                {pendingPrompt?.type === 'approval' && (
-                    <Box marginBottom={1}>
-                        <ApprovalPrompt
-                            requestId={pendingPrompt.requestId}
-                            context={pendingPrompt.context}
-                            diff={pendingPrompt.diff}
-                            onResolve={handlePromptResolve}
-                        />
-                    </Box>
-                )}
-                {/* ... other prompts ... */}
-                {pendingPrompt?.type === 'choice' && (
-                    <Box marginBottom={1}>
-                        <ChoicePrompt
-                            question={pendingPrompt.question}
-                            options={pendingPrompt.options}
-                            onResolve={handlePromptResolve}
-                        />
-                    </Box>
-                )}
-                {pendingPrompt?.type === 'text_input' && (
-                    <Box marginBottom={1}>
-                        <TextInputPrompt
-                            requestId={pendingPrompt.requestId}
-                            prompt={pendingPrompt.prompt}
-                            masked={pendingPrompt.masked}
-                            placeholder={pendingPrompt.placeholder}
-                            onResolve={handlePromptResolve}
-                        />
-                    </Box>
-                )}
-
-                {/* Settings Menu REMOVED from here */}
-
-
-                {/* Footer Stats Area */}
-                <Box paddingX={0} marginBottom={0} marginTop={0}>
-                    <Footer mode={stats.mode} model={stats.model} taskProgress={taskProgress} />
-                </Box>
-
-                {/* Input Area (disabled when prompt is active) */}
-                <Box flexDirection="column">
-                    {/* Separator Line (Responsive) */}
-                    <Box
-                        borderStyle="single"
-                        borderTop={false}
-                        borderLeft={false}
-                        borderRight={false}
-                        borderBottom={true}
-                        borderColor="gray"
-                        marginBottom={0}
-                    />
-
-                    <Box marginY={0} paddingX={0}>
-                        <Text color="red" bold>❯ </Text>
-                        <TextInput
-                            key={inputKey}
-                            value={input}
-                            onChange={pendingPrompt ? () => { } : setInput}
-                            onSubmit={pendingPrompt ? () => { } : handleSubmit}
-                            placeholder={pendingPrompt ? 'Respond to prompt above...' : 'Type a message or command...'}
-                            focus={activeView === 'chat'} // Only focus when in chat mode
-                        />
-                    </Box>
-
-                    {/* Bottom Separator (Responsive) */}
-                    <Box
-                        borderStyle="single"
-                        borderTop={true}
-                        borderLeft={false}
-                        borderRight={false}
-                        borderBottom={false}
-                        borderColor="gray"
-                        marginTop={0}
-                    />
-                </Box>
-
-                {/* Popup now appears BELOW the input area */}
-                <CommandPopup
-                    matches={matches}
-                    selectedIndex={selectedIndex}
-                />
-
-                {/* Footer / Status Bar - Hidden when popup is open */}
-                {matches.length === 0 && (
-                    <Box flexDirection="column" marginTop={0} paddingX={0}>
-                        {/* Row 1 */}
-                        <Box flexDirection="row" justifyContent="space-between">
-                            <Box>
-                                <Text>
-                                    {stats.mode === 'plan' ? '⏸ ' : stats.mode === 'auto' ? '▶ ' : '⏺ '}
-                                    <Text bold>{stats.mode} mode on</Text>
-                                    <Text dimColor> (shift+Tab to cycle)</Text>
-                                </Text>
+            {/* Input & Footer - Fixed Height at Bottom - Hidden when overlay views are active */}
+            {activeView === 'chat' && (
+                <Box flexDirection="column" flexShrink={0}>
+                    {/* Persistent Thinking Indicator - Sticky at bottom */}
+                    <Box flexDirection="row" marginBottom={0} marginLeft={2}>
+                        {isBusy && !isInitCommand && (
+                            <Glitter>{currentActivity ? `⏳ ${currentActivity}` : 'Thinking...'}</Glitter>
+                        )}
+                        {isBackgroundBusy && (
+                            <Box marginLeft={isBusy ? 4 : 0}>
+                                <Glitter>Background...</Glitter>
                             </Box>
-                            <Box>
-                                <Text dimColor>
-                                    Context: {(usage.getContextUsage(stats.model).used / 1000).toFixed(1)}k / {(usage.getContextUsage(stats.model).limit / 1000).toFixed(0)}k ({Math.round(usage.getContextUsage(stats.model).percentRemaining === 100 ? 0 : (100 - usage.getContextUsage(stats.model).percentRemaining))}%)
-                                </Text>
-                            </Box>
+                        )}
+                    </Box>
+
+                    {/* Interactive Prompts */}
+                    {pendingPrompt?.type === 'approval' && (
+                        <Box marginBottom={1}>
+                            <ApprovalPrompt
+                                requestId={pendingPrompt.requestId}
+                                context={pendingPrompt.context}
+                                diff={pendingPrompt.diff}
+                                onResolve={handlePromptResolve}
+                            />
+                        </Box>
+                    )}
+                    {pendingPrompt?.type === 'choice' && (
+                        <Box marginBottom={1}>
+                            <ChoicePrompt
+                                question={pendingPrompt.question}
+                                options={pendingPrompt.options}
+                                onResolve={handlePromptResolve}
+                            />
+                        </Box>
+                    )}
+                    {pendingPrompt?.type === 'text_input' && (
+                        <Box marginBottom={1}>
+                            <TextInputPrompt
+                                requestId={pendingPrompt.requestId}
+                                prompt={pendingPrompt.prompt}
+                                masked={pendingPrompt.masked}
+                                placeholder={pendingPrompt.placeholder}
+                                onResolve={handlePromptResolve}
+                            />
+                        </Box>
+                    )}
+
+                    {/* Footer Stats Area */}
+                    <Box paddingX={0} marginBottom={0} marginTop={0}>
+                        <Footer mode={stats.mode} model={stats.model} taskProgress={taskProgress} />
+                    </Box>
+
+                    {/* Input Area (disabled when prompt is active) */}
+                    <Box flexDirection="column">
+                        <Box
+                            borderStyle="single"
+                            borderTop={false}
+                            borderLeft={false}
+                            borderRight={false}
+                            borderBottom={true}
+                            borderColor="gray"
+                            marginBottom={0}
+                        />
+
+                        <Box marginY={0} paddingX={0}>
+                            <Text color="red" bold>❯ </Text>
+                            {renderInput()}
                         </Box>
 
-                        {/* Row 2 */}
-                        <Box flexDirection="row" justifyContent="space-between">
-                            <Box>
-                                {/* Placeholder for status messages or errors */}
-                                <Text dimColor></Text>
+                        <Box
+                            borderStyle="single"
+                            borderTop={true}
+                            borderLeft={false}
+                            borderRight={false}
+                            borderBottom={false}
+                            borderColor="gray"
+                            marginTop={0}
+                        />
+                    </Box>
+
+                    {/* Popup now appears BELOW the input area */}
+                    <CommandPopup
+                        matches={matches}
+                        selectedIndex={selectedIndex}
+                    />
+
+                    {/* Footer / Status Bar - Hidden when popup is open */}
+                    {matches.length === 0 && (
+                        <Box flexDirection="column" marginTop={0} paddingX={0}>
+                            {/* Row 1 */}
+                            <Box flexDirection="row" justifyContent="space-between">
+                                <Box>
+                                    <Text>
+                                        {stats.mode === 'plan' ? '⏸ ' : stats.mode === 'auto' ? '▶ ' : '⏺ '}
+                                        <Text bold>{stats.mode} mode on</Text>
+                                        <Text dimColor> (shift+Tab to cycle)</Text>
+                                    </Text>
+                                </Box>
+                                {/* File diff indicator in center */}
+                                <Box>
+                                    {lastFileChange && (
+                                        <Text dimColor>
+                                            <Text color={lastFileChange.op === 'W' ? 'green' : 'yellow'}>[{lastFileChange.op}]</Text> {lastFileChange.path}
+                                        </Text>
+                                    )}
+                                </Box>
+                                <Box>
+                                    <Text dimColor>
+                                        Context: {(usage.getContextUsage(stats.model).used / 1000).toFixed(1)}k / {(usage.getContextUsage(stats.model).limit / 1000).toFixed(0)}k ({Math.round(usage.getContextUsage(stats.model).percentRemaining === 100 ? 0 : (100 - usage.getContextUsage(stats.model).percentRemaining))}%)
+                                    </Text>
+                                </Box>
                             </Box>
-                            <Box>
-                                <Text dimColor>@aurora-foundation/obsidian-next</Text>
+
+                            {/* Row 2 */}
+                            <Box flexDirection="row" justifyContent="space-between">
+                                <Box>
+                                    <Text dimColor></Text>
+                                </Box>
+                                <Box>
+                                    <Text dimColor>@aurora-foundation/obsidian-next</Text>
+                                </Box>
                             </Box>
                         </Box>
-                    </Box>
-                )}
-            </Box>
+                    )}
+                </Box>
+            )}
         </Box >
     );
 };

@@ -6,7 +6,7 @@ import { bus } from '../core/bus.js';
 import { formatHeader } from '../utils/ui.js';
 
 // Export this type so Root.tsx can use it
-export type MenuView = 'categories' | 'mode' | 'security' | 'ui' | 'permissions' | 'commands' | 'plan-confirm' | 'models';
+export type MenuView = 'categories' | 'mode' | 'security' | 'ui' | 'owl' | 'permissions' | 'commands' | 'plan-confirm' | 'models';
 
 interface SettingsMenuProps {
     onClose: () => void;
@@ -91,9 +91,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
             case 'models':
                 const currentModel = currentConfig.model;
                 return [
-                    { key: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', type: 'select', value: currentModel.includes('sonnet'), description: 'Balanced' },
-                    { key: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', type: 'select', value: currentModel.includes('haiku'), description: 'Fastest' },
-                    { key: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', type: 'select', value: currentModel.includes('opus'), description: 'Most capable' },
+                    { key: 'claude-opus-4-6-20260207', label: 'Claude Opus 4.6', type: 'select', value: currentModel === 'claude-opus-4-6-20260207', description: 'Intelligence King' },
+                    { key: 'claude-opus-4-5-20251101', label: 'Claude Opus 4.5', type: 'select', value: currentModel === 'claude-opus-4-5-20251101', description: 'Deep reasoning' },
+                    { key: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', type: 'select', value: currentModel === 'claude-sonnet-4-5-20250929', description: 'Balanced' },
+                    { key: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', type: 'select', value: currentModel === 'claude-haiku-4-5-20251001', description: 'Fastest' },
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
             case 'security':
@@ -109,6 +110,16 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                     { key: 'syntaxHighlight', label: 'Syntax Highlighting', type: 'toggle', value: currentSettings.ui.syntaxHighlight, description: 'Colorize code' },
                     { key: 'diffColors', label: 'Diff Colors', type: 'toggle', value: currentSettings.ui.diffColors, description: 'Show colored diffs' },
                     { key: 'showLineNumbers', label: 'Line Numbers', type: 'toggle', value: currentSettings.ui.showLineNumbers, description: 'Show line numbers' },
+                    { key: 'owl', label: 'Owl Animation', type: 'category', description: currentSettings.ui.owlAnimation?.enabled ? 'Enabled' : 'Disabled' },
+                    { key: 'back', label: 'Back', type: 'action' },
+                ];
+            case 'owl':
+                const owlSettings = currentSettings.ui.owlAnimation || { enabled: true, flyWhenIdle: true, idleTimeout: 60000, sleepTimeout: 300000 };
+                return [
+                    { key: 'owlEnabled', label: 'Enable Owl', type: 'toggle', value: owlSettings.enabled, description: 'Show owl animation in dashboard' },
+                    { key: 'owlFly', label: 'Fly When Idle', type: 'toggle', value: owlSettings.flyWhenIdle, description: 'Owl flies around when idle' },
+                    { key: 'owlIdleTimeout', label: 'Idle Timeout', type: 'category', description: `${owlSettings.idleTimeout / 1000}s` },
+                    { key: 'owlSleepTimeout', label: 'Sleep Timeout', type: 'category', description: `${owlSettings.sleepTimeout / 1000}s` },
                     { key: 'back', label: 'Back', type: 'action' },
                 ];
             case 'permissions':
@@ -124,7 +135,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                     { key: 'cmd:init', label: '/init', type: 'action', description: 'Initialize' },
                     { key: 'cmd:config', label: '/config', type: 'action', description: 'Edit config' },
                     { key: 'cmd:status', label: '/status', type: 'action', description: 'System status' },
-                    { key: 'cmd:cost', label: '/cost', type: 'action', description: 'Session cost' },
+                    { key: 'cmd:context', label: '/context', type: 'action', description: 'Context & usage' },
                     { key: 'cmd:clear', label: '/clear', type: 'action', description: 'Clear history' },
                     { key: 'cmd:exit', label: '/exit', type: 'action', description: 'Save & Exit' },
                     { key: 'back', label: 'Back', type: 'action' },
@@ -187,14 +198,35 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                     message: `Switch key storage to '${nextBackend}'? Re-auth required.`,
                     payload: nextBackend
                 });
-            } else if (['mode', 'models', 'security', 'ui', 'permissions', 'commands'].includes(item.key)) {
+            } else if (['mode', 'models', 'security', 'ui', 'owl', 'permissions', 'commands'].includes(item.key)) {
                 setView(item.key as MenuView);
+            } else if (item.key === 'owlIdleTimeout') {
+                // Cycle through idle timeout options: 30s, 60s, 120s, 300s
+                const owlSettings = currentSettings.ui.owlAnimation || { enabled: true, flyWhenIdle: true, idleTimeout: 60000, sleepTimeout: 300000 };
+                const timeouts = [30000, 60000, 120000, 300000];
+                const currentIdx = timeouts.indexOf(owlSettings.idleTimeout);
+                const nextTimeout = timeouts[(currentIdx + 1) % timeouts.length];
+                await saveAndUpdate({ ui: { ...currentSettings.ui, owlAnimation: { ...owlSettings, idleTimeout: nextTimeout } } });
+            } else if (item.key === 'owlSleepTimeout') {
+                // Cycle through sleep timeout options: 60s, 180s, 300s, 600s
+                const owlSettings = currentSettings.ui.owlAnimation || { enabled: true, flyWhenIdle: true, idleTimeout: 60000, sleepTimeout: 300000 };
+                const timeouts = [60000, 180000, 300000, 600000];
+                const currentIdx = timeouts.indexOf(owlSettings.sleepTimeout);
+                const nextTimeout = timeouts[(currentIdx + 1) % timeouts.length];
+                await saveAndUpdate({ ui: { ...currentSettings.ui, owlAnimation: { ...owlSettings, sleepTimeout: nextTimeout } } });
             }
         } else if (item.type === 'toggle') {
             if (view === 'security') {
                 await saveAndUpdate({ security: { ...currentSettings.security, [item.key]: !item.value } });
             } else if (view === 'ui') {
                 await saveAndUpdate({ ui: { ...currentSettings.ui, [item.key]: !item.value } });
+            } else if (view === 'owl') {
+                const owlSettings = currentSettings.ui.owlAnimation || { enabled: true, flyWhenIdle: true, idleTimeout: 60000, sleepTimeout: 300000 };
+                if (item.key === 'owlEnabled') {
+                    await saveAndUpdate({ ui: { ...currentSettings.ui, owlAnimation: { ...owlSettings, enabled: !item.value } } });
+                } else if (item.key === 'owlFly') {
+                    await saveAndUpdate({ ui: { ...currentSettings.ui, owlAnimation: { ...owlSettings, flyWhenIdle: !item.value } } });
+                }
             }
         } else if (item.type === 'select') {
             if (view === 'mode' && item.key !== 'back') {
@@ -210,7 +242,11 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                 await saveConfigUpdate({ model: item.key });
             }
         } else if (item.type === 'action') {
-            if (item.key === 'back') setView('categories');
+            if (item.key === 'back') {
+                // Go back to parent view
+                if (view === 'owl') setView('ui');
+                else setView('categories');
+            }
             else if (item.key === 'close') onClose();
             else if (item.key === 'clearAllow') setConfirmation({ type: 'clear_allow', message: 'Flush allow-list rules?' });
             else if (item.key === 'clearDeny') setConfirmation({ type: 'clear_deny', message: 'Flush deny-list rules?' });
@@ -222,10 +258,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
                 onClose();
                 bus.emitUser({ type: 'user_input', content: cmd });
             } else if (item.key === 'plan-execute') {
-                bus.emitUser({ type: 'approval_response', approved: true, requestId: 'plan' });
+                bus.emitUser({ type: 'approval_response', approved: true, requestId: 'plan', scope: 'session' });
                 onClose();
             } else if (item.key === 'plan-cancel') {
-                bus.emitUser({ type: 'approval_response', approved: false, requestId: 'plan' });
+                bus.emitUser({ type: 'approval_response', approved: false, requestId: 'plan', scope: 'session' });
                 onClose();
             } else if (item.key === 'plan-modify') {
                 bus.emitUser({ type: 'user_input', content: 'Please modify the plan' });
@@ -251,6 +287,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
         if (key.return) handleSelect();
         if (key.escape) {
             if (view === 'categories') onClose();
+            else if (view === 'owl') setView('ui');
             else setView('categories');
         }
         // Numeric shortcut
@@ -289,6 +326,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({ onClose, initialTab 
             case 'models': return 'Model Selection';
             case 'security': return 'Security Settings';
             case 'ui': return 'UI Preferences';
+            case 'owl': return 'Owl Animation';
             case 'permissions': return 'Permission Lists';
             case 'commands': return 'Quick Commands';
             case 'plan-confirm': return 'Plan Review';

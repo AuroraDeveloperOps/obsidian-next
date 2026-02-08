@@ -7,9 +7,27 @@ export const settingsCommand: CommandHandler = async (args) => {
 
     // No args - show all settings
     if (args.length === 0) {
+        const content = [
+            'User Settings Overview',
+            `   ⎿  Mode        ${s.mode}`,
+            `   ⎿  AutoAccept  ${s.autoAccept.enabled ? 'Enabled' : 'Disabled'}`,
+            `   ⎿  PII Redact  ${s.security.piiRedaction ? 'ON' : 'OFF'}`,
+            `   ⎿  Audit Log   ${s.security.auditLogging ? 'ON' : 'OFF'}`,
+            `   ⎿  Sandbox     ${s.security.sandbox ? 'ON' : 'OFF'}`,
+            '',
+            '   [Permissions]',
+            `   ⎿  Allowed     ${s.permissions.allow.length} patterns`,
+            `   ⎿  Denied      ${s.permissions.deny.length} patterns`,
+            '',
+            '   [UI Context]',
+            `   ⎿  Syntax      ${s.ui.syntaxHighlight ? 'ON' : 'OFF'}`,
+            `   ⎿  Line Nos    ${s.ui.showLineNumbers ? 'ON' : 'OFF'}`,
+            '',
+        ].join('\n');
+
         bus.emitAgent({
             type: 'thought',
-            content: `Settings (${settings.getPath()}):\n${JSON.stringify(s, null, 2)}`
+            content
         });
         return;
     }

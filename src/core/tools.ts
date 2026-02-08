@@ -6,7 +6,9 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
+import * as fsSync from 'fs';
 import path from 'path';
+import os from 'os';
 import { bus } from './bus.js';
 import { auditor } from './auditor.js';
 import { sandbox } from './sandbox.js';
@@ -17,11 +19,27 @@ import { settings } from './settings.js';
 import { auditLog } from './auditLog.js';
 import { diffManager } from './diff.js';
 import { redactor } from './redactor.js';
+import { config } from './config.js';
 import { mcp } from './mcp.js';
 import { getRegistryDefinition, listRegistry } from './mcp-registry.js';
 import { UserEvent } from '../events/types.js';
+import { scheduler } from './scheduler.js';
+import { computer, takeScreenshotForAPI } from '../computer/index.js';
+import {
+    findClickableByLabel,
+    clickElementByLabel,
+    getUIContext,
+    getButtons,
+    activateApp,
+    getFocusedApp
+} from '../computer/accessibility.js';
+import { ComputerAction } from '../computer/types.js';
 
 const execAsync = promisify(exec);
+
+// Track the last screenshot scale for coordinate transformation in ComputerUseTool
+// This allows coordinate scaling to work even without pilot mode enabled
+let lastScreenshotScale = 1.0;
 
 // Safety limits to prevent context explosion
 const MAX_OUTPUT_LENGTH = 10000;  // Max chars in tool output
@@ -41,9 +59,37 @@ function truncateOutput(output: string, maxLength: number = MAX_OUTPUT_LENGTH): 
     return `${truncated}\n\n... [TRUNCATED: ${remaining} more characters]`;
 }
 
+/**
+ * Filter out known harmless system noise from stderr
+ * These are OS-level messages that don't indicate actual errors
+ */
+function filterSystemNoise(stderr: string): string {
+    if (!stderr) return stderr;
+
+    const noisePatterns = [
+        /^aks:aks_get_lock_state:\d+:\d+: aks connection failed\s*/gm,  // macOS keychain noise
+        /^objc\[\d+\]: .* may have been in progress in another thread.*$/gm,  // Objective-C runtime
+        /^Warning: .* is deprecated.*$/gm,  // Deprecation warnings
+        /^\[warn\].*$/gmi,  // Generic warn prefixes
+        /^MESA-LOADER:.*$/gm,  // Mesa graphics loader
+        /^libEGL warning:.*$/gm,  // EGL warnings
+        /^Fontconfig warning:.*$/gm,  // Font config
+    ];
+
+    let filtered = stderr;
+    for (const pattern of noisePatterns) {
+        filtered = filtered.replace(pattern, '');
+    }
+
+    // Clean up empty lines left behind
+    filtered = filtered.replace(/^\s*[\r\n]/gm, '').trim();
+
+    return filtered;
+}
+
 // Pending approval requests
 const pendingApprovals = new Map<string, {
-    resolve: (approved: boolean) => void;
+    resolve: (result: { approved: boolean; scope: 'session' | 'persistent'; bypass?: boolean }) => void;
     timeout: NodeJS.Timeout;
 }>();
 
@@ -54,15 +100,20 @@ bus.on('user', (event: UserEvent) => {
         if (pending) {
             clearTimeout(pending.timeout);
             pendingApprovals.delete(event.requestId);
-            pending.resolve(event.approved);
+            pending.resolve({ approved: event.approved, scope: event.scope, bypass: event.bypass });
         }
     }
 });
 
 /**
  * Request user approval for a command
+ *
+ * Displays a clear, actionable permission prompt to the user with:
+ * - The exact command to be executed
+ * - Why approval is needed
+ * - Clear action options
  */
-async function requestApproval(command: string, reason: string): Promise<boolean> {
+async function requestApproval(command: string, reason: string): Promise<{ approved: boolean; scope: 'session' | 'persistent'; bypass?: boolean }> {
     const requestId = `approval_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     return new Promise((resolve) => {
@@ -71,17 +122,23 @@ async function requestApproval(command: string, reason: string): Promise<boolean
             pendingApprovals.delete(requestId);
             bus.emitAgent({
                 type: 'error',
-                message: 'Approval request timed out. Command denied.'
+                message: 'No response received. Command blocked for safety.'
             });
-            resolve(false);
+            resolve({ approved: false, scope: 'session' });
         }, APPROVAL_TIMEOUT);
 
         pendingApprovals.set(requestId, { resolve, timeout });
 
+        // Format context clearly
+        const context = [
+            `Command: ${command}`,
+            `Reason: ${reason}`,
+        ].join('\n');
+
         bus.emitAgent({
             type: 'approval_request',
             requestId,
-            context: `Command: ${command}\nReason: ${reason}`,
+            context,
         });
     });
 }
@@ -90,6 +147,7 @@ export interface ToolResult {
     success: boolean;
     output?: string;
     error?: string;
+    content?: any[]; // Supports structured content like image blocks
 }
 
 export interface Tool {
@@ -138,37 +196,50 @@ export const BashTool: Tool = {
         if (!audit.approved && audit.requiresApproval) {
             await auditLog.logApproval('requested', command, audit.reason);
 
-            const approved = await requestApproval(command, audit.reason || 'Potentially dangerous operation');
+            const { approved, scope, bypass } = await requestApproval(command, audit.reason || 'Potentially dangerous operation');
 
-            if (!approved) {
-                // Save denial and log it
-                await settings.addDeniedPermission('bash', command);
+            if (approved) {
+                if (scope === 'persistent') {
+                    if (bypass) {
+                        await settings.addUnsandboxedPermission('bash', command);
+                    } else {
+                        await settings.addAllowedPermission('bash', command);
+                    }
+                } else {
+                    await settings.addSessionPermission('bash', command, true, bypass);
+                }
+                await auditLog.logApproval('granted', command, bypass ? 'Bypass enabled' : undefined);
+            } else {
+                if (scope === 'persistent') {
+                    await settings.addDeniedPermission('bash', command);
+                } else {
+                    await settings.addSessionPermission('bash', command, false);
+                }
                 await auditLog.logApproval('denied', command);
                 return {
                     success: false,
                     error: 'Command rejected by user'
                 };
             }
-
-            // Save approval for future (user said yes) and log it
-            await settings.addAllowedPermission('bash', command);
-            await auditLog.logApproval('granted', command);
         }
 
-        // Auto-approved commands (in allow list) skip confirmation
-        // audit.approved && audit.autoApproved === true means pre-approved
+        // Check if this command should bypass sandbox
+        const bypassSandbox = await settings.isUnsandboxed('bash', command);
+        const cfg = await config.load();
 
         try {
             // Wrap command with sandbox if enabled
-            const execCommand = await sandbox.wrapCommand(command);
+            const execCommand = await sandbox.wrapCommand(command, bypassSandbox);
 
             const { stdout, stderr } = await execAsync(execCommand, {
-                cwd: process.cwd(),
+                cwd: cfg.workspaceRoot,
                 timeout: 30000, // 30 second timeout
                 maxBuffer: 1024 * 1024, // 1MB buffer (reduced from 10MB)
             });
 
-            const output = stdout || stderr || 'Command executed successfully';
+            // Filter out known harmless system noise from stderr
+            const filteredStderr = filterSystemNoise(stderr);
+            const output = stdout || filteredStderr || 'Command executed successfully';
 
             // Log successful execution
             await auditLog.logCommand(command, true);
@@ -228,7 +299,8 @@ export const ReadTool: Tool = {
         }
 
         try {
-            const fullPath = path.resolve(process.cwd(), filePath);
+            const cfg = await config.load();
+            const fullPath = path.resolve(cfg.workspaceRoot, filePath);
             const content = await fs.readFile(fullPath, 'utf-8');
 
             // Add line numbers for better readability
@@ -302,7 +374,8 @@ export const WriteTool: Tool = {
         }
 
         try {
-            const fullPath = path.resolve(process.cwd(), filePath);
+            const cfg = await config.load();
+            const fullPath = path.resolve(cfg.workspaceRoot, filePath);
 
             // Check if file already exists
             try {
@@ -390,7 +463,8 @@ export const EditTool: Tool = {
         }
 
         try {
-            const fullPath = path.resolve(process.cwd(), filePath);
+            const cfg = await config.load();
+            const fullPath = path.resolve(cfg.workspaceRoot, filePath);
             const original = await fs.readFile(fullPath, 'utf-8');
 
             // Check if search string exists
@@ -494,7 +568,8 @@ export const ListTool: Tool = {
         }
 
         try {
-            const fullPath = path.resolve(process.cwd(), dirPath);
+            const cfg = await config.load();
+            const fullPath = path.resolve(cfg.workspaceRoot, dirPath);
             const entries = await fs.readdir(fullPath, { withFileTypes: true });
 
             // Filter out ignored directories
@@ -568,11 +643,12 @@ export const GrepTool: Tool = {
         }
 
         try {
-            const fullPath = path.resolve(process.cwd(), searchPath);
+            const cfg = await config.load();
+            const fullPath = path.resolve(cfg.workspaceRoot, searchPath);
             const results: string[] = [];
 
             // Use recursive search
-            await searchDirectory(fullPath, pattern, results, maxResults);
+            await searchDirectory(fullPath, pattern, results, maxResults, 0, cfg.workspaceRoot);
 
             if (results.length === 0) {
                 return {
@@ -602,7 +678,8 @@ async function searchDirectory(
     pattern: string,
     results: string[],
     maxResults: number,
-    depth: number = 0
+    depth: number = 0,
+    workspaceRoot: string = process.cwd()
 ): Promise<void> {
     if (results.length >= maxResults || depth > 10) return;
 
@@ -614,7 +691,7 @@ async function searchDirectory(
             if (results.length >= maxResults) break;
 
             const fullPath = path.join(dir, entry.name);
-            const relativePath = path.relative(process.cwd(), fullPath);
+            const relativePath = path.relative(workspaceRoot, fullPath);
 
             // Skip ignored directories (node_modules, .git, etc.)
             if (entry.name.startsWith('.') || IGNORED_DIRS.includes(entry.name)) {
@@ -622,7 +699,7 @@ async function searchDirectory(
             }
 
             if (entry.isDirectory()) {
-                await searchDirectory(fullPath, pattern, results, maxResults, depth + 1);
+                await searchDirectory(fullPath, pattern, results, maxResults, depth + 1, workspaceRoot);
             } else if (entry.isFile()) {
                 // Only search text files
                 const ext = path.extname(entry.name).toLowerCase();
@@ -677,10 +754,10 @@ export const GlobTool: Tool = {
         }
 
         try {
+            const cfg = await config.load();
             const results: string[] = [];
-            const fullBase = path.resolve(process.cwd(), basePath);
-
-            await globSearch(fullBase, pattern, results, 100);
+            const fullBase = path.resolve(cfg.workspaceRoot, basePath);
+            await globSearch(fullBase, pattern, results, 100, 0, cfg.workspaceRoot);
 
             if (results.length === 0) {
                 return {
@@ -710,7 +787,8 @@ async function globSearch(
     pattern: string,
     results: string[],
     maxResults: number,
-    depth: number = 0
+    depth: number = 0,
+    workspaceRoot: string = process.cwd()
 ): Promise<void> {
     if (results.length >= maxResults || depth > 15) return;
 
@@ -734,12 +812,12 @@ async function globSearch(
             }
 
             const fullPath = path.join(dir, entry.name);
-            const relativePath = path.relative(process.cwd(), fullPath);
+            const relativePath = path.relative(workspaceRoot, fullPath);
 
             if (entry.isDirectory()) {
                 // If pattern starts with **, search subdirs
                 if (pattern.includes('**') || pattern.includes('/')) {
-                    await globSearch(fullPath, pattern, results, maxResults, depth + 1);
+                    await globSearch(fullPath, pattern, results, maxResults, depth + 1, workspaceRoot);
                 }
             } else if (entry.isFile()) {
                 // Test against pattern
@@ -758,7 +836,7 @@ async function globSearch(
  */
 export const TaskTool: Tool = {
     name: 'task',
-    description: 'Manage the active task list. actions: create, add_step, complete_step, fail_step, complete_task',
+    description: 'Manage the project plan and todo list. Use this for tracking work items, not for scheduling recurring jobs. actions: create, add_step, complete_step, fail_step, complete_task',
     inputSchema: {
         action: {
             type: 'string',
@@ -1036,10 +1114,578 @@ export const MCPManagementTool: Tool = {
 };
 
 /**
+ * Memory Tool - Long-term memory storage and recall
+ *
+ * Allows the AI to store and recall user preferences, facts, and learned patterns.
+ */
+const MemoryTool: Tool = {
+    name: 'memory',
+    description: 'Store and recall long-term memories: user preferences, project facts, and learned patterns. Use this to remember user information across sessions.',
+    inputSchema: {
+        action: { type: 'string', description: 'Action: store, recall, search, list, forget' },
+        type: { type: 'string', description: 'Memory type: user_preference, project_fact, decision_log, learned_pattern (for store)' },
+        key: { type: 'string', description: 'Unique key for the memory (for store, recall, forget)' },
+        content: { type: 'string', description: 'Content to store (for store action)' },
+        query: { type: 'string', description: 'Search query (for search action)' },
+    },
+    requiredParams: ['action'],
+
+    async execute(args: Record<string, string>): Promise<ToolResult> {
+        const { memory } = await import('./memory.js');
+        const { action, type, key, content, query } = args;
+
+        await memory.init();
+
+        if (action === 'store') {
+            if (!key || !content) {
+                return { success: false, error: 'store requires key and content' };
+            }
+            const memoType = (type as any) || 'user_preference';
+            const success = await memory.store(memoType, key, content);
+            if (success) {
+                return { success: true, output: `Stored memory: ${key}` };
+            }
+            return { success: false, error: 'Failed to store memory' };
+        }
+
+        if (action === 'recall') {
+            if (!key) {
+                return { success: false, error: 'recall requires key' };
+            }
+            const memo = await memory.recall(key);
+            if (memo) {
+                return { success: true, output: `[${memo.type}] ${memo.key}: ${memo.content}` };
+            }
+            return { success: true, output: `No memory found for key: ${key}` };
+        }
+
+        if (action === 'search') {
+            if (!query) {
+                return { success: false, error: 'search requires query' };
+            }
+            const memos = await memory.search(query, type as any);
+            if (memos.length === 0) {
+                return { success: true, output: 'No memories found matching query' };
+            }
+            const lines = memos.map(m => `- [${m.type}] ${m.key}: ${m.content}`);
+            return { success: true, output: `Found ${memos.length} memories:\n${lines.join('\n')}` };
+        }
+
+        if (action === 'list') {
+            const memoType = (type as any);
+            let memos: any[];
+            
+            if (memoType) {
+                memos = await memory.getByType(memoType);
+                if (memos.length === 0) {
+                    return { success: true, output: `No ${memoType} memories found` };
+                }
+                const lines = memos.map(m => `- ${m.key}: ${m.content}`);
+                return { success: true, output: `${memoType} memories:\n${lines.join('\n')}` };
+            } else {
+                // List summary of everything
+                const stats = await memory.getStats();
+                const allMemos: string[] = [];
+                
+                for (const t of Object.keys(stats.byType)) {
+                    const typeMemos = await memory.getByType(t as any);
+                    if (typeMemos.length > 0) {
+                        allMemos.push(`--- ${t} ---`);
+                        allMemos.push(...typeMemos.map(m => `- ${m.key}: ${m.content}`));
+                    }
+                }
+                
+                if (allMemos.length === 0) return { success: true, output: 'No memories found in any category.' };
+                return { success: true, output: `Current Memory Bank:\n${allMemos.join('\n')}` };
+            }
+        }
+
+        if (action === 'forget') {
+            if (!key) {
+                return { success: false, error: 'forget requires key' };
+            }
+            const success = await memory.forget(key);
+            if (success) {
+                return { success: true, output: `Forgot memory: ${key}` };
+            }
+            return { success: false, error: 'Failed to forget memory' };
+        }
+
+        return { success: false, error: `Unknown action: ${action}. Valid: store, recall, search, list, forget` };
+    }
+};
+
+/**
+ * Unschedule Tool - Remove a recurring background task
+ */
+export const UnscheduleTool: Tool = {
+    name: 'unschedule_task',
+    description: 'Unschedule a previously scheduled background cron job. Requires the task ID.',
+    inputSchema: {
+        taskId: {
+            type: 'string',
+            description: 'The ID of the task to unschedule (obtained from list_scheduled_tasks).'
+        }
+    },
+    requiredParams: ['taskId'],
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const taskId = args.taskId as string;
+
+        if (!taskId) {
+            return { success: false, error: 'Task ID is required to unschedule a task.' };
+        }
+
+        try {
+            const success = await scheduler.removeTask(taskId);
+            if (success) {
+                return { success: true, output: `Successfully unscheduled task: ${taskId}` };
+            } else {
+                return { success: false, output: `Failed to unschedule task: ${taskId}. Task not found or already inactive.` };
+            }
+        } catch (error: any) {
+            return { success: false, error: `Failed to unschedule task: ${error.message}` };
+        }
+    },
+};
+
+
+/**
+ * Computer Use Tool - Interact with the desktop environment
+ *
+ * Supports two modes:
+ * 1. Coordinate-based: Traditional screenshot + click at (x,y)
+ * 2. Accessibility-based: Smart element targeting by label (macOS only)
+ */
+export const ComputerUseTool: Tool = {
+    name: 'computer',
+    description: `Desktop interaction. PREFER BASH for URLs/apps (e.g., bash 'open "https://youtube.com"').
+
+SMART ACTIONS (use first):
+- find_and_click: Click by label ("Submit", "Play") - no coordinates needed
+- get_ui_context: List buttons/fields in current window
+- get_buttons: List all button labels
+- activate_app: Bring app to front
+
+COORDINATE ACTIONS (use when smart actions fail):
+- screenshot: Capture screen
+- left_click: Click at [x,y]
+- type: Type text
+- key: Press key (cmd+l, Return, etc.)
+- scroll: Scroll at position`,
+    inputSchema: {
+        action: {
+            type: 'string',
+            description: 'SMART (prefer): find_and_click, get_ui_context, get_buttons, activate_app, get_focused_app. COORDINATE (fallback): screenshot, left_click, type, key, scroll, mouse_move, double_click, right_click, left_click_drag, wait, zoom.'
+        },
+        coordinate: {
+            type: 'array',
+            items: { type: 'number' },
+            description: '[x, y] pixel coordinates for coordinate-based actions.'
+        },
+        text: {
+            type: 'string',
+            description: 'Text to type, or modifier key for clicks (shift, control, alt, command).'
+        },
+        key: {
+            type: 'string',
+            description: 'Key to press (e.g., enter, escape, ctrl+c).'
+        },
+        label: {
+            type: 'string',
+            description: 'UI element label for find_and_click (e.g., "Submit", "Cancel", "OK").'
+        },
+        app_name: {
+            type: 'string',
+            description: 'Application name for activate_app or to scope element search.'
+        },
+        scroll_direction: {
+            type: 'string',
+            description: 'up, down, left, or right'
+        },
+        scroll_amount: {
+            type: 'number',
+            description: 'Amount to scroll (default: 3)'
+        },
+        start_coordinate: {
+            type: 'array',
+            items: { type: 'number' },
+            description: '[x, y] start coordinates for drag'
+        },
+        end_coordinate: {
+            type: 'array',
+            items: { type: 'number' },
+            description: '[x, y] end coordinates for drag'
+        },
+        duration: {
+            type: 'number',
+            description: 'Duration in milliseconds (for wait, hold_key)'
+        },
+        region: {
+            type: 'array',
+            items: { type: 'number' },
+            description: '[x1, y1, x2, y2] region for zoom'
+        }
+    },
+    requiredParams: ['action'],
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const actionType = args.action;
+
+        if (!actionType) {
+            return { success: false, error: 'No computer action provided. Use: screenshot, left_click, type, key, mouse_move, scroll, etc.' };
+        }
+
+        // Helper to validate coordinate array
+        const validateCoord = (coord: any, name: string = 'coordinate'): [number, number] | null => {
+            if (!coord || !Array.isArray(coord) || coord.length < 2) {
+                return null;
+            }
+            const x = Number(coord[0]);
+            const y = Number(coord[1]);
+            if (isNaN(x) || isNaN(y)) return null;
+            return [x, y];
+        };
+
+        // Scale coordinates from screenshot space to native screen space
+        // This ensures clicks land in the correct position regardless of pilot mode
+        const scaleToNative = (coord: [number, number]): [number, number] => {
+            if (lastScreenshotScale >= 1.0) return coord;
+            return [
+                Math.round(coord[0] / lastScreenshotScale),
+                Math.round(coord[1] / lastScreenshotScale)
+            ];
+        };
+
+        try {
+            let output: string | undefined;
+
+            switch (actionType) {
+                case 'screenshot':
+                    // Use API-optimized screenshot (resized for API limits)
+                    const screenshotResult = await takeScreenshotForAPI(false);
+                    // Store scale for coordinate transformation (works with or without pilot mode)
+                    lastScreenshotScale = screenshotResult.scale;
+                    // Emit scale update so coordinate conversion uses the correct values
+                    bus.emitAgent({
+                        type: 'computer_scale_update',
+                        scale: screenshotResult.scale,
+                        scaledWidth: screenshotResult.width,
+                        scaledHeight: screenshotResult.height,
+                        nativeWidth: Math.round(screenshotResult.width / screenshotResult.scale),
+                        nativeHeight: Math.round(screenshotResult.height / screenshotResult.scale)
+                    });
+                    return {
+                        success: true,
+                        output: `Screenshot captured (${screenshotResult.width}x${screenshotResult.height}, scale: ${screenshotResult.scale.toFixed(2)}). Native: ${Math.round(screenshotResult.width / screenshotResult.scale)}x${Math.round(screenshotResult.height / screenshotResult.scale)}`,
+                        content: [{ type: 'image', data: screenshotResult.base64, mimeType: 'image/png' }]
+                    };
+
+                case 'left_click': {
+                    const coord = validateCoord(args.coordinate);
+                    if (!coord) return { success: false, error: 'left_click requires coordinate: [x, y] as numbers' };
+                    const [nativeX, nativeY] = scaleToNative(coord);
+                    await computer.leftClick(nativeX, nativeY, args.text);
+                    output = `Clicked at screenshot (${coord[0]}, ${coord[1]}) -> native (${nativeX}, ${nativeY}). If this missed the target, re-examine the screenshot and identify the EXACT center of the element you want to click.`;
+                    break;
+                }
+
+                case 'type':
+                    if (!args.text && args.text !== '') return { success: false, error: 'type requires text parameter' };
+                    await computer.typeText(args.text);
+                    output = `Typed: "${args.text.substring(0, 30)}${args.text.length > 30 ? '...' : ''}"`;
+                    break;
+
+                case 'key':
+                    const keyToPress = args.key || args.text;
+                    if (!keyToPress) return { success: false, error: 'key requires key parameter (e.g., "enter", "escape", "ctrl+c")' };
+                    await computer.pressKey(keyToPress);
+                    output = `Pressed key: ${keyToPress}`;
+                    break;
+
+                case 'mouse_move': {
+                    const coord = validateCoord(args.coordinate);
+                    if (!coord) return { success: false, error: 'mouse_move requires coordinate: [x, y]' };
+                    const [nativeX, nativeY] = scaleToNative(coord);
+                    await computer.mouseMove(nativeX, nativeY);
+                    output = `Mouse moved to screenshot (${coord[0]}, ${coord[1]}) -> native (${nativeX}, ${nativeY}).`;
+                    break;
+                }
+
+                case 'scroll': {
+                    const coord = validateCoord(args.coordinate);
+                    if (!coord) return { success: false, error: 'scroll requires coordinate: [x, y]' };
+                    if (!args.scroll_direction) return { success: false, error: 'scroll requires scroll_direction: up|down|left|right' };
+                    const amount = args.scroll_amount || 3;
+                    const [nativeX, nativeY] = scaleToNative(coord);
+                    await computer.scroll(nativeX, nativeY, args.scroll_direction, amount, args.text);
+                    output = `Scrolled ${args.scroll_direction} by ${amount} at screenshot (${coord[0]}, ${coord[1]}) -> native (${nativeX}, ${nativeY}).`;
+                    break;
+                }
+
+                case 'left_click_drag': {
+                    const startCoord = validateCoord(args.start_coordinate, 'start_coordinate');
+                    const endCoord = validateCoord(args.end_coordinate, 'end_coordinate');
+                    if (!startCoord) return { success: false, error: 'left_click_drag requires start_coordinate: [x, y]' };
+                    if (!endCoord) return { success: false, error: 'left_click_drag requires end_coordinate: [x, y]' };
+                    const [nativeStartX, nativeStartY] = scaleToNative(startCoord);
+                    const [nativeEndX, nativeEndY] = scaleToNative(endCoord);
+                    await computer.leftClickDrag(nativeStartX, nativeStartY, nativeEndX, nativeEndY);
+                    output = `Dragged from screenshot (${startCoord[0]}, ${startCoord[1]}) -> native (${nativeStartX}, ${nativeStartY}) to screenshot (${endCoord[0]}, ${endCoord[1]}) -> native (${nativeEndX}, ${nativeEndY}).`;
+                    break;
+                }
+
+                case 'right_click': {
+                    const coord = validateCoord(args.coordinate);
+                    if (!coord) return { success: false, error: 'right_click requires coordinate: [x, y]' };
+                    const [nativeX, nativeY] = scaleToNative(coord);
+                    await computer.rightClick(nativeX, nativeY, args.text);
+                    output = `Right click at screenshot (${coord[0]}, ${coord[1]}) -> native (${nativeX}, ${nativeY}).`;
+                    break;
+                }
+
+                case 'middle_click': {
+                    const coord = validateCoord(args.coordinate);
+                    if (!coord) return { success: false, error: 'middle_click requires coordinate: [x, y]' };
+                    const [nativeX, nativeY] = scaleToNative(coord);
+                    await computer.middleClick(nativeX, nativeY, args.text);
+                    output = `Middle click at screenshot (${coord[0]}, ${coord[1]}) -> native (${nativeX}, ${nativeY}).`;
+                    break;
+                }
+
+                case 'double_click': {
+                    const coord = validateCoord(args.coordinate);
+                    if (!coord) return { success: false, error: 'double_click requires coordinate: [x, y]' };
+                    const [nativeX, nativeY] = scaleToNative(coord);
+                    await computer.doubleClick(nativeX, nativeY, args.text);
+                    output = `Double click at screenshot (${coord[0]}, ${coord[1]}) -> native (${nativeX}, ${nativeY}).`;
+                    break;
+                }
+
+                case 'triple_click': {
+                    const coord = validateCoord(args.coordinate);
+                    if (!coord) return { success: false, error: 'triple_click requires coordinate: [x, y]' };
+                    const [nativeX, nativeY] = scaleToNative(coord);
+                    await computer.tripleClick(nativeX, nativeY, args.text);
+                    output = `Triple click at screenshot (${coord[0]}, ${coord[1]}) -> native (${nativeX}, ${nativeY}).`;
+                    break;
+                }
+
+                case 'left_mouse_down': {
+                    const coord = validateCoord(args.coordinate);
+                    if (!coord) return { success: false, error: 'left_mouse_down requires coordinate: [x, y]' };
+                    const [nativeX, nativeY] = scaleToNative(coord);
+                    await computer.leftMouseDown(nativeX, nativeY);
+                    output = `Mouse down at screenshot (${coord[0]}, ${coord[1]}) -> native (${nativeX}, ${nativeY}).`;
+                    break;
+                }
+
+                case 'left_mouse_up': {
+                    const coord = validateCoord(args.coordinate);
+                    if (!coord) return { success: false, error: 'left_mouse_up requires coordinate: [x, y]' };
+                    const [nativeX, nativeY] = scaleToNative(coord);
+                    await computer.leftMouseUp(nativeX, nativeY);
+                    output = `Mouse up at screenshot (${coord[0]}, ${coord[1]}) -> native (${nativeX}, ${nativeY}).`;
+                    break;
+                }
+
+                case 'hold_key': {
+                    const keyToHold = args.key || args.text;
+                    if (!keyToHold) return { success: false, error: 'hold_key requires key parameter' };
+                    const duration = args.duration || 1;
+                    await computer.holdKey(keyToHold, duration);
+                    output = `Held ${keyToHold} for ${duration}s.`;
+                    break;
+                }
+
+                case 'wait': {
+                    const duration = args.duration || 1000;
+                    await computer.wait(duration);
+                    output = `Waited ${duration}ms.`;
+                    break;
+                }
+
+                case 'zoom': {
+                    if (!args.region || !Array.isArray(args.region) || args.region.length < 4) {
+                        return { success: false, error: 'zoom requires region: [x1, y1, x2, y2]' };
+                    }
+                    const [x1, y1, x2, y2] = args.region;
+                    const [nativeX1, nativeY1] = scaleToNative([x1, y1]);
+                    const [nativeX2, nativeY2] = scaleToNative([x2, y2]);
+                    const zoomResult = await computer.zoom(nativeX1, nativeY1, nativeX2, nativeY2);
+                    return {
+                        success: true,
+                        output: `Zoomed region screenshot (${x1}, ${y1}) to (${x2}, ${y2}) -> native (${nativeX1}, ${nativeY1}) to (${nativeX2}, ${nativeY2}).`,
+                        content: [{ type: 'image', data: zoomResult, mimeType: 'image/png' }]
+                    };
+                }
+
+                case 'get_dimensions':
+                    const dims = await computer.getDisplayDimensions();
+                    return { success: true, output: `Display: ${dims.width}x${dims.height}. Use these dimensions for coordinate calculations.` };
+
+                case 'batch':
+                    if (!args.commands || !Array.isArray(args.commands)) {
+                        return { success: false, error: 'batch requires commands: string[]' };
+                    }
+                    await computer.executeBatch(args.commands);
+                    output = `Batch executed ${args.commands.length} commands.`;
+                    break;
+
+                // ==================== SMART ACCESSIBILITY-BASED ACTIONS ====================
+
+                case 'find_and_click': {
+                    // Click an element by its label using accessibility API
+                    if (!args.label) return { success: false, error: 'find_and_click requires label parameter (e.g., "Submit", "OK")' };
+
+                    // First try accessibility-based click (more reliable)
+                    const clicked = await clickElementByLabel(args.label, args.app_name);
+                    if (clicked) {
+                        output = `Clicked element labeled "${args.label}" via accessibility API.`;
+                        break;
+                    }
+
+                    // Fallback: find coordinates and click
+                    const coords = await findClickableByLabel(args.label);
+                    if (coords) {
+                        await computer.leftClick(coords[0], coords[1]);
+                        output = `Clicked "${args.label}" at (${coords[0]}, ${coords[1]}).`;
+                        break;
+                    }
+
+                    return { success: false, error: `Could not find element labeled "${args.label}". Try using screenshot + coordinate-based click.` };
+                }
+
+                case 'get_ui_context': {
+                    // Get current UI state (focused app, window, available buttons/fields)
+                    const uiContext = await getUIContext();
+                    return {
+                        success: true,
+                        output: `Current UI State:\n${uiContext}\n\nUse find_and_click with a button label, or screenshot + coordinates for unlisted elements.`
+                    };
+                }
+
+                case 'get_buttons': {
+                    // List all buttons in the current window
+                    const buttons = await getButtons(args.app_name);
+                    if (buttons.length === 0) {
+                        return { success: true, output: 'No buttons found in current window. Try screenshot to see the UI.' };
+                    }
+                    return {
+                        success: true,
+                        output: `Available buttons (${buttons.length}):\n${buttons.map(b => `  - "${b}"`).join('\n')}\n\nUse find_and_click with any of these labels.`
+                    };
+                }
+
+                case 'activate_app': {
+                    // Bring an application to the front
+                    if (!args.app_name) return { success: false, error: 'activate_app requires app_name parameter' };
+                    const activated = await activateApp(args.app_name);
+                    if (activated) {
+                        output = `Activated "${args.app_name}".`;
+                        // Take verification screenshot
+                        await new Promise(r => setTimeout(r, 500));
+                        const verifyScreenshot = await takeScreenshotForAPI(false);
+                        return {
+                            success: true,
+                            output: `${output} Window now in focus.`,
+                            content: [{ type: 'image', data: verifyScreenshot.base64, mimeType: 'image/png' }]
+                        };
+                    }
+                    return { success: false, error: `Could not activate "${args.app_name}". Check if the app is running.` };
+                }
+
+                case 'get_focused_app': {
+                    const app = await getFocusedApp();
+                    return { success: true, output: `Currently focused: ${app}` };
+                }
+
+                default:
+                    return { success: false, error: `Unknown action: ${actionType}. SMART: find_and_click, get_ui_context, get_buttons, activate_app. COORDINATE: screenshot, left_click, type, key, scroll, etc.` };
+            }
+
+            // Automatic Visual Verification for state-changing actions
+            const interactionActions = ['left_click', 'right_click', 'double_click', 'triple_click', 'type', 'key', 'left_click_drag', 'batch', 'find_and_click'];
+            if (interactionActions.includes(actionType)) {
+                // Pause slightly for the UI to update
+                await new Promise(resolve => setTimeout(resolve, 500));
+                // Use API-optimized screenshot with cursor for verification
+                const verifyScreenshot = await takeScreenshotForAPI(true);
+                return {
+                    success: true,
+                    output: `${output || 'Action executed.'} Verification captured (${verifyScreenshot.width}x${verifyScreenshot.height}).`,
+                    content: [{ type: 'image', data: verifyScreenshot.base64, mimeType: 'image/png' }]
+                };
+            }
+
+            return { success: true, output: output || 'Computer action executed successfully.' };
+        } catch (error: any) {
+            return { success: false, error: `Computer action failed: ${error.message}` };
+        }
+    },
+};
+
+/**
  * Tool Registry - Manages available tools
  */
+/**
+ * Create Skill Tool - Autonomous tool generation
+ */
+export const CreateSkillTool: Tool = {
+    name: 'create_skill',
+    description: 'Create a new autonomous skill (tool) for the agent. This tool writes the implementation, runs tests, and registers it dynamically. The code MUST be a valid Node.js module that exports default a Tool object.',
+    inputSchema: {
+        name: {
+            type: 'string',
+            description: 'Name of the tool (e.g., "jira_issue_create")'
+        },
+        description: {
+            type: 'string',
+            description: 'What the tool does'
+        },
+        code: {
+            type: 'string',
+            description: 'Node.js code for the tool. Must export default a Tool object.'
+        }
+    },
+    requiredParams: ['name', 'description', 'code'],
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const name = args.name as string;
+        const code = args.code as string;
+        const skillsDir = path.join(os.homedir(), '.obsidian-next', 'skills');
+        const skillPath = path.join(skillsDir, `${name}.js`);
+
+        try {
+            if (!fsSync.existsSync(skillsDir)) {
+                fsSync.mkdirSync(skillsDir, { recursive: true });
+            }
+
+            await fs.writeFile(skillPath, code, 'utf-8');
+
+            // Dynamically import and register
+            const module = await import(`file://${skillPath}?t=${Date.now()}`); // Use cache buster
+            if (module.default && module.default.name) {
+                tools.register(module.default);
+                return {
+                    success: true,
+                    output: `Skill '${name}' created and registered successfully. It is now available for use.`
+                };
+            }
+
+            return { success: false, error: 'Skill code must export default a Tool object.' };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Failed to create skill: ${error.message}`
+            };
+        }
+    }
+};
+
 export class ToolRegistry {
     private tools = new Map<string, Tool>();
+    private skillsDir = path.join(os.homedir(), '.obsidian-next', 'skills');
 
     constructor() {
         // Register built-in tools
@@ -1050,10 +1696,44 @@ export class ToolRegistry {
         this.register(ListTool);
         this.register(GrepTool);
         this.register(GlobTool);
-        this.register(GlobTool);
         this.register(TaskTool);
         this.register(WebFetchTool);
         this.register(MCPManagementTool);
+        this.register(ScheduleTool);
+        this.register(ListScheduledTasksTool);
+        this.register(UnscheduleTool);
+        this.register(MemoryTool);
+        this.register(ComputerUseTool);
+        this.register(CreateSkillTool);
+    }
+
+    async init() {
+        await this.loadSkills();
+    }
+
+    private async loadSkills() {
+        if (!fsSync.existsSync(this.skillsDir)) {
+            fsSync.mkdirSync(this.skillsDir, { recursive: true });
+        }
+
+        try {
+            const files = await fs.readdir(this.skillsDir);
+            for (const file of files) {
+                if (file.endsWith('.js')) {
+                    try {
+                        const skillPath = path.join(this.skillsDir, file);
+                        const module = await import(`file://${skillPath}`);
+                        if (module.default && module.default.name) {
+                            this.register(module.default);
+                        }
+                    } catch (e) {
+                        console.error(`Failed to load skill ${file}:`, e);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to read skills directory:', e);
+        }
     }
 
     register(tool: Tool): void {
@@ -1092,8 +1772,8 @@ export class ToolRegistry {
                     }
 
                     // Parse MCP content result
-                    const output = result.content.map((c: any) => c.text).join('\n');
-                    return { success: !result.isError, output };
+                    const output = result.content.filter((c: any) => c.text).map((c: any) => c.text).join('\n');
+                    return { success: !result.isError, output, content: result.content };
                 }
             }));
 
@@ -1145,5 +1825,95 @@ export class ToolRegistry {
         return result;
     }
 }
+
+
+/**
+ * Schedule Tool - Create a recurring background task
+ */
+export const ScheduleTool: Tool = {
+    name: 'schedule_task',
+    description: 'Schedule a recurring background cron job. Use this for requests like "every hour", "at 9am", or "check every X".',
+    inputSchema: {
+        cron: {
+            type: 'string',
+            description: 'Cron expression (e.g. "* * * * *")'
+        },
+        ability: {
+            type: 'string',
+            description: 'Name of the ability to execute. Available: "system:bash", "system:echo", "system:notify" (sound + alert), "system:summary", "system:heartbeat"'
+        },
+        params: {
+            type: 'string',
+            description: 'JSON string of parameters. For system:notify, use {"title": "...", "message": "..."}. For system:bash, use {"command": "..."}'
+        }
+    },
+    requiredParams: ['cron', 'ability'],
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        const cron = args.cron as string;
+        const ability = args.ability as string;
+        const paramsStr = args.params as string || '{}';
+
+        if (!cron || !ability) {
+            return { success: false, error: 'Cron expression and ability name are required' };
+        }
+
+        let params = {};
+        try {
+            params = JSON.parse(paramsStr);
+        } catch {
+            return { success: false, error: 'Invalid JSON parameters' };
+        }
+
+        try {
+            const task = await scheduler.scheduleTask(cron, ability, params);
+            return {
+                success: true,
+                output: `Scheduled task ${task.id}: ${ability} @ "${cron}"`
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Failed to schedule task: ${error.message}`
+            };
+        }
+    },
+};
+
+/**
+ * List Scheduled Tasks Tool
+ */
+export const ListScheduledTasksTool: Tool = {
+    name: 'list_scheduled_tasks',
+    description: 'List all scheduled/recurring background cron jobs. Use this when the user asks "what tasks are scheduled", "show scheduled tasks", "check scheduled jobs", "list cron jobs", or any variation asking about background recurring tasks.',
+    inputSchema: {},
+    requiredParams: [],
+
+    async execute(args: Record<string, any>): Promise<ToolResult> {
+        try {
+            const tasks = scheduler.listTasks();
+            if (tasks.length === 0) {
+                return { success: true, output: 'No active scheduled tasks.' };
+            }
+
+            const header = `ID | CRON | COMMAND | LAST RUN | NEXT RUN\n${'-'.repeat(80)}`;
+            const rows = tasks.map(t => {
+                const last = t.last_run_at ? new Date(t.last_run_at).toLocaleString() : 'Never';
+                const next = t.next_run_at ? new Date(t.next_run_at).toLocaleString() : 'Unknown';
+                return `${t.id} | ${t.cron_expression} | ${t.command} | ${last} | ${next}`;
+            }).join('\n');
+
+            return {
+                success: true,
+                output: `${header}\n${rows}`
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Failed to list tasks: ${error.message}`
+            };
+        }
+    },
+};
 
 export const tools = new ToolRegistry();

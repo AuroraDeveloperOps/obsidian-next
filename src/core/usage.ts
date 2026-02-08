@@ -1,6 +1,5 @@
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
+import { db } from './database.js';
+import { context } from './context.js';
 import { z } from 'zod';
 
 const UsageSchema = z.object({
@@ -8,81 +7,86 @@ const UsageSchema = z.object({
     totalRequests: z.number().default(0),
     totalInputTokens: z.number().default(0),
     totalOutputTokens: z.number().default(0),
+    totalCacheReadTokens: z.number().default(0),
+    totalCacheCreationTokens: z.number().default(0),
     totalCost: z.number().default(0),
 });
 
 export type UsageStats = z.infer<typeof UsageSchema>;
 
-const MODEL_PRICES: Record<string, { input: number; output: number }> = {
+const MODEL_PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
     // Claude 4.5 Family (2025-2026)
-    'claude-sonnet-4-5-20250929': { input: 3.00, output: 15.00 },
-    'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00 },
-    'claude-opus-4-5-20251101': { input: 5.00, output: 25.00 },
-    // Claude 3.5 Family (backward compatibility)
-    'claude-3-5-sonnet': { input: 3.00, output: 15.00 },
-    'claude-3-5-haiku': { input: 0.25, output: 1.25 },
-    'claude-3-haiku': { input: 0.25, output: 1.25 },
-    'claude-3-opus': { input: 15.00, output: 75.00 },
-    'claude-3-sonnet': { input: 3.00, output: 15.00 },
+    'claude-sonnet-4-5-20250929': { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+    'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00, cacheRead: 0.10, cacheWrite: 1.25 },
+    'claude-opus-4-5-20251101': { input: 5.00, output: 25.00, cacheRead: 0.50, cacheWrite: 6.25 },
+    // Claude 3.5 Family
+    'claude-3-5-sonnet': { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
+    'claude-3-5-haiku': { input: 0.25, output: 1.25, cacheRead: 0.03, cacheWrite: 0.30 },
+    'claude-3-haiku': { input: 0.25, output: 1.25, cacheRead: 0.03, cacheWrite: 0.30 },
+    'claude-3-opus': { input: 15.00, output: 75.00, cacheRead: 1.50, cacheWrite: 18.75 },
+    'claude-3-sonnet': { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 },
 };
 
 const CONTEXT_WINDOW_SIZES: Record<string, number> = {
-    // Claude 4.5 Family
     'claude-sonnet-4-5-20250929': 200_000,
     'claude-haiku-4-5-20251001': 200_000,
     'claude-opus-4-5-20251101': 200_000,
-    // Legacy (Claude 3.5 Family)
     'claude-3-5-sonnet': 200_000,
     'claude-3-5-haiku': 200_000,
 };
 
 export class UsageTracker {
-    private usagePath: string;
-    private stats: UsageStats;
+    // In-memory session stats (for quick access/display)
     private sessionCost: number = 0;
     private sessionInputTokens: number = 0;
     private sessionOutputTokens: number = 0;
+    private sessionCacheReadTokens: number = 0;
+    private sessionCacheCreationTokens: number = 0;
     private sessionDuration: number = 0;
     private lastContextSize: number = 0;
+    private lastCacheRead: number = 0;
+    private lastCacheCreation: number = 0;
 
-    constructor(customPath?: string) {
-        this.usagePath = customPath || path.join(os.homedir(), '.obsidian', 'usage.json');
-        this.stats = UsageSchema.parse({});
-    }
+    constructor() { }
+
     async init() {
-        try {
-            const data = await fs.readFile(this.usagePath, 'utf-8');
-            this.stats = UsageSchema.parse(JSON.parse(data));
-        } catch {
-            // No history or invalid, start fresh
-            await this.save();
-        }
+        // No-op: DB is initialized in database.ts
     }
 
-    async track(model: string, input: number, output: number) {
-        // Calculate cost
+    async track(model: string, input: number, output: number, cacheRead: number = 0, cacheCreation: number = 0, contextSize?: number) {
         let prices = MODEL_PRICES[model];
         if (!prices) {
-            // Attempt partial match
             const key = Object.keys(MODEL_PRICES).find(k => model.includes(k));
-            prices = key ? MODEL_PRICES[key] : { input: 0, output: 0 };
+            prices = key ? MODEL_PRICES[key] : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
         }
 
-        const cost = (input / 1_000_000 * prices.input) + (output / 1_000_000 * prices.output);
+        const costInput = (input / 1_000_000 * prices.input);
+        const costOutput = (output / 1_000_000 * prices.output);
+        const costCacheRead = (cacheRead / 1_000_000 * prices.cacheRead);
+        const costCacheWrite = (cacheCreation / 1_000_000 * prices.cacheWrite);
+        const totalReqCost = costInput + costOutput + costCacheRead + costCacheWrite;
 
-        this.stats.totalRequests++;
-        this.stats.totalInputTokens += input;
-        this.stats.totalOutputTokens += output;
-        this.stats.totalCost += cost;
+        // DB Insert with cache token tracking
+        try {
+            const currentSessionId = context.get().session_id;
+            db.getDb().prepare(`
+                INSERT INTO usage_stats (session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(currentSessionId, model, input, output, cacheRead, cacheCreation, totalReqCost, Date.now());
+        } catch (e) {
+            console.error('Failed to log usage to DB:', e);
+        }
 
-        // Session tracking
-        this.sessionCost += cost;
+        // Session tracking (Memory)
+        this.sessionCost += totalReqCost;
         this.sessionInputTokens += input;
         this.sessionOutputTokens += output;
+        this.sessionCacheReadTokens += cacheRead;
+        this.sessionCacheCreationTokens += cacheCreation;
 
-        this.lastContextSize = input; // Input tokens = context size for that request
-
-        await this.save();
+        this.lastContextSize = contextSize !== undefined ? contextSize : (input + cacheRead);
+        this.lastCacheRead = cacheRead;
+        this.lastCacheCreation = cacheCreation;
     }
 
     getSessionCost(): number {
@@ -93,7 +97,9 @@ export class UsageTracker {
         return {
             input: this.sessionInputTokens,
             output: this.sessionOutputTokens,
-            total: this.sessionInputTokens + this.sessionOutputTokens
+            cacheRead: this.sessionCacheReadTokens,
+            cacheCreation: this.sessionCacheCreationTokens,
+            total: this.sessionInputTokens + this.sessionOutputTokens + this.sessionCacheReadTokens + this.sessionCacheCreationTokens
         };
     }
 
@@ -106,8 +112,7 @@ export class UsageTracker {
     }
 
     getContextUsage(model: string) {
-        // Find best matching limit
-        let limit = 200_000; // Default safe
+        let limit = 200_000;
         if (CONTEXT_WINDOW_SIZES[model]) {
             limit = CONTEXT_WINDOW_SIZES[model];
         } else {
@@ -116,11 +121,13 @@ export class UsageTracker {
         }
 
         const used = this.lastContextSize;
+        const cached = this.lastCacheRead + this.lastCacheCreation;
         const remaining = Math.max(0, limit - used);
         const percentUsed = (used / limit) * 100;
 
         return {
             used,
+            cached,
             limit,
             remaining,
             percentRemaining: 100 - percentUsed
@@ -128,18 +135,65 @@ export class UsageTracker {
     }
 
     async trackSession() {
-        this.stats.totalSessions++;
-        await this.save();
+        // Implicitly tracked via usage_stats, but we could update a sessions table count if needed.
+        // For now, this is a no-op as the DB has individual records.
     }
 
     getStats(): UsageStats {
-        return this.stats;
+        // Query aggregate stats from DB including cache tokens
+        try {
+            const result = db.getDb().prepare(`
+                SELECT
+                    SUM(input_tokens) as totalInputTokens,
+                    SUM(output_tokens) as totalOutputTokens,
+                    COALESCE(SUM(cache_read_tokens), 0) as totalCacheReadTokens,
+                    COALESCE(SUM(cache_creation_tokens), 0) as totalCacheCreationTokens,
+                    SUM(cost) as totalCost,
+                    COUNT(*) as totalRequests,
+                    COUNT(DISTINCT session_id) as totalSessions
+                FROM usage_stats
+            `).get() as any;
+
+            return {
+                totalSessions: result.totalSessions || 0,
+                totalRequests: result.totalRequests || 0,
+                totalInputTokens: result.totalInputTokens || 0,
+                totalOutputTokens: result.totalOutputTokens || 0,
+                totalCacheReadTokens: result.totalCacheReadTokens || 0,
+                totalCacheCreationTokens: result.totalCacheCreationTokens || 0,
+                totalCost: result.totalCost || 0,
+            };
+        } catch (e) {
+            return UsageSchema.parse({});
+        }
     }
 
-    private async save() {
-        const dir = path.dirname(this.usagePath);
-        await fs.mkdir(dir, { recursive: true });
-        await fs.writeFile(this.usagePath, JSON.stringify(this.stats, null, 2));
+    /**
+     * Get cache hit rate for current session
+     */
+    getCacheHitRate(): { hitRate: number; totalCached: number; totalInput: number } {
+        const totalCached = this.sessionCacheReadTokens;
+        const totalInput = this.sessionInputTokens + this.sessionCacheReadTokens + this.sessionCacheCreationTokens;
+        const hitRate = totalInput > 0 ? (totalCached / totalInput) * 100 : 0;
+        return { hitRate, totalCached, totalInput };
+    }
+
+    restoreSessionState(stats: {
+        cost: number;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheCreationTokens: number;
+        duration: number;
+    }) {
+        this.sessionCost = stats.cost;
+        this.sessionInputTokens = stats.inputTokens;
+        this.sessionOutputTokens = stats.outputTokens;
+        this.sessionCacheReadTokens = stats.cacheReadTokens;
+        this.sessionCacheCreationTokens = stats.cacheCreationTokens;
+        this.sessionDuration = stats.duration;
+        this.lastContextSize = stats.inputTokens + stats.cacheReadTokens + stats.cacheCreationTokens;
+        this.lastCacheRead = stats.cacheReadTokens;
     }
 }
 

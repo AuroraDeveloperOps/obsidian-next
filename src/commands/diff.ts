@@ -63,33 +63,28 @@ export const diffCommand: CommandHandler = async (args) => {
         return;
     }
 
-    const lines = [
-        '='.repeat(50),
-        'RECENT FILE CHANGES',
-        '='.repeat(50),
+    const content = [
+        'Recent File Changes',
+        ...diffs.map((diff, i) => {
+            const date = new Date(diff.timestamp);
+            const dateStr = date.toLocaleDateString();
+            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return [
+                `   ⎿  [${i + 1}] ${path.basename(diff.filePath)}`,
+                `      ⎿  Path      ${diff.filePath}`,
+                `      ⎿  Time      ${dateStr} ${timeStr}`,
+                `      ⎿  Changes   +${diff.additions} / -${diff.deletions}`,
+                ''
+            ].join('\n');
+        }),
+        '   [Usage]',
+        '   ⎿  /diff <filepath>  View specific diff',
         '',
-    ];
-
-    for (let i = 0; i < diffs.length; i++) {
-        const diff = diffs[i];
-        const date = new Date(diff.timestamp);
-        const dateStr = date.toLocaleDateString();
-        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const fileName = path.basename(diff.filePath);
-
-        lines.push(`[${i + 1}] ${fileName}`);
-        lines.push(`    Path: ${diff.filePath}`);
-        lines.push(`    Time: ${dateStr} ${timeStr}`);
-        lines.push(`    Changes: +${diff.additions} / -${diff.deletions}`);
-        lines.push('');
-    }
-
-    lines.push('Usage: /diff <filepath> to view specific diff');
-    lines.push('='.repeat(50));
+    ].join('\n');
 
     bus.emitAgent({
         type: 'thought',
-        content: lines.join('\n'),
+        content,
     });
 
     bus.emitAgent({
@@ -101,15 +96,12 @@ export const diffCommand: CommandHandler = async (args) => {
 function displayDiff(diff: DiffEntry): void {
     const date = new Date(diff.timestamp);
     const header = [
-        '='.repeat(50),
-        `DIFF: ${diff.filePath}`,
-        '='.repeat(50),
+        `File Diff: ${path.basename(diff.filePath)}`,
+        `   ⎿  Path      ${diff.filePath}`,
+        `   ⎿  Time      ${date.toLocaleString()}`,
+        `   ⎿  Lines     ${diff.beforeLines} -> ${diff.afterLines}`,
+        `   ⎿  Changes   +${diff.additions} / -${diff.deletions}`,
         '',
-        `Timestamp: ${date.toLocaleString()}`,
-        `Lines: ${diff.beforeLines} -> ${diff.afterLines}`,
-        `Changes: +${diff.additions} / -${diff.deletions}`,
-        '',
-        '-'.repeat(50),
     ];
 
     // Format diff with colors
@@ -129,7 +121,7 @@ function displayDiff(diff: DiffEntry): void {
     const output = [
         ...header,
         ...diffLines,
-        '-'.repeat(50),
+        '',
     ];
 
     bus.emitAgent({

@@ -6,6 +6,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { bus } from './bus.js';
+import { config } from './config.js';
 
 export interface Change {
     id: string;
@@ -33,10 +34,11 @@ class UndoManager {
         afterContent: string | null
     ): Promise<string> {
         const id = `chg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const cfg = await config.load();
 
         const change: Change = {
             id,
-            filePath: path.relative(process.cwd(), path.resolve(filePath)),
+            filePath: path.relative(cfg.workspaceRoot, path.resolve(filePath)),
             operation,
             beforeContent,
             afterContent,
@@ -63,10 +65,11 @@ class UndoManager {
         }
 
         const results: string[] = [];
+        const cfg = await config.load();
 
         for (const change of toUndo) {
             try {
-                const fullPath = path.resolve(process.cwd(), change.filePath);
+                const fullPath = path.resolve(cfg.workspaceRoot, change.filePath);
 
                 switch (change.operation) {
                     case 'create':

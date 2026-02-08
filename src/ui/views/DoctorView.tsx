@@ -59,7 +59,7 @@ export const DoctorView: React.FC<DoctorViewProps> = ({ onClose }) => {
         }
 
         // 2. Check tools
-        const toolList = tools.list();
+        const toolList = await tools.list();
         checks.push({
             name: 'Tools',
             status: 'ok',

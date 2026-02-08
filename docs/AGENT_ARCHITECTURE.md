@@ -2,74 +2,52 @@
 
 ## Topology
 
-The system uses a **Supervisor-Agent** topology driven by an **Event Bus**.
+The system uses a **Supervisor-Agent** topology driven by a global **Daemon** and **Event Bus**.
 
 ```
-Input -> [Supervisor] -> |-> [Commands] (e.g., /mode)
-                         |-> [Agent] -> [LLM]
+Input -> [Frontend] -> Socket -> [Supervisor] -> |-> [Commands] (e.g., /mode)
+                                                 |-> [Agent] -> [Claude 4.6]
 ```
 
-## Execution Flow
+## Execution Flow (The Autonomous Loop)
 
-1. **User Input** is captured by `Root.tsx` and sent to the `EventBus`.
+1. **User Input** is captured by any frontend (CLI, Web, Telegram) and sent via Socket to the Daemon.
 2. **Supervisor** listens for `user_input`.
 3. Checks if input is a **Command** (starts with `/`).
-   - If yes: Executes Command.
+   - If yes: Executes Command handler.
    - If no: Delegates to **Agent**.
-4. **Agent** analyzes input, checks context, and executes logic loop.
-5. **Bus** emits events (`thought`, `tool_start`, `tool_result`) back to UI.
+4. **Agent (Reasoning Phase)**: 
+   - Utilizes Claude 4.6 **Adaptive Thinking**.
+   - Toggles `effort: max` for complex planning.
+   - Emits `thinking` blocks to UI for transparency.
+5. **Agent (Execution Phase)**:
+   - Identifies required tools.
+   - If a tool is missing, triggers **Self-Improving Skill Loop** (`create_skill`).
+6. **Bus** emits events (`thought`, `tool_start`, `tool_result`) back to all connected frontends.
 
 ## Execution Modes
 
-Managed by `context.ts` and `agent.ts`:
+Managed globally by `context.ts` and `agent.ts`:
 
 ```
-/mode auto    - "Auto-Accept" (Green): Execute tools without confirmation.
-/mode plan    - "Plan Mode" (Yellow): Read-only planning -> Ask Approval -> Execute.
-/mode safe    - "Default" (White): Read=Auto, Write/Exec=Ask Approval.
+/mode auto    - "Autonomous" (Green): Execute tools without confirmation.
+/mode plan    - "Architect" (Yellow): Read-only planning -> Ask Approval -> Execute.
+/mode safe    - "Guardian" (White): Read=Auto, Write/Exec=Ask Approval.
 ```
 
-## Data Structures
+## Data Structures (SQLite Backend)
 
-### Tasks (`.obsidian/tasks.md`)
+All state is now stored in `~/.obsidian-next/state.db`.
 
-Persisted Markdown file for tracking progress.
+### Tasks (Table: `tasks`)
+Structured project tracking with subtasks and context metadata.
 
-```markdown
-# Implement Login Flow
+### Context (Table: `working_set`)
+Time-decayed working memory for the agent. Prioritizes recent and relevant files for the 1M token context window.
 
-Status: in_progress
+### Semantic Memory (Table: `memos` + `sqlite-vec`)
+Long-term facts, patterns, and decisions indexed for vector search.
 
-## Progress
-- [x] Create login.tsx
-- [ ] Connect auth hook
-
-## Context
-- Modified: src/ui/login.tsx
-```
-
-### Context (`.obsidian/context.json`)
-
-Working memory for the agent.
-
-```json
-{
-  "session_id": "k9...x2",
-  "mode": "safe",
-  "current_task": "Implement Login Flow",
-  "files_read": ["src/ui/login.tsx"],
-  "files_modified": ["src/ui/login.tsx"],
-  "working_set": ["src/ui/login.tsx"],
-  "created_at": "2026-01-01T12:00:00.000Z"
-}
-
-
-### Session Persistence (`.obsidian/sessions/`)
-
-Global storage for resumed workflows.
-- **Scope**: User-global (`~/.obsidian/sessions` by default).
-- **Format**: JSON bundles containing Context, History, and Task snapshots.
-- **Lifecycle**: Saved on `/exit`, restores full state on `/resume`.
 ## Tool Execution Flow
 
 ```
@@ -77,9 +55,15 @@ Agent -> ToolRegistry -> Auditor -> [Approval?] -> [Sandbox?] -> Execute
 ```
 
 1. **Agent** calls tool.
-2. **registry** looks up implementation.
-3. **Auditor** checks `auditor.ts` rules (path traversal, dangerous commands).
-4. **Approval**: If destructive & not auto-mode, ask user via `ApprovalPrompt`.
-5. **Sandbox**: If `executionMode: 'sandbox'`, wrap command in `sandbox-exec`/`firejail`.
-6. **Execute**: Run Node.js logic or Child Process.
-7. **Result**: Return output to Agent and emit `tool_result`.
+2. **Registry** looks up implementation (built-in or self-generated skill).
+3. **Auditor** checks global safety rules relative to `workspaceRoot`.
+4. **Approval**: If destructive & not auto-mode, ask user via UI or Telegram.
+5. **Sandbox**: Wrap command in OS-level isolation.
+6. **Execute**: Run Node.js logic or Child Process within the Daemon context.
+7. **Result**: Return output, update `Working Set` scores, and emit `tool_result`.
+
+## Self-Improving Skill Loop
+1. **Identify**: Agent detects a capability gap.
+2. **Draft**: Agent writes a new TypeScript tool in `~/.obsidian-next/skills/`.
+3. **Verify**: Agent generates and runs a sandboxed unit test.
+4. **Register**: Daemon dynamically imports and enables the new tool.
