@@ -836,11 +836,11 @@ async function globSearch(
  */
 export const TaskTool: Tool = {
     name: 'task',
-    description: 'Manage the project plan and todo list. Use this for tracking work items, not for scheduling recurring jobs. actions: create, add_step, complete_step, fail_step, complete_task',
+    description: 'Manage the project plan and todo list. Use this for tracking work items, NOT for scheduled/recurring cron jobs (use list_scheduled_tasks for those). actions: create, list, add_step, complete_step, fail_step, complete_task',
     inputSchema: {
         action: {
             type: 'string',
-            description: 'Action to perform: create, add_step, complete_step, fail_step, complete_task'
+            description: 'Action to perform: create, list, add_step, complete_step, fail_step, complete_task'
         },
         title: {
             type: 'string',
@@ -867,6 +867,11 @@ export const TaskTool: Tool = {
 
         try {
             switch (action) {
+                case 'list': {
+                    const progress = tasks.getProgress();
+                    return { success: true, output: progress };
+                }
+
                 case 'create':
                     if (!title) return { success: false, error: 'Title required for create' };
                     await tasks.create(title);
