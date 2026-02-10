@@ -148,6 +148,17 @@ export class Scheduler {
                 // but also prevent it from thinking it's due for 50 years of catchup
                 const baseline = task.last_run_at || (now - 61000);
 
+                // One-time tasks: check if target time has passed
+                let taskParams: any = {};
+                try { taskParams = task.params ? JSON.parse(task.params) : {}; } catch {}
+
+                if (taskParams.__once && taskParams.__target) {
+                    if (now >= taskParams.__target) {
+                        await this.executeTask(task);
+                    }
+                    continue;
+                }
+
                 const interval = parseExpression(task.cron_expression, {
                     currentDate: baseline
                 });
@@ -192,6 +203,12 @@ export class Scheduler {
                 taskId: task.id,
                 command: task.command
             });
+
+            // One-time tasks: deactivate after first successful execution
+            if (params.__once) {
+                db.getDb().prepare(`UPDATE scheduled_tasks SET active = 0 WHERE id = ?`).run(task.id);
+                bus.emitAgent({ type: 'thought', content: `[Scheduler] One-time task ${task.id} completed and deactivated.` });
+            }
 
         } catch (error: any) {
             console.error(`[Scheduler] Task ${task.id} failed:`, error);

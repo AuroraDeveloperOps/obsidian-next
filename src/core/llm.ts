@@ -55,6 +55,7 @@ export class LLMClient {
     private accumulatedCacheCreationTokens = 0;
     private abortController: AbortController | null = null;
     private currentInterruptHandler: ((e: any) => void) | null = null;
+    private lastToolOutputs: string[] = [];
 
     constructor() {
         // Listen for computer scale updates from screenshot tool
@@ -375,6 +376,7 @@ export class LLMClient {
             if (userMessage.trim()) {
                 // New user message - reset iteration counter and token accumulators
                 this.toolIterations = 0;
+                this.lastToolOutputs = [];
                 // Note: We do NOT reset accumulatedInputTokens here blindly if we want to track session growth,
                 // BUT for a new turn, we usually rely on the API to give us the fresh count.
                 // The `accumulatedInputTokens` property in this class is somewhat transient for the current streaming loop.
@@ -551,18 +553,20 @@ CONTEXT AWARENESS:
 ${tokensUsed > tokenBudget * 0.7 ? '- WARNING: Context is filling up. Be concise. Consider suggesting /clear if the task is complete.' : ''}
 
 CORE DIRECTIVES:
-1. EXPLORE FIRST: Never assume the state of the codebase. Use list and grep to explore. Read files completely before editing.
-2. DISCOVERY MANDATE: If you don't recognize a project, preference, or fact, you MUST call 'memory' tool with action: 'list' (and NO type) to view the entire knowledge bank. Never say "I don't know" before listing all memories.
-3. SELF-IMPROVEMENT: If you lack a tool for a specific task, use 'create_skill' to build it.
-4. CODE QUALITY: Write strict, type-safe TypeScript. Properly handle errors.
-5. COMMUNICATION: Be deadpan, sharp, and concise. No Markdown formatting. CAPITAL LETTERS for emphasis.
-6. SECURITY: Never output secrets. Strictly adhere to the workspaceRoot boundaries.
+1. ACTION FIRST: NEVER say "I'll check" or "Let me look" without ALSO calling the tool in the SAME turn. When the user asks about memories, scheduled tasks, files, or anything retrievable — invoke the tool IMMEDIATELY alongside your text. Do not end a turn with only a promise to act.
+2. EXPLORE FIRST: Never assume the state of the codebase. Use list and grep to explore. Read files completely before editing.
+3. DISCOVERY MANDATE: If you don't recognize a project, preference, or fact, you MUST call 'memory' tool with action: 'list' (and NO type) to view the entire knowledge bank. Never say "I don't know" before listing all memories. When asked about scheduled tasks, ALWAYS call 'list_scheduled_tasks'.
+4. SELF-IMPROVEMENT: If you lack a tool for a specific task, use 'create_skill' to build it.
+5. CODE QUALITY: Write strict, type-safe TypeScript. Properly handle errors.
+6. COMMUNICATION: Be deadpan, sharp, and concise. No Markdown formatting. CAPITAL LETTERS for emphasis.
+7. RESPONSE MANDATE: After using ANY tool, you MUST generate a human-readable text response summarizing the results. NEVER end a turn with only tool calls and no text. The user cannot see raw tool output — YOU must interpret and present it.
+8. SECURITY: Never output secrets. Strictly adhere to the workspaceRoot boundaries.
 
-AGENTIC WORKFLOW:
-1. Discovery: List memory and list files.
-2. Strategy: Identify gaps and create a plan.
-3. Execution: Execute tools or build new skills.
-4. Verification: Check results and self-correct on failure.
+AGENTIC WORKFLOW (every turn):
+1. ACT: Call relevant tools FIRST. Do not narrate — execute.
+2. INTERPRET: Read tool results and synthesize a clear answer.
+3. RESPOND: Present findings to the user in text.
+4. VERIFY: If results look wrong, self-correct and retry.
 
 Current Working Directory: ${cfg.workspaceRoot}
 ${userContext ? `\n${userContext}\n` : ''}
@@ -839,11 +843,15 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
 
                 if (chunk.type === 'content_block_stop' && currentToolUse) {
                     try {
-                        currentToolUse.input = JSON.parse(currentToolUse.input);
+                        // If no input_json_delta chunks were received, input is empty string
+                        // Treat as empty object (common for tools with no required params)
+                        const rawInput = currentToolUse.input || '{}';
+                        currentToolUse.input = JSON.parse(rawInput);
                         toolUses.push(currentToolUse);
-                        currentToolUse = null;
                     } catch (e) {
-                        // ignore parse error mid-stream
+                        // Parse failed — still execute with empty args rather than silently dropping
+                        currentToolUse.input = {};
+                        toolUses.push(currentToolUse);
                     }
                 }
 
@@ -978,6 +986,8 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
                             type: 'thought',
                             content: outputContent
                         });
+                        // Track tool outputs for fallback when LLM generates no text
+                        this.lastToolOutputs.push(outputContent);
                     }
                 }
 
@@ -1246,6 +1256,16 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 
     clearHistory(): void {
         this.conversationHistory = [];
+    }
+
+    /**
+     * Get all tool outputs from the current turn (for fallback when LLM generates no text).
+     * Returns concatenated output or null if no tools were used.
+     */
+    getLastToolOutput(): string | null {
+        if (this.lastToolOutputs.length === 0) return null;
+        const output = this.lastToolOutputs.join('\n\n');
+        return output;
     }
 
     /**

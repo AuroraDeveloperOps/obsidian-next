@@ -371,12 +371,38 @@ APPROVAL: <yes if destructive, no otherwise>`;
 
         // null means actual failure, empty string means LLM returned no text (valid for tool-only responses)
         if (response !== null) {
-            // Emit the final response as a thought right before 'done' to ensure visibility
-            // This handles cases where LLM only called tools without generating text,
-            // or where tool output thoughts got lost due to consecutive thought handling
-            if (response && response.trim()) {
-                bus.emitAgent({ type: 'thought', content: response });
+            let finalResponse = response;
+
+            // Check if the model promised to act but didn't use any tools
+            const toolOutput = llm.getLastToolOutput();
+            if (finalResponse && !toolOutput) {
+                const lower = finalResponse.toLowerCase();
+                const isPromiseToAct = (
+                    lower.includes("i'll check") || lower.includes("let me check") ||
+                    lower.includes("i'll look") || lower.includes("let me look") ||
+                    lower.includes("i'll list") || lower.includes("let me list") ||
+                    lower.includes("i'll search") || lower.includes("let me search") ||
+                    lower.includes("checking") || lower.includes("looking into")
+                );
+                if (isPromiseToAct) {
+                    // Model said it would act but didn't call tools — force a follow-up
+                    const followUp = await llm.streamChat(
+                        '[System] You said you would check but did not call any tools. Call the appropriate tool NOW and present the actual results to the user.'
+                    );
+                    if (followUp && followUp.trim()) {
+                        finalResponse = followUp;
+                    }
+                }
             }
+
+            // Emit the final response as a thought right before 'done' to ensure visibility
+            if (finalResponse && finalResponse.trim()) {
+                bus.emitAgent({ type: 'thought', content: finalResponse });
+            } else if (toolOutput) {
+                // LLM generated no text but tools ran — surface tool output
+                bus.emitAgent({ type: 'thought', content: toolOutput });
+            }
+
             await context.setLastAction(input.slice(0, 50));
             const durationMs = Date.now() - startTime;
             usage.addSessionDuration(durationMs);
