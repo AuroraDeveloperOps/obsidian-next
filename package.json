@@ -36,7 +36,11 @@
         "build": "tsup src/index.ts src/mcp/index.ts --format esm",
         "start": "node dist/index.js",
         "mcp": "node dist/mcp/index.js",
-        "test": "vitest"
+        "test": "vitest",
+        "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+        "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
+        "lint": "eslint src --ext .ts,.tsx",
+        "lint:fix": "eslint src --ext .ts,.tsx --fix"
     },
     "dependencies": {
         "@anthropic-ai/sandbox-runtime": "^0.0.32",
@@ -53,6 +57,7 @@
         "ink": "^4.4.1",
         "ink-spinner": "^5.0.0",
         "ink-text-input": "^5.0.1",
+        "ollama": "^0.5.18",
         "react": "^18.3.1",
         "sqlite-vec": "^0.1.7-alpha.2",
         "zod": "^3.23.8"
@@ -61,7 +66,12 @@
         "@types/better-sqlite3": "^7.6.13",
         "@types/node": "^20.14.9",
         "@types/react": "^18.3.3",
+        "@typescript-eslint/eslint-plugin": "^8.55.0",
+        "@typescript-eslint/parser": "^8.55.0",
+        "eslint": "^9.39.2",
+        "eslint-config-prettier": "^10.1.8",
         "ink-testing-library": "^3.0.0",
+        "prettier": "^3.8.1",
         "tsup": "^8.1.0",
         "typescript": "^5.5.3",
         "vitest": "^4.0.18"

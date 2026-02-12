@@ -1,5 +1,6 @@
 import { bus } from './bus.js';
 import { initCommand } from '../commands/init.js';
+import { setupCommand } from '../commands/setup.js';
 import { clearCommand } from '../commands/clear.js';
 import { contextCommand } from '../commands/context.js';
 import { modelsCommand } from '../commands/models.js';
@@ -23,120 +24,182 @@ import { memoryCommand } from '../commands/memory.js';
 export type CommandHandler = (args: string[]) => Promise<void>;
 
 interface CommandDef {
-    name: string;
-    description: string;
-    handler: CommandHandler;
-    isView?: boolean;
-    viewId?: string;
-    aliases?: string[];
+	name: string;
+	description: string;
+	handler: CommandHandler;
+	isView?: boolean;
+	viewId?: string;
+	aliases?: string[];
 }
 
 export class CommandRegistry {
-    private commands: Map<string, CommandDef> = new Map();
-    private aliases: Map<string, string> = new Map();
+	private commands: Map<string, CommandDef> = new Map();
+	private aliases: Map<string, string> = new Map();
 
-    constructor() {
-        this.register('help', 'Show available commands', async () => {
-            const validCommands = Array.from(this.commands.values())
-                .map(c => `  /${c.name.padEnd(10)} - ${c.description}`)
-                .join('\n');
+	constructor() {
+		this.register(
+			'help',
+			'Show available commands',
+			async () => {
+				const validCommands = Array.from(this.commands.values())
+					.map((c) => `  /${c.name.padEnd(10)} - ${c.description}`)
+					.join('\n');
 
-            bus.emitAgent({
-                type: 'thought',
-                content: `Available Commands:\n${validCommands}`
-            });
-        }, { isView: true, viewId: 'help' });
+				bus.emitAgent({
+					type: 'thought',
+					content: `Available Commands:\n${validCommands}`
+				});
+			},
+			{ isView: true, viewId: 'help' }
+		);
 
-        this.register('init', 'Initialize configuration', initCommand);
-        this.register('clear', 'Clear conversation history', clearCommand);
-        this.register('context', 'Show session context & usage', contextCommand, { isView: true, viewId: 'usage', aliases: ['usage', 'cost'] });
-        this.register('models', 'Select AI model', modelsCommand, { isView: true, viewId: 'settings' });
-        this.register('tool', 'Execute tools manually', toolCommand);
-        this.register('status', 'Show system status', statusCommand, { isView: true, viewId: 'doctor', aliases: ['doctor'] });
-        this.register('sandbox', 'Toggle sandbox mode', sandboxCommand, { isView: true, viewId: 'settings' }); // Root.tsx handles the specific tab
-        this.register('mode', 'Set execution mode (auto/plan/safe)', modeCommand, { isView: true, viewId: 'settings' });
-        this.register('task', 'View/manage current task', taskCommand, { isView: true, viewId: 'task' });
-        this.register('undo', 'Undo recent file changes', undoCommand);
-        this.register('config', 'View/edit configuration', configCommand, { isView: true, viewId: 'settings' });
-        this.register('settings', 'View/edit settings (mode, permissions, ui)', settingsCommand, { isView: true, viewId: 'settings' });
-        this.register('exit', 'Save session and exit gracefully', exitCommand);
-        this.register('resume', 'Restore a saved session', resumeCommand, { isView: true, viewId: 'sessions', aliases: ['sessions'] });
-        this.register('diff', 'View recent file changes', diffCommand);
-        this.register('mcp', 'Manage Model Context Protocol', async (args) => {
-            // Placeholder if needed, but UI usually handles it
-        }, { isView: true, viewId: 'mcp', aliases: ['plugin'] });
-        this.register('pilot', 'Enable/disable Computer Use mode', pilotCommand, { aliases: ['computer', 'desktop'] });
-        this.register('schedule', 'Schedule a background task', scheduleCommand);
-        this.register('scheduled_tasks', 'List all scheduled background tasks', scheduledTasksCommand, { aliases: ['tasks'] });
-        this.register('memory', 'Manage agent memory', memoryCommand);
+		this.register('init', 'Initialize configuration', initCommand);
+		this.register(
+			'setup',
+			'Run setup wizard or configure Ollama',
+			setupCommand,
+			{ aliases: ['onboard'] }
+		);
+		this.register('clear', 'Clear conversation history', clearCommand);
+		this.register('context', 'Show session context & usage', contextCommand, {
+			isView: true,
+			viewId: 'usage',
+			aliases: ['usage', 'cost']
+		});
+		this.register('models', 'Select AI model', modelsCommand, {
+			isView: true,
+			viewId: 'settings'
+		});
+		this.register('tool', 'Execute tools manually', toolCommand);
+		this.register('status', 'Show system status', statusCommand, {
+			isView: true,
+			viewId: 'doctor',
+			aliases: ['doctor']
+		});
+		this.register('sandbox', 'Toggle sandbox mode', sandboxCommand, {
+			isView: true,
+			viewId: 'settings'
+		}); // Root.tsx handles the specific tab
+		this.register('mode', 'Set execution mode (auto/plan/safe)', modeCommand, {
+			isView: true,
+			viewId: 'settings'
+		});
+		this.register('task', 'View/manage current task', taskCommand, {
+			isView: true,
+			viewId: 'task'
+		});
+		this.register('undo', 'Undo recent file changes', undoCommand);
+		this.register('config', 'View/edit configuration', configCommand, {
+			isView: true,
+			viewId: 'settings'
+		});
+		this.register(
+			'settings',
+			'View/edit settings (mode, permissions, ui)',
+			settingsCommand,
+			{ isView: true, viewId: 'settings' }
+		);
+		this.register('exit', 'Save session and exit gracefully', exitCommand);
+		this.register('resume', 'Restore a saved session', resumeCommand, {
+			isView: true,
+			viewId: 'sessions',
+			aliases: ['sessions']
+		});
+		this.register('diff', 'View recent file changes', diffCommand);
+		this.register(
+			'mcp',
+			'Manage Model Context Protocol',
+			async (args) => {
+				// Placeholder if needed, but UI usually handles it
+			},
+			{ isView: true, viewId: 'mcp', aliases: ['plugin'] }
+		);
+		this.register('pilot', 'Enable/disable Computer Use mode', pilotCommand, {
+			aliases: ['computer', 'desktop']
+		});
+		this.register('schedule', 'Schedule a background task', scheduleCommand);
+		this.register(
+			'scheduled_tasks',
+			'List all scheduled background tasks',
+			scheduledTasksCommand,
+			{ aliases: ['tasks'] }
+		);
+		this.register('memory', 'Manage agent memory', memoryCommand);
 
-        this.register('schedule_test', 'Schedule a test task', async () => {
-            const { scheduler } = await import('./scheduler.js');
-            const now = new Date();
-            now.setSeconds(now.getSeconds() + 5);
-            const cronExpression = `${now.getSeconds()} ${now.getMinutes()} ${now.getHours()} ${now.getDate()} ${now.getMonth() + 1} *`;
+		this.register('schedule_test', 'Schedule a test task', async () => {
+			const { scheduler } = await import('./scheduler.js');
+			const now = new Date();
+			now.setSeconds(now.getSeconds() + 5);
+			const cronExpression = `${now.getSeconds()} ${now.getMinutes()} ${now.getHours()} ${now.getDate()} ${now.getMonth() + 1} *`;
 
-            await scheduler.scheduleTask(cronExpression, 'system:echo', { message: 'Hello from scheduled task' });
-            bus.emitAgent({
-                type: 'thought',
-                content: `Scheduled a test task to run at ${now.toLocaleTimeString()}`
-            });
-        });
-    }
+			await scheduler.scheduleTask(cronExpression, 'system:echo', {
+				message: 'Hello from scheduled task'
+			});
+			bus.emitAgent({
+				type: 'thought',
+				content: `Scheduled a test task to run at ${now.toLocaleTimeString()}`
+			});
+		});
+	}
 
-    register(name: string, description: string, handler: CommandHandler, options: Partial<Pick<CommandDef, 'isView' | 'viewId' | 'aliases'>> = {}) {
-        const def = { name, description, handler, ...options };
-        this.commands.set(name, def);
+	register(
+		name: string,
+		description: string,
+		handler: CommandHandler,
+		options: Partial<Pick<CommandDef, 'isView' | 'viewId' | 'aliases'>> = {}
+	) {
+		const def = { name, description, handler, ...options };
+		this.commands.set(name, def);
 
-        if (options.aliases) {
-            for (const alias of options.aliases) {
-                this.aliases.set(alias, name);
-            }
-        }
-    }
+		if (options.aliases) {
+			for (const alias of options.aliases) {
+				this.aliases.set(alias, name);
+			}
+		}
+	}
 
-    has(name: string): boolean {
-        return this.commands.has(name) || this.aliases.has(name);
-    }
+	has(name: string): boolean {
+		return this.commands.has(name) || this.aliases.has(name);
+	}
 
-    async execute(name: string, args: string[]) {
-        const actualName = this.aliases.get(name) || name;
-        const cmd = this.commands.get(actualName);
-        if (!cmd) {
-            bus.emitAgent({
-                type: 'error',
-                message: `Unknown command: /${name}`
-            });
-            return;
-        }
+	async execute(name: string, args: string[]) {
+		const actualName = this.aliases.get(name) || name;
+		const cmd = this.commands.get(actualName);
+		if (!cmd) {
+			bus.emitAgent({
+				type: 'error',
+				message: `Unknown command: /${name}`
+			});
+			return;
+		}
 
-        try {
-            // Signal UI if this is a view command WITHOUT arguments
-            // If args are provided, we're executing an action, not just viewing
-            if (cmd.isView && cmd.viewId && args.length === 0) {
-                bus.emitAgent({
-                    type: 'view_request',
-                    viewId: cmd.viewId,
-                    command: actualName,
-                    params: args
-                });
-            }
+		try {
+			// Signal UI if this is a view command WITHOUT arguments
+			// If args are provided, we're executing an action, not just viewing
+			if (cmd.isView && cmd.viewId && args.length === 0) {
+				bus.emitAgent({
+					type: 'view_request',
+					viewId: cmd.viewId,
+					command: actualName,
+					params: args
+				});
+			}
 
-            await cmd.handler(args);
+			await cmd.handler(args);
 
-            // Emit command executed event for UI/logging
-            bus.emitAgent({
-                type: 'command_executed',
-                command: actualName,
-                args: args
-            });
-        } catch (error) {
-            bus.emitAgent({
-                type: 'error',
-                message: `Command /${name} failed: ${error instanceof Error ? error.message : String(error)}`
-            });
-        }
-    }
+			// Emit command executed event for UI/logging
+			bus.emitAgent({
+				type: 'command_executed',
+				command: actualName,
+				args: args
+			});
+		} catch (error) {
+			bus.emitAgent({
+				type: 'error',
+				message: `Command /${name} failed: ${error instanceof Error ? error.message : String(error)}`
+			});
+		}
+	}
 }
 
 export const commands = new CommandRegistry();

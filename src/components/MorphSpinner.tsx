@@ -3,7 +3,7 @@ import { Text } from 'ink';
 import Spinner from 'ink-spinner';
 
 interface MorphSpinnerProps {
-    text: string;
+	text: string;
 }
 
 /**
@@ -12,12 +12,12 @@ interface MorphSpinnerProps {
  * Uses 'dots' spinner from ink-spinner (classic cli look).
  */
 export const MorphSpinner: React.FC<MorphSpinnerProps> = ({ text }) => {
-    return (
-        <Text>
-            <Text color="cyan">
-                <Spinner type="dots" />
-            </Text>
-            {' ' + text}
-        </Text>
-    );
+	return (
+		<Text>
+			<Text color="cyan">
+				<Spinner type="dots" />
+			</Text>
+			{' ' + text}
+		</Text>
+	);
 };

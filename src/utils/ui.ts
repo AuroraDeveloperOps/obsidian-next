@@ -9,9 +9,9 @@ import chalk from 'chalk';
  * Style: --- [ Title ] ---
  */
 export function formatHeader(title: string): string {
-    return `${chalk.bold.white(title)}\n`;
+	return `${chalk.bold.white(title)}\n`;
 }
 
 export function formatFooter(): string {
-    return ''; // Footers are discouraged in the new aesthetic
+	return ''; // Footers are discouraged in the new aesthetic
 }

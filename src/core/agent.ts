@@ -5,10 +5,10 @@
  */
 
 import { bus } from './bus.js';
-import { llm } from './llm.js';
+import { llm } from './llm/index.js';
 import { context } from './context.js';
 import { tasks } from './tasks.js';
-import { tools } from './tools.js';
+import { tools } from '../tools/index.js';
 import { undo } from './undo.js';
 import { redactor } from './redactor.js';
 import { auditLog } from './auditLog.js';
@@ -24,279 +24,343 @@ import { scheduler } from './scheduler.js';
 import { registerAbilities } from '../abilities/index.js';
 
 export interface AgentPlan {
-    task: string;
-    steps: string[];
-    files_to_read: string[];
-    files_to_modify: string[];
-    requires_approval: boolean;
+	task: string;
+	steps: string[];
+	files_to_read: string[];
+	files_to_modify: string[];
+	requires_approval: boolean;
 }
 
 class Agent {
-    private initialized = false;
-    private pendingPlan: { plan: AgentPlan; originalInput: string } | null = null;
-    private sessionId: string;
+	private initialized = false;
+	private pendingPlan: { plan: AgentPlan; originalInput: string } | null = null;
+	private sessionId: string;
 
-    constructor() {
-        // Generate unique session ID for undo tracking
-        this.sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    }
+	constructor() {
+		// Generate unique session ID for undo tracking
+		this.sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+	}
 
-    async init(resumeSessionId?: string): Promise<void> {
-        if (this.initialized) return;
-        
-        // Load global config and initialize workspace root
-        const cfg = await config.load();
-        auditor.setWorkspaceRoot(cfg.workspaceRoot);
+	async init(resumeSessionId?: string): Promise<void> {
+		if (this.initialized) return;
 
-        await context.init();
-        await mcp.init();
-        await tools.init();
+		// Load global config and initialize workspace root
+		const cfg = await config.load();
+		auditor.setWorkspaceRoot(cfg.workspaceRoot);
 
-        // Initialize Scheduler
-        registerAbilities(scheduler);
-        scheduler.start();
+		await context.init();
+		await mcp.init();
+		await tools.init();
 
-        if (resumeSessionId) {
-            const { session } = await import('./session.js');
-            const result = await session.restore(resumeSessionId);
-            if (!result.success) {
-                bus.emitAgent({ type: 'error', message: `Failed to resume session: ${result.error}` });
-                // Fallback to new session
-                await context.startNewSession();
-                await history.clear();
-            } else {
-                bus.emitAgent({ type: 'thought', content: `Resumed session: ${resumeSessionId}` });
-            }
-        } else {
-            // Start a fresh session (archives old one)
-            // This prevents the agent from "remembering" stale tasks from previous runs
-            await context.startNewSession();
-            await history.clear();
+		// Initialize Scheduler
+		registerAbilities(scheduler);
+		scheduler.start();
 
-            // Also archive and clear stale tasks to ensure a fresh start
-            // (Unless resumed, tasks should match the fresh session)
-            await tasks.init(); // Load first to have something to archive
-            if (tasks.hasActiveTask()) {
-                await tasks.archive();
-                await tasks.clear();
-            }
-        }
+		if (resumeSessionId) {
+			const { session } = await import('./session.js');
+			const result = await session.restore(resumeSessionId);
+			if (!result.success) {
+				bus.emitAgent({
+					type: 'error',
+					message: `Failed to resume session: ${result.error}`
+				});
+				// Fallback to new session
+				await context.startNewSession();
+				await history.clear();
+			} else {
+				bus.emitAgent({
+					type: 'thought',
+					content: `Resumed session: ${resumeSessionId}`
+				});
+			}
+		} else {
+			// Start a fresh session (archives old one)
+			// This prevents the agent from "remembering" stale tasks from previous runs
+			await context.startNewSession();
+			await history.clear();
 
-        await tasks.init();
-        // Initialize undo system with session ID for change tracking
-        await undo.init(this.sessionId);
-        // Initialize audit logging with session ID
-        auditLog.setSessionId(this.sessionId);
-        await auditLog.init();
-        // Enable PII redaction by default for security (can be disabled in settings)
-        const s = await (await import('./settings.js')).settings.load();
-        redactor.setEnabled(s.security.piiRedaction);
-        this.initialized = true;
-    }
+			// Also archive and clear stale tasks to ensure a fresh start
+			// (Unless resumed, tasks should match the fresh session)
+			await tasks.init(); // Load first to have something to archive
+			if (tasks.hasActiveTask()) {
+				await tasks.archive();
+				await tasks.clear();
+			}
+		}
 
-    private async handleCommand(input: string): Promise<boolean> {
-        if (input.trim() === '/') return true; // Ignore single slash
-        const commandName = input.split(' ')[0];
-        const command = COMMANDS.find(c => c.name === commandName);
-        if (!command) return false;
+		await tasks.init();
+		// Initialize undo system with session ID for change tracking
+		await undo.init(this.sessionId);
+		// Initialize audit logging with session ID
+		auditLog.setSessionId(this.sessionId);
+		await auditLog.init();
+		// Enable PII redaction by default for security (can be disabled in settings)
+		const s = await (await import('./settings.js')).settings.load();
+		redactor.setEnabled(s.security.piiRedaction);
+		this.initialized = true;
+	}
 
-        const args = input.split(' ').slice(1);
+	private async handleCommand(input: string): Promise<boolean> {
+		if (input.trim() === '/') return true; // Ignore single slash
+		const commandName = input.split(' ')[0];
+		const command = COMMANDS.find((c) => c.name === commandName);
+		if (!command) return false;
 
-        if (command.isView) {
-            let viewId = command.name.slice(1);
-            // Special handling for commands that map to settings tabs or other views
-            switch (command.name) {
-                case '/models':
-                case '/mode':
-                case '/sandbox':
-                case '/config':
-                case '/settings':
-                    viewId = 'settings';
-                    break;
-                case '/status':
-                case '/doctor':
-                    viewId = 'doctor';
-                    break;
-                case '/resume':
-                    // If resume has an argument (session ID), execute the command directly
-                    if (args.length > 0) {
-                        const { resumeCommand } = await import('../commands/resume.js');
-                        await resumeCommand(args);
-                        return true;
-                    }
-                    viewId = 'sessions';
-                    break;
-                case '/task':
-                    viewId = 'task';
-                    break;
-                case '/context':
-                    viewId = 'context';
-                    break;
-                case '/mcp':
-                    viewId = 'mcp';
-                    break;
-                case '/init':
-                    viewId = 'init';
-                    break;
-                case '/help':
-                    viewId = 'help';
-                    break;
-            }
+		const args = input.split(' ').slice(1);
 
-            bus.emitAgent({
-                type: 'view_request',
-                viewId,
-                command: command.name,
-                params: args,
-            });
-            return true;
-        }
+		if (command.isView) {
+			let viewId = command.name.slice(1);
+			// Special handling for commands that map to settings tabs or other views
+			switch (command.name) {
+				case '/models':
+				case '/mode':
+				case '/sandbox':
+				case '/config':
+				case '/settings':
+					viewId = 'settings';
+					break;
+				case '/status':
+				case '/doctor':
+					viewId = 'doctor';
+					break;
+				case '/resume':
+					// If resume has an argument (session ID), execute the command directly
+					if (args.length > 0) {
+						const { resumeCommand } = await import('../commands/resume.js');
+						await resumeCommand(args);
+						return true;
+					}
+					viewId = 'sessions';
+					break;
+				case '/task':
+					viewId = 'task';
+					break;
+				case '/context':
+					viewId = 'context';
+					break;
+				case '/mcp':
+					viewId = 'mcp';
+					break;
+				case '/init':
+					viewId = 'init';
+					break;
+				case '/help':
+					viewId = 'help';
+					break;
+			}
 
-        // Handle non-view commands
-        switch (command.name) {
-            case '/clear':
-                bus.emitAgent({
-                    type: 'approval_request',
-                    requestId: 'ui:clear',
-                    context: 'Flush session history? This cannot be undone.',
-                });
-                return true;
-            case '/exit':
-                await exitCommand(args);
-                return true;
-            case '/undo':
-                 bus.emitAgent({
-                    type: 'approval_request',
-                    requestId: 'agent:undo',
-                    context: 'Undo the last file modification? This will revert the change on disk.',
-                });
-                return true;
-            case '/diff':
-                this.showDiff();
-                return true;
-            case '/tool':
-                // This might need more complex handling depending on args
-                bus.emitAgent({ type: 'thought', content: `Tool command requires arguments: /tool <tool_name> [args]`});
-                return true;
+			bus.emitAgent({
+				type: 'view_request',
+				viewId,
+				command: command.name,
+				params: args
+			});
+			return true;
+		}
 
-        }
+		// Handle non-view commands
+		switch (command.name) {
+			case '/clear':
+				bus.emitAgent({
+					type: 'approval_request',
+					requestId: 'ui:clear',
+					context: 'Flush session history? This cannot be undone.'
+				});
+				return true;
+			case '/exit':
+				await exitCommand(args);
+				return true;
+			case '/undo':
+				bus.emitAgent({
+					type: 'approval_request',
+					requestId: 'agent:undo',
+					context:
+						'Undo the last file modification? This will revert the change on disk.'
+				});
+				return true;
+			case '/diff':
+				this.showDiff();
+				return true;
+			case '/tool':
+				// This might need more complex handling depending on args
+				bus.emitAgent({
+					type: 'thought',
+					content: `Tool command requires arguments: /tool <tool_name> [args]`
+				});
+				return true;
+		}
 
-        return false;
-    }
+		return false;
+	}
 
-    private async showDiff() {
-        const changes = undo.getHistory(1);
-        if (changes.length > 0) {
-            const change = changes[0];
-            const diffContent = `File: ${change.filePath}\nOperation: ${change.operation}\n${change.beforeContent ? `Before:\n${change.beforeContent.slice(0, 500)}...` : ''}`;
-            bus.emitAgent({ type: 'thought', content: diffContent });
-        } else {
-            bus.emitAgent({ type: 'thought', content: 'No changes to display.' });
-        }
-    }
+	private async showDiff() {
+		const changes = undo.getHistory(1);
+		if (changes.length > 0) {
+			const change = changes[0];
+			const diffContent = `File: ${change.filePath}\nOperation: ${change.operation}\n${change.beforeContent ? `Before:\n${change.beforeContent.slice(0, 500)}...` : ''}`;
+			bus.emitAgent({ type: 'thought', content: diffContent });
+		} else {
+			bus.emitAgent({ type: 'thought', content: 'No changes to display.' });
+		}
+	}
 
+	async run(input: string): Promise<void> {
+		await this.init();
 
-    async run(input: string): Promise<void> {
-        await this.init();
+		if (await this.handleCommand(input)) {
+			return;
+		}
 
-        if (await this.handleCommand(input)) {
-            return;
-        }
+		const mode = context.getMode();
 
-        const mode = context.getMode();
+		// Analyze task complexity
+		const { complexity, suggestPlanMode } = this.analyzeTaskComplexity(input);
 
-        // Analyze task complexity
-        const { complexity, suggestPlanMode } = this.analyzeTaskComplexity(input);
+		// Update task if this looks like a new task
+		if (this.isNewTask(input)) {
+			await tasks.create(this.extractTaskTitle(input));
+			await context.setTask(tasks.getProgress());
+		}
 
-        // Update task if this looks like a new task
-        if (this.isNewTask(input)) {
-            await tasks.create(this.extractTaskTitle(input));
-            await context.setTask(tasks.getProgress());
-        }
+		// Log mode and complexity for transparency
+		const complexityLabel =
+			complexity === 'complex'
+				? 'complex task'
+				: complexity === 'moderate'
+					? 'moderate task'
+					: 'simple task';
+		bus.emitAgent({ type: 'thought', content: `[${mode}] ${complexityLabel}` });
 
-        // Log mode and complexity for transparency
-        const complexityLabel = complexity === 'complex' ? 'complex task' : complexity === 'moderate' ? 'moderate task' : 'simple task';
-        bus.emitAgent({ type: 'thought', content: `[${mode}] ${complexityLabel}` });
+		// Suggest plan mode for complex tasks (embedded in the prompt enhancement)
+		if (suggestPlanMode && mode !== 'plan') {
+			bus.emitAgent({
+				type: 'thought',
+				content:
+					'[TIP] Complex task detected. Consider switching to plan mode (Shift+Tab) for better results.',
+				hidden: false
+			});
+		}
 
-        // Suggest plan mode for complex tasks (embedded in the prompt enhancement)
-        if (suggestPlanMode && mode !== 'plan') {
-            bus.emitAgent({
-                type: 'thought',
-                content: '[TIP] Complex task detected. Consider switching to plan mode (Shift+Tab) for better results.',
-                hidden: false
-            });
-        }
+		if (mode === 'plan') {
+			await this.runPlanMode(input);
+		} else {
+			await this.runDirectMode(input);
+		}
+	}
 
-        if (mode === 'plan') {
-            await this.runPlanMode(input);
-        } else {
-            await this.runDirectMode(input);
-        }
-    }
+	private isNewTask(input: string): boolean {
+		// Heuristic: longer inputs with action verbs are likely new tasks
+		const actionWords = [
+			'create',
+			'add',
+			'implement',
+			'fix',
+			'update',
+			'refactor',
+			'build',
+			'make',
+			'write'
+		];
+		const lower = input.toLowerCase();
+		return input.length > 20 && actionWords.some((w) => lower.includes(w));
+	}
 
-    private isNewTask(input: string): boolean {
-        // Heuristic: longer inputs with action verbs are likely new tasks
-        const actionWords = ['create', 'add', 'implement', 'fix', 'update', 'refactor', 'build', 'make', 'write'];
-        const lower = input.toLowerCase();
-        return input.length > 20 && actionWords.some(w => lower.includes(w));
-    }
+	/**
+	 * Analyze task complexity to suggest mode transitions
+	 */
+	private analyzeTaskComplexity(input: string): {
+		complexity: 'simple' | 'moderate' | 'complex';
+		suggestPlanMode: boolean;
+	} {
+		const lower = input.toLowerCase();
 
-    /**
-     * Analyze task complexity to suggest mode transitions
-     */
-    private analyzeTaskComplexity(input: string): { complexity: 'simple' | 'moderate' | 'complex'; suggestPlanMode: boolean } {
-        const lower = input.toLowerCase();
+		// Complexity indicators
+		const complexIndicators = [
+			'refactor',
+			'migrate',
+			'overhaul',
+			'redesign',
+			'architect',
+			'multiple files',
+			'across the codebase',
+			'all of',
+			'entire',
+			'integrate',
+			'replace all',
+			'comprehensive',
+			'full'
+		];
 
-        // Complexity indicators
-        const complexIndicators = [
-            'refactor', 'migrate', 'overhaul', 'redesign', 'architect',
-            'multiple files', 'across the codebase', 'all of', 'entire',
-            'integrate', 'replace all', 'comprehensive', 'full',
-        ];
+		const moderateIndicators = [
+			'add feature',
+			'implement',
+			'create',
+			'build',
+			'setup',
+			'configure',
+			'update',
+			'modify',
+			'change'
+		];
 
-        const moderateIndicators = [
-            'add feature', 'implement', 'create', 'build', 'setup',
-            'configure', 'update', 'modify', 'change',
-        ];
+		const simpleIndicators = [
+			'fix',
+			'typo',
+			'rename',
+			'delete',
+			'remove',
+			'quick',
+			'small',
+			'minor',
+			'simple',
+			'just',
+			'only'
+		];
 
-        const simpleIndicators = [
-            'fix', 'typo', 'rename', 'delete', 'remove', 'quick',
-            'small', 'minor', 'simple', 'just', 'only',
-        ];
+		// Count multi-step patterns
+		const hasMultiStep = /\b(and|then|also|after that|next)\b/gi.test(input);
+		const wordCount = input.split(/\s+/).length;
 
-        // Count multi-step patterns
-        const hasMultiStep = /\b(and|then|also|after that|next)\b/gi.test(input);
-        const wordCount = input.split(/\s+/).length;
+		// Determine complexity
+		let complexity: 'simple' | 'moderate' | 'complex' = 'simple';
 
-        // Determine complexity
-        let complexity: 'simple' | 'moderate' | 'complex' = 'simple';
+		if (
+			complexIndicators.some((i) => lower.includes(i)) ||
+			(hasMultiStep && wordCount > 30)
+		) {
+			complexity = 'complex';
+		} else if (
+			moderateIndicators.some((i) => lower.includes(i)) ||
+			wordCount > 15
+		) {
+			complexity = 'moderate';
+		} else if (simpleIndicators.some((i) => lower.includes(i))) {
+			complexity = 'simple';
+		}
 
-        if (complexIndicators.some(i => lower.includes(i)) || (hasMultiStep && wordCount > 30)) {
-            complexity = 'complex';
-        } else if (moderateIndicators.some(i => lower.includes(i)) || wordCount > 15) {
-            complexity = 'moderate';
-        } else if (simpleIndicators.some(i => lower.includes(i))) {
-            complexity = 'simple';
-        }
+		// Suggest plan mode for complex tasks when not already in plan mode
+		const currentMode = context.getMode();
+		const suggestPlanMode = complexity === 'complex' && currentMode !== 'plan';
 
-        // Suggest plan mode for complex tasks when not already in plan mode
-        const currentMode = context.getMode();
-        const suggestPlanMode = complexity === 'complex' && currentMode !== 'plan';
+		return { complexity, suggestPlanMode };
+	}
 
-        return { complexity, suggestPlanMode };
-    }
+	private extractTaskTitle(input: string): string {
+		// Take first 50 chars or first sentence
+		const firstSentence = input.split(/[.!?\n]/)[0];
+		return (
+			firstSentence.slice(0, 50) + (firstSentence.length > 50 ? '...' : '')
+		);
+	}
 
-    private extractTaskTitle(input: string): string {
-        // Take first 50 chars or first sentence
-        const firstSentence = input.split(/[.!?\n]/)[0];
-        return firstSentence.slice(0, 50) + (firstSentence.length > 50 ? '...' : '');
-    }
+	private async runPlanMode(input: string): Promise<void> {
+		// Step 1: Generate plan (READ-ONLY mode - no writes during planning)
+		bus.emitAgent({
+			type: 'thought',
+			content: 'Generating plan (read-only)...'
+		});
 
-    private async runPlanMode(input: string): Promise<void> {
-        // Step 1: Generate plan (READ-ONLY mode - no writes during planning)
-        bus.emitAgent({ type: 'thought', content: 'Generating plan (read-only)...' });
-
-        const planPrompt = `Analyze this request and create a plan.
+		const planPrompt = `Analyze this request and create a plan.
 
 IMPORTANT: You are in PLANNING mode. You may ONLY use read operations (read, list, grep, glob) to understand the codebase. Do NOT execute any writes or modifications yet.
 
@@ -313,152 +377,191 @@ FILES_READ: <comma separated paths or "none">
 FILES_MODIFY: <comma separated paths or "none">
 APPROVAL: <yes if destructive, no otherwise>`;
 
-        const readOnlyTools = ['read', 'list', 'grep', 'glob'];
-        
-        const planResponse = await llm.streamChat(planPrompt, { allowedTools: readOnlyTools });
+		const readOnlyTools = ['read', 'list', 'grep', 'glob'];
 
-        if (!planResponse) {
-            bus.emitAgent({ type: 'error', message: 'Failed to generate plan' });
-            return;
-        }
+		const planResponse = await llm.streamChat(planPrompt, {
+			allowedTools: readOnlyTools
+		});
 
-        // Parse plan
-        const plan = this.parsePlan(planResponse);
+		if (!planResponse) {
+			bus.emitAgent({ type: 'error', message: 'Failed to generate plan' });
+			return;
+		}
 
-        // Store pending plan for execution after approval
-        this.pendingPlan = { plan, originalInput: input };
+		// Parse plan
+		const plan = this.parsePlan(planResponse);
 
-        // Show plan and wait for approval
-        bus.emitAgent({
-            type: 'thought',
-            content: this.formatPlan(plan)
-        });
+		// Store pending plan for execution after approval
+		this.pendingPlan = { plan, originalInput: input };
 
-        bus.emitAgent({
-            type: 'approval_request',
-            requestId: `plan_${Date.now()}`,
-            context: `Execute this plan?\n\n${this.formatPlan(plan)}`,
-        });
+		// Show plan and wait for approval
+		bus.emitAgent({
+			type: 'thought',
+			content: this.formatPlan(plan)
+		});
 
-        // Approval handling happens via handleApprovalResponse
-        // Called by supervisor when user approves/denies
-    }
+		bus.emitAgent({
+			type: 'approval_request',
+			requestId: `plan_${Date.now()}`,
+			context: `Execute this plan?\n\n${this.formatPlan(plan)}`
+		});
 
-    private async runDirectMode(input: string): Promise<void> {
-        const startTime = Date.now();
+		// Approval handling happens via handleApprovalResponse
+		// Called by supervisor when user approves/denies
+	}
 
-        // Add context to prompt
-        const ctxSummary = context.getSummary();
-        const taskProgress = tasks.getProgress();
+	private async runDirectMode(input: string): Promise<void> {
+		const startTime = Date.now();
 
-        let enhancedInput = input;
-        if (ctxSummary || taskProgress !== 'No active task') {
-            enhancedInput = `${input}\n\n[Context: ${ctxSummary}]\n[${taskProgress}]`;
-        }
+		// Add context to prompt
+		const ctxSummary = context.getSummary();
+		const taskProgress = tasks.getProgress();
 
-        // Redact any PII from the enhanced input before sending to LLM
-        const redactionResult = redactor.redact(enhancedInput);
-        if (redactionResult.redactionCount > 0) {
-            enhancedInput = redactionResult.text;
-            bus.emitAgent({
-                type: 'thought',
-                content: `[Security] Redacted ${redactionResult.redactionCount} sensitive item(s) from context`,
-                hidden: true
-            });
-        }
+		let enhancedInput = input;
+		if (ctxSummary || taskProgress !== 'No active task') {
+			enhancedInput = `${input}\n\n[Context: ${ctxSummary}]\n[${taskProgress}]`;
+		}
 
-        const response = await llm.streamChat(enhancedInput);
+		// Auto-recall relevant memories based on user input
+		try {
+			const { memory } = await import('./memory.js');
+			const results = await memory.search(input);
+			if (results.length > 0) {
+				const relevant = results
+					.slice(0, 3)
+					.map((m) => `- ${m.key}: ${m.content}`)
+					.join('\n');
+				enhancedInput += `\n\n[RECALL - Relevant memories]\n${relevant}`;
+			}
+		} catch {
+			// Memory unavailable - non-fatal
+		}
 
-        // null means actual failure, empty string means LLM returned no text (valid for tool-only responses)
-        if (response !== null) {
-            let finalResponse = response;
+		// Redact any PII from the enhanced input before sending to LLM
+		const redactionResult = redactor.redact(enhancedInput);
+		if (redactionResult.redactionCount > 0) {
+			enhancedInput = redactionResult.text;
+			bus.emitAgent({
+				type: 'thought',
+				content: `[Security] Redacted ${redactionResult.redactionCount} sensitive item(s) from context`,
+				hidden: true
+			});
+		}
 
-            // Check if the model promised to act but didn't use any tools
-            const toolOutput = llm.getLastToolOutput();
-            if (finalResponse && !toolOutput) {
-                const lower = finalResponse.toLowerCase();
-                const isPromiseToAct = (
-                    lower.includes("i'll check") || lower.includes("let me check") ||
-                    lower.includes("i'll look") || lower.includes("let me look") ||
-                    lower.includes("i'll list") || lower.includes("let me list") ||
-                    lower.includes("i'll search") || lower.includes("let me search") ||
-                    lower.includes("checking") || lower.includes("looking into")
-                );
-                if (isPromiseToAct) {
-                    // Model said it would act but didn't call tools — force a follow-up
-                    const followUp = await llm.streamChat(
-                        '[System] You said you would check but did not call any tools. Call the appropriate tool NOW and present the actual results to the user.'
-                    );
-                    if (followUp && followUp.trim()) {
-                        finalResponse = followUp;
-                    }
-                }
-            }
+		const response = await llm.streamChat(enhancedInput);
 
-            // Emit the final response as a thought right before 'done' to ensure visibility
-            if (finalResponse && finalResponse.trim()) {
-                bus.emitAgent({ type: 'thought', content: finalResponse });
-            } else if (toolOutput) {
-                // LLM generated no text but tools ran — surface tool output
-                bus.emitAgent({ type: 'thought', content: toolOutput });
-            }
+		// null means actual failure, empty string means LLM returned no text (valid for tool-only responses)
+		if (response !== null) {
+			let finalResponse = response;
 
-            await context.setLastAction(input.slice(0, 50));
-            const durationMs = Date.now() - startTime;
-            usage.addSessionDuration(durationMs);
-            bus.emitAgent({ type: 'done', summary: `Completed in ${(durationMs / 1000).toFixed(1)}s` });
-        } else {
-            bus.emitAgent({ type: 'error', message: 'Failed to get response from LLM' });
-        }
-    }
+			// Check if the model promised to act but didn't use any tools
+			const toolOutput = llm.getLastToolOutput();
+			if (finalResponse && !toolOutput) {
+				const lower = finalResponse.toLowerCase();
+				const isPromiseToAct =
+					lower.includes("i'll check") ||
+					lower.includes('let me check') ||
+					lower.includes("i'll look") ||
+					lower.includes('let me look') ||
+					lower.includes("i'll list") ||
+					lower.includes('let me list') ||
+					lower.includes("i'll search") ||
+					lower.includes('let me search') ||
+					lower.includes('checking') ||
+					lower.includes('looking into');
+				if (isPromiseToAct) {
+					// Model said it would act but didn't call tools — force a follow-up
+					const followUp = await llm.streamChat(
+						'[System] You said you would check but did not call any tools. Call the appropriate tool NOW and present the actual results to the user.'
+					);
+					if (followUp && followUp.trim()) {
+						finalResponse = followUp;
+					}
+				}
+			}
 
-    async handleApprovalResponse(approved: boolean, requestId: string): Promise<void> {
-        if (requestId === 'agent:undo') {
-            if (approved) {
-                const result = await undo.undo(1);
-                bus.emitAgent({ type: 'thought', content: result.message });
-            } else {
-                bus.emitAgent({ type: 'thought', content: 'Undo cancelled.' });
-            }
-            return;
-        }
+			// Emit the final response as a thought right before 'done' to ensure visibility
+			if (finalResponse && finalResponse.trim()) {
+				bus.emitAgent({ type: 'thought', content: finalResponse });
+			} else if (toolOutput) {
+				// LLM generated no text but tools ran — surface tool output
+				bus.emitAgent({ type: 'thought', content: toolOutput });
+			}
 
-        if (!this.pendingPlan) {
-            return;
-        }
+			await context.setLastAction(input.slice(0, 50));
+			const durationMs = Date.now() - startTime;
+			usage.addSessionDuration(durationMs);
+			bus.emitAgent({
+				type: 'done',
+				summary: `Completed in ${(durationMs / 1000).toFixed(1)}s`
+			});
+		} else {
+			bus.emitAgent({
+				type: 'error',
+				message: 'Failed to get response from LLM'
+			});
+		}
+	}
 
-        if (!approved) {
-            bus.emitAgent({ type: 'thought', content: 'Plan rejected. Awaiting new instructions.' });
-            this.pendingPlan = null;
-            return;
-        }
+	async handleApprovalResponse(
+		approved: boolean,
+		requestId: string
+	): Promise<void> {
+		if (requestId === 'agent:undo') {
+			if (approved) {
+				const result = await undo.undo(1);
+				bus.emitAgent({ type: 'thought', content: result.message });
+			} else {
+				bus.emitAgent({ type: 'thought', content: 'Undo cancelled.' });
+			}
+			return;
+		}
 
-        const { plan, originalInput } = this.pendingPlan;
-        this.pendingPlan = null;
+		if (!this.pendingPlan) {
+			return;
+		}
 
-        // Auto-create task and steps (only if plan has a valid task title)
-        if (plan.task && plan.task.trim()) {
-            await tools.execute('task', { action: 'create', title: plan.task });
-            for (const step of plan.steps) {
-                if (step && step.trim()) {
-                    await tools.execute('task', { action: 'add_step', step });
-                }
-            }
-        }
+		if (!approved) {
+			bus.emitAgent({
+				type: 'thought',
+				content: 'Plan rejected. Awaiting new instructions.'
+			});
+			this.pendingPlan = null;
+			return;
+		}
 
-        await this.executePlan(plan, originalInput);
-    }
+		const { plan, originalInput } = this.pendingPlan;
+		this.pendingPlan = null;
 
-    private async executePlan(plan: AgentPlan, originalInput: string): Promise<void> {
-        const startTime = Date.now();
+		// Auto-create task and steps (only if plan has a valid task title)
+		if (plan.task && plan.task.trim()) {
+			await tools.execute('task', { action: 'create', title: plan.task });
+			for (const step of plan.steps) {
+				if (step && step.trim()) {
+					await tools.execute('task', { action: 'add_step', step });
+				}
+			}
+		}
 
-        // Switch to auto mode for plan execution (user already approved the plan)
-        const previousMode = context.getMode();
-        await context.setMode('auto');
-        bus.emitAgent({ type: 'thought', content: 'Executing approved plan (auto-accept enabled)...' });
+		await this.executePlan(plan, originalInput);
+	}
 
-        // Build execution prompt with plan context
-        const executionPrompt = `Execute this plan step by step:
+	private async executePlan(
+		plan: AgentPlan,
+		originalInput: string
+	): Promise<void> {
+		const startTime = Date.now();
+
+		// Switch to auto mode for plan execution (user already approved the plan)
+		const previousMode = context.getMode();
+		await context.setMode('auto');
+		bus.emitAgent({
+			type: 'thought',
+			content: 'Executing approved plan (auto-accept enabled)...'
+		});
+
+		// Build execution prompt with plan context
+		const executionPrompt = `Execute this plan step by step:
 
 ORIGINAL REQUEST: ${originalInput}
 
@@ -478,91 +581,103 @@ OTHER RULES:
 - Do NOT create summary files (SUMMARY.md, START_HERE.txt, etc.)
 - Report results directly in chat.`;
 
-        try {
-            const response = await llm.streamChat(executionPrompt);
+		try {
+			const response = await llm.streamChat(executionPrompt);
 
-            if (response) {
-                await context.setLastAction(`Executed: ${plan.task.slice(0, 40)}`);
-                const durationMs = Date.now() - startTime;
-                usage.addSessionDuration(durationMs);
-                bus.emitAgent({ type: 'done', summary: `Plan executed in ${(durationMs / 1000).toFixed(1)}s` });
-            } else {
-                bus.emitAgent({ type: 'error', message: 'Failed to execute plan' });
-            }
-        } finally {
-            // Restore previous mode after execution
-            if (previousMode) {
-                await context.setMode(previousMode);
-            }
-        }
-    }
+			if (response) {
+				await context.setLastAction(`Executed: ${plan.task.slice(0, 40)}`);
+				const durationMs = Date.now() - startTime;
+				usage.addSessionDuration(durationMs);
+				bus.emitAgent({
+					type: 'done',
+					summary: `Plan executed in ${(durationMs / 1000).toFixed(1)}s`
+				});
+			} else {
+				bus.emitAgent({ type: 'error', message: 'Failed to execute plan' });
+			}
+		} finally {
+			// Restore previous mode after execution
+			if (previousMode) {
+				await context.setMode(previousMode);
+			}
+		}
+	}
 
-    private parsePlan(response: string): AgentPlan {
-        const lines = response.split('\n');
-        const plan: AgentPlan = {
-            task: '',
-            steps: [],
-            files_to_read: [],
-            files_to_modify: [],
-            requires_approval: false,
-        };
+	private parsePlan(response: string): AgentPlan {
+		const lines = response.split('\n');
+		const plan: AgentPlan = {
+			task: '',
+			steps: [],
+			files_to_read: [],
+			files_to_modify: [],
+			requires_approval: false
+		};
 
-        for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (trimmedLine.toUpperCase().startsWith('TASK:')) {
-                plan.task = trimmedLine.slice(5).trim();
-            } else if (trimmedLine.match(/^\d+\.\s/)) {
-                const step = trimmedLine.replace(/^\d+\.\s*/, '').trim();
-                if (step) plan.steps.push(step);
-            } else if (trimmedLine.toUpperCase().startsWith('FILES_READ:')) {
-                const files = trimmedLine.slice(11).trim();
-                if (files && files.toLowerCase() !== 'none') {
-                    plan.files_to_read = files.split(',').map(f => f.trim()).filter(f => f);
-                }
-            } else if (trimmedLine.toUpperCase().startsWith('FILES_MODIFY:')) {
-                const files = trimmedLine.slice(13).trim();
-                if (files && files.toLowerCase() !== 'none') {
-                    plan.files_to_modify = files.split(',').map(f => f.trim()).filter(f => f);
-                }
-            } else if (trimmedLine.toUpperCase().startsWith('APPROVAL:')) {
-                plan.requires_approval = trimmedLine.toLowerCase().includes('yes');
-            }
-        }
+		for (const line of lines) {
+			const trimmedLine = line.trim();
+			if (trimmedLine.toUpperCase().startsWith('TASK:')) {
+				plan.task = trimmedLine.slice(5).trim();
+			} else if (trimmedLine.match(/^\d+\.\s/)) {
+				const step = trimmedLine.replace(/^\d+\.\s*/, '').trim();
+				if (step) plan.steps.push(step);
+			} else if (trimmedLine.toUpperCase().startsWith('FILES_READ:')) {
+				const files = trimmedLine.slice(11).trim();
+				if (files && files.toLowerCase() !== 'none') {
+					plan.files_to_read = files
+						.split(',')
+						.map((f) => f.trim())
+						.filter((f) => f);
+				}
+			} else if (trimmedLine.toUpperCase().startsWith('FILES_MODIFY:')) {
+				const files = trimmedLine.slice(13).trim();
+				if (files && files.toLowerCase() !== 'none') {
+					plan.files_to_modify = files
+						.split(',')
+						.map((f) => f.trim())
+						.filter((f) => f);
+				}
+			} else if (trimmedLine.toUpperCase().startsWith('APPROVAL:')) {
+				plan.requires_approval = trimmedLine.toLowerCase().includes('yes');
+			}
+		}
 
-        // Fallback: If no TASK: line found, try to extract from first meaningful line
-        if (!plan.task && lines.length > 0) {
-            const firstNonEmpty = lines.find(l => l.trim() && !l.trim().match(/^(TASK|FILES|APPROVAL|STEPS|\d+\.)/i));
-            if (firstNonEmpty) {
-                plan.task = firstNonEmpty.trim().slice(0, 100); // Use first 100 chars as fallback
-            }
-        }
+		// Fallback: If no TASK: line found, try to extract from first meaningful line
+		if (!plan.task && lines.length > 0) {
+			const firstNonEmpty = lines.find(
+				(l) =>
+					l.trim() && !l.trim().match(/^(TASK|FILES|APPROVAL|STEPS|\d+\.)/i)
+			);
+			if (firstNonEmpty) {
+				plan.task = firstNonEmpty.trim().slice(0, 100); // Use first 100 chars as fallback
+			}
+		}
 
-        return plan;
-    }
+		return plan;
+	}
 
-    private formatPlan(plan: AgentPlan): string {
-        const lines = [`Task: ${plan.task}`, '', 'Steps:'];
-        plan.steps.forEach((s, i) => lines.push(`  ${i + 1}. ${s}`));
+	private formatPlan(plan: AgentPlan): string {
+		const lines = [`Task: ${plan.task}`, '', 'Steps:'];
+		plan.steps.forEach((s, i) => lines.push(`  ${i + 1}. ${s}`));
 
-        if (plan.files_to_read.length > 0) {
-            lines.push('', `Read: ${plan.files_to_read.join(', ')}`);
-        }
-        if (plan.files_to_modify.length > 0) {
-            lines.push(`Modify: ${plan.files_to_modify.join(', ')}`);
-        }
+		if (plan.files_to_read.length > 0) {
+			lines.push('', `Read: ${plan.files_to_read.join(', ')}`);
+		}
+		if (plan.files_to_modify.length > 0) {
+			lines.push(`Modify: ${plan.files_to_modify.join(', ')}`);
+		}
 
-        return lines.join('\n');
-    }
+		return lines.join('\n');
+	}
 
-    // Mode control
-    async setMode(mode: 'auto' | 'plan' | 'safe'): Promise<void> {
-        await context.setMode(mode);
-        bus.emitAgent({ type: 'thought', content: `Mode: ${mode}` });
-    }
+	// Mode control
+	async setMode(mode: 'auto' | 'plan' | 'safe'): Promise<void> {
+		await context.setMode(mode);
+		bus.emitAgent({ type: 'thought', content: `Mode: ${mode}` });
+	}
 
-    getMode(): string {
-        return context.getMode();
-    }
+	getMode(): string {
+		return context.getMode();
+	}
 }
 
 export const agent = new Agent();

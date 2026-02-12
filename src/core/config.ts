@@ -8,183 +8,235 @@ import { z } from 'zod';
 // Do not store API keys in config - use /init to set up secure key storage
 
 export const ConfigSchema = z.object({
-    model: z.string().default('claude-opus-4-6-20260207'),
-    workspaceRoot: z.string().default(os.homedir()),
-    maxTokens: z.number().default(8192),
-    language: z.string().default('en'),
-    // Deprecated: apiKey should be managed by KeyManager, not stored in config
-    apiKey: z.string().optional(),
+	model: z.string().default('claude-opus-4-6-20260207'),
+	workspaceRoot: z.string().default(os.homedir()),
+	maxTokens: z.number().default(8192),
+	language: z.string().default('en'),
+	// Deprecated: apiKey should be managed by KeyManager, not stored in config
+	apiKey: z.string().optional(),
 
-    // Sandbox Configuration
-    executionMode: z.enum(['local', 'sandbox']).default('local'),
-    sandbox: z.object({
-        allowedDomains: z.array(z.string()).default(['*.github.com', '*.npmjs.org', '*.npmjs.com', 'api.anthropic.com', 'registry.npmjs.org']),
-        deniedDomains: z.array(z.string()).default([]),
-        denyRead: z.array(z.string()).default(['~/.ssh', '~/.aws', '~/.config/gcloud', '~/.kube', '~/.gnupg']),
-        allowWrite: z.array(z.string()).default(['.', '/tmp']),
-        denyWrite: z.array(z.string()).default(['.env', '.env.*', '*.key', '*.pem', '.git/config']),
-    }).default({}),
+	// Provider Configuration (MoE - Mixture of Experts)
+	provider: z.enum(['anthropic', 'ollama', 'moe']).default('anthropic'),
+	ollama: z
+		.object({
+			baseUrl: z.string().default('http://localhost:11434'),
+			models: z
+				.object({
+					// Optimized for 8GB RAM systems (Q4 quantization, max 8B params)
+					tool: z.string().default('llama3.1:8b-instruct-q4_K_M'), // 4.7GB - function calling
+					chat: z.string().default('qwen2.5:3b-instruct-q4_K_M'), // 2GB - fast general chat
+					reasoning: z.string().default('llama3.1:8b-instruct-q4_K_M') // 4.7GB - fallback to tool model
+				})
+				.default({})
+		})
+		.default({}),
 
-    // Context Management
-    summarizerModel: z.string().default('claude-haiku-4-5-20251001'),
+	// Sandbox Configuration
+	executionMode: z.enum(['local', 'sandbox']).default('local'),
+	sandbox: z
+		.object({
+			allowedDomains: z
+				.array(z.string())
+				.default([
+					'*.github.com',
+					'*.npmjs.org',
+					'*.npmjs.com',
+					'api.anthropic.com',
+					'registry.npmjs.org'
+				]),
+			deniedDomains: z.array(z.string()).default([]),
+			denyRead: z
+				.array(z.string())
+				.default([
+					'~/.ssh',
+					'~/.aws',
+					'~/.config/gcloud',
+					'~/.kube',
+					'~/.gnupg'
+				]),
+			allowWrite: z.array(z.string()).default(['.', '/tmp']),
+			denyWrite: z
+				.array(z.string())
+				.default(['.env', '.env.*', '*.key', '*.pem', '.git/config'])
+		})
+		.default({}),
 
-    // Adaptive Thinking
-    thinkingEffort: z.enum(['low', 'medium', 'high', 'max']).default('high'),
+	// Context Management
+	summarizerModel: z.string().default('claude-haiku-4-5-20251001'),
 
-    // Token Counting
-    // When true, uses Anthropic's countTokens API for accurate pre-request validation
-    // Set to false to skip pre-counting (saves ~100-500ms latency per request)
-    preCountTokens: z.boolean().default(true),
+	// Adaptive Thinking
+	thinkingEffort: z.enum(['low', 'medium', 'high', 'max']).default('high'),
+
+	// Token Counting
+	// When true, uses Anthropic's countTokens API for accurate pre-request validation
+	// Set to false to skip pre-counting (saves ~100-500ms latency per request)
+	preCountTokens: z.boolean().default(true)
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
 
 const DEFAULT_CONFIG: Config = {
-    model: 'claude-opus-4-6-20260207',
-    maxTokens: 8192,
-    language: 'en',
-    workspaceRoot: os.homedir(),
-    executionMode: 'local',
-    sandbox: {
-        allowedDomains: ['*.github.com', '*.npmjs.org', '*.npmjs.com', 'api.anthropic.com', 'registry.npmjs.org'],
-        deniedDomains: [],
-        denyRead: ['~/.ssh', '~/.aws', '~/.config/gcloud', '~/.kube', '~/.gnupg'],
-        allowWrite: ['.', '/tmp'],
-        denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config'],
-    },
-    summarizerModel: 'claude-haiku-4-5-20251001',
-    thinkingEffort: 'high',
-    preCountTokens: true,
+	model: 'claude-opus-4-6-20260207',
+	maxTokens: 8192,
+	language: 'en',
+	workspaceRoot: os.homedir(),
+	provider: 'anthropic',
+	ollama: {
+		baseUrl: 'http://localhost:11434',
+		models: {
+			tool: 'llama3.1:8b-instruct-q4_K_M',
+			chat: 'qwen2.5:3b-instruct-q4_K_M',
+			reasoning: 'llama3.1:8b-instruct-q4_K_M'
+		}
+	},
+	executionMode: 'local',
+	sandbox: {
+		allowedDomains: [
+			'*.github.com',
+			'*.npmjs.org',
+			'*.npmjs.com',
+			'api.anthropic.com',
+			'registry.npmjs.org'
+		],
+		deniedDomains: [],
+		denyRead: ['~/.ssh', '~/.aws', '~/.config/gcloud', '~/.kube', '~/.gnupg'],
+		allowWrite: ['.', '/tmp'],
+		denyWrite: ['.env', '.env.*', '*.key', '*.pem', '.git/config']
+	},
+	summarizerModel: 'claude-haiku-4-5-20251001',
+	thinkingEffort: 'high',
+	preCountTokens: true
 };
 
 export class ConfigManager {
-    private configPath: string;
-    private cachedConfig: Config | null = null;
-    private hasDeprecatedApiKey: boolean = false;
+	private configPath: string;
+	private cachedConfig: Config | null = null;
+	private hasDeprecatedApiKey: boolean = false;
 
-    constructor(customPath?: string) {
-        this.configPath = customPath || path.join(os.homedir(), '.obsidian-next', 'config.json');
-    }
+	constructor(customPath?: string) {
+		this.configPath =
+			customPath || path.join(os.homedir(), '.obsidian-next', 'config.json');
+	}
 
-    async load(): Promise<Config> {
-        // Return cached if available
-        if (this.cachedConfig) return this.cachedConfig;
+	async load(): Promise<Config> {
+		// Return cached if available
+		if (this.cachedConfig) return this.cachedConfig;
 
-        return this.reload();
-    }
+		return this.reload();
+	}
 
-    async reload(): Promise<Config> {
-        let loadedConfig = DEFAULT_CONFIG;
+	async reload(): Promise<Config> {
+		let loadedConfig = DEFAULT_CONFIG;
 
-        try {
-            const data = await fs.readFile(this.configPath, 'utf-8');
-            const parsed = JSON.parse(data);
-            loadedConfig = { ...DEFAULT_CONFIG, ...parsed };
+		try {
+			const data = await fs.readFile(this.configPath, 'utf-8');
+			const parsed = JSON.parse(data);
+			loadedConfig = { ...DEFAULT_CONFIG, ...parsed };
 
-            // Warn if deprecated apiKey found in config file
-            if (parsed.apiKey) {
-                this.hasDeprecatedApiKey = true;
-            }
-        } catch {
-            // File missing or invalid, use defaults
-        }
+			// Warn if deprecated apiKey found in config file
+			if (parsed.apiKey) {
+				this.hasDeprecatedApiKey = true;
+			}
+		} catch {
+			// File missing or invalid, use defaults
+		}
 
-        const finalConfig = ConfigSchema.parse(loadedConfig);
+		const finalConfig = ConfigSchema.parse(loadedConfig);
 
-        this.cachedConfig = finalConfig;
-        return finalConfig;
-    }
+		this.cachedConfig = finalConfig;
+		return finalConfig;
+	}
 
-    /**
-     * Check if config has deprecated apiKey field
-     * Users should migrate to KeyManager via /init
-     */
-    hasDeprecatedKey(): boolean {
-        return this.hasDeprecatedApiKey;
-    }
+	/**
+	 * Check if config has deprecated apiKey field
+	 * Users should migrate to KeyManager via /init
+	 */
+	hasDeprecatedKey(): boolean {
+		return this.hasDeprecatedApiKey;
+	}
 
-    /**
-     * Get deprecated apiKey for migration to KeyManager
-     */
-    getDeprecatedApiKey(): string | undefined {
-        return this.cachedConfig?.apiKey;
-    }
+	/**
+	 * Get deprecated apiKey for migration to KeyManager
+	 */
+	getDeprecatedApiKey(): string | undefined {
+		return this.cachedConfig?.apiKey;
+	}
 
-    /**
-     * Remove apiKey from config file after successful migration
-     */
-    async removeApiKeyFromConfig(): Promise<void> {
-        try {
-            const data = await fs.readFile(this.configPath, 'utf-8');
-            const parsed = JSON.parse(data);
+	/**
+	 * Remove apiKey from config file after successful migration
+	 */
+	async removeApiKeyFromConfig(): Promise<void> {
+		try {
+			const data = await fs.readFile(this.configPath, 'utf-8');
+			const parsed = JSON.parse(data);
 
-            if (parsed.apiKey) {
-                delete parsed.apiKey;
-                await fs.writeFile(this.configPath, JSON.stringify(parsed, null, 2));
-                this.hasDeprecatedApiKey = false;
-                this.clearCache();
-            }
-        } catch {
-            // Config file may not exist
-        }
-    }
+			if (parsed.apiKey) {
+				delete parsed.apiKey;
+				await fs.writeFile(this.configPath, JSON.stringify(parsed, null, 2));
+				this.hasDeprecatedApiKey = false;
+				this.clearCache();
+			}
+		} catch {
+			// Config file may not exist
+		}
+	}
 
-    clearCache(): void {
-        this.cachedConfig = null;
-    }
+	clearCache(): void {
+		this.cachedConfig = null;
+	}
 
-    async save(config: Config): Promise<void> {
-        const dir = path.dirname(this.configPath);
-        await fs.mkdir(dir, { recursive: true });
+	async save(config: Config): Promise<void> {
+		const dir = path.dirname(this.configPath);
+		await fs.mkdir(dir, { recursive: true });
 
-        // Never save apiKey to config file - use KeyManager instead
-        // Never save workspaceRoot to global config - it should always be process.cwd() or set by local config
-        const { apiKey, workspaceRoot, ...safeConfig } = config;
+		// Never save apiKey to config file - use KeyManager instead
+		// Never save workspaceRoot to global config - it should always be process.cwd() or set by local config
+		const { apiKey, workspaceRoot, ...safeConfig } = config;
 
-        await fs.writeFile(this.configPath, JSON.stringify(safeConfig, null, 2));
-        this.clearCache();
-    }
+		await fs.writeFile(this.configPath, JSON.stringify(safeConfig, null, 2));
+		this.clearCache();
+	}
 
-    async exists(): Promise<boolean> {
-        try {
-            await fs.access(this.configPath);
-            return true;
-        } catch {
-            return false;
-        }
-    }
+	async exists(): Promise<boolean> {
+		try {
+			await fs.access(this.configPath);
+			return true;
+		} catch {
+			return false;
+		}
+	}
 
-    getPath(): string {
-        return this.configPath;
-    }
+	getPath(): string {
+		return this.configPath;
+	}
 
-    /**
-     * Dynamically get the project version from package.json
-     */
-    async getVersion(): Promise<string> {
-        try {
-            const selfPath = fileURLToPath(import.meta.url);
-            let currentDir = path.dirname(selfPath);
+	/**
+	 * Dynamically get the project version from package.json
+	 */
+	async getVersion(): Promise<string> {
+		try {
+			const selfPath = fileURLToPath(import.meta.url);
+			let currentDir = path.dirname(selfPath);
 
-            // Search upwards for package.json
-            for (let i = 0; i < 5; i++) {
-                const pkgPath = path.join(currentDir, 'package.json');
-                try {
-                    const data = await fs.readFile(pkgPath, 'utf-8');
-                    const pkg = JSON.parse(data);
-                    if (pkg.name === '@aurora-foundation/obsidian-next') {
-                        return pkg.version;
-                    }
-                } catch {
-                    // Not in this dir, go up
-                }
-                currentDir = path.dirname(currentDir);
-            }
-            return '0.4.5'; // Fallback
-        } catch {
-            return '0.4.5';
-        }
-    }
+			// Search upwards for package.json
+			for (let i = 0; i < 5; i++) {
+				const pkgPath = path.join(currentDir, 'package.json');
+				try {
+					const data = await fs.readFile(pkgPath, 'utf-8');
+					const pkg = JSON.parse(data);
+					if (pkg.name === '@aurora-foundation/obsidian-next') {
+						return pkg.version;
+					}
+				} catch {
+					// Not in this dir, go up
+				}
+				currentDir = path.dirname(currentDir);
+			}
+			return '0.4.5'; // Fallback
+		} catch {
+			return '0.4.5';
+		}
+	}
 }
 
 export const config = new ConfigManager();

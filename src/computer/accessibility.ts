@@ -14,46 +14,46 @@
 import { shell } from './shell.js';
 
 export interface UIElement {
-    name: string;
-    role: string;
-    position: [number, number];
-    size: [number, number];
-    enabled: boolean;
-    focused: boolean;
+	name: string;
+	role: string;
+	position: [number, number];
+	size: [number, number];
+	enabled: boolean;
+	focused: boolean;
 }
 
 export interface WindowInfo {
-    name: string;
-    app: string;
-    position: [number, number];
-    size: [number, number];
-    focused: boolean;
+	name: string;
+	app: string;
+	position: [number, number];
+	size: [number, number];
+	focused: boolean;
 }
 
 /**
  * Get the currently focused application name
  */
 export async function getFocusedApp(): Promise<string> {
-    try {
-        const script = `
+	try {
+		const script = `
             tell application "System Events"
                 set frontApp to first application process whose frontmost is true
                 return name of frontApp
             end tell
         `;
-        const { stdout } = await shell.execute(`osascript -e '${script}'`);
-        return stdout.trim();
-    } catch (error) {
-        return 'Unknown';
-    }
+		const { stdout } = await shell.execute(`osascript -e '${script}'`);
+		return stdout.trim();
+	} catch (error) {
+		return 'Unknown';
+	}
 }
 
 /**
  * Get the title of the frontmost window
  */
 export async function getFocusedWindowTitle(): Promise<string> {
-    try {
-        const script = `
+	try {
+		const script = `
             tell application "System Events"
                 set frontApp to first application process whose frontmost is true
                 tell frontApp
@@ -65,19 +65,19 @@ export async function getFocusedWindowTitle(): Promise<string> {
                 end tell
             end tell
         `;
-        const { stdout } = await shell.execute(`osascript -e '${script}'`);
-        return stdout.trim();
-    } catch (error) {
-        return '';
-    }
+		const { stdout } = await shell.execute(`osascript -e '${script}'`);
+		return stdout.trim();
+	} catch (error) {
+		return '';
+	}
 }
 
 /**
  * List all visible windows across applications
  */
 export async function listWindows(): Promise<WindowInfo[]> {
-    try {
-        const script = `
+	try {
+		const script = `
             set output to ""
             tell application "System Events"
                 repeat with proc in (every process whose visible is true)
@@ -94,29 +94,29 @@ export async function listWindows(): Promise<WindowInfo[]> {
             end tell
             return output
         `;
-        const { stdout } = await shell.execute(`osascript -e '${script}'`);
+		const { stdout } = await shell.execute(`osascript -e '${script}'`);
 
-        const windows: WindowInfo[] = [];
-        for (const line of stdout.trim().split('\n')) {
-            if (!line) continue;
-            const [app, name, posStr, sizeStr] = line.split('|');
-            if (!posStr || !sizeStr) continue;
+		const windows: WindowInfo[] = [];
+		for (const line of stdout.trim().split('\n')) {
+			if (!line) continue;
+			const [app, name, posStr, sizeStr] = line.split('|');
+			if (!posStr || !sizeStr) continue;
 
-            const pos = posStr.split(',').map(Number) as [number, number];
-            const size = sizeStr.split(',').map(Number) as [number, number];
+			const pos = posStr.split(',').map(Number) as [number, number];
+			const size = sizeStr.split(',').map(Number) as [number, number];
 
-            windows.push({
-                name: name || '',
-                app: app || '',
-                position: pos,
-                size: size,
-                focused: false
-            });
-        }
-        return windows;
-    } catch (error) {
-        return [];
-    }
+			windows.push({
+				name: name || '',
+				app: app || '',
+				position: pos,
+				size: size,
+				focused: false
+			});
+		}
+		return windows;
+	} catch (error) {
+		return [];
+	}
 }
 
 /**
@@ -124,14 +124,14 @@ export async function listWindows(): Promise<WindowInfo[]> {
  * Returns the center coordinates if found
  */
 export async function findElementByLabel(
-    label: string,
-    appName?: string
+	label: string,
+	appName?: string
 ): Promise<{ x: number; y: number; width: number; height: number } | null> {
-    try {
-        const targetApp = appName || await getFocusedApp();
+	try {
+		const targetApp = appName || (await getFocusedApp());
 
-        // Search for button, text field, or any element with matching name
-        const script = `
+		// Search for button, text field, or any element with matching name
+		const script = `
             tell application "System Events"
                 tell process "${targetApp}"
                     set targetElements to every UI element of window 1 whose name contains "${label}"
@@ -161,40 +161,45 @@ export async function findElementByLabel(
             end tell
         `;
 
-        const { stdout } = await shell.execute(`osascript -e '${script}'`);
-        const result = stdout.trim();
+		const { stdout } = await shell.execute(`osascript -e '${script}'`);
+		const result = stdout.trim();
 
-        if (!result) return null;
+		if (!result) return null;
 
-        const [x, y, width, height] = result.split(',').map(Number);
-        return { x, y, width, height };
-    } catch (error) {
-        return null;
-    }
+		const [x, y, width, height] = result.split(',').map(Number);
+		return { x, y, width, height };
+	} catch (error) {
+		return null;
+	}
 }
 
 /**
  * Find a clickable element (button, link, etc.) by label
  * Returns center coordinates for clicking
  */
-export async function findClickableByLabel(label: string): Promise<[number, number] | null> {
-    const element = await findElementByLabel(label);
-    if (!element) return null;
+export async function findClickableByLabel(
+	label: string
+): Promise<[number, number] | null> {
+	const element = await findElementByLabel(label);
+	if (!element) return null;
 
-    // Return center of element for clicking
-    const centerX = Math.round(element.x + element.width / 2);
-    const centerY = Math.round(element.y + element.height / 2);
-    return [centerX, centerY];
+	// Return center of element for clicking
+	const centerX = Math.round(element.x + element.width / 2);
+	const centerY = Math.round(element.y + element.height / 2);
+	return [centerX, centerY];
 }
 
 /**
  * Click on a UI element by its label (accessibility-based click)
  */
-export async function clickElementByLabel(label: string, appName?: string): Promise<boolean> {
-    try {
-        const targetApp = appName || await getFocusedApp();
+export async function clickElementByLabel(
+	label: string,
+	appName?: string
+): Promise<boolean> {
+	try {
+		const targetApp = appName || (await getFocusedApp());
 
-        const script = `
+		const script = `
             tell application "System Events"
                 tell process "${targetApp}"
                     set targetElements to every button of window 1 whose name contains "${label}"
@@ -215,21 +220,21 @@ export async function clickElementByLabel(label: string, appName?: string): Prom
             end tell
         `;
 
-        const { stdout } = await shell.execute(`osascript -e '${script}'`);
-        return stdout.trim() === 'clicked';
-    } catch (error) {
-        return false;
-    }
+		const { stdout } = await shell.execute(`osascript -e '${script}'`);
+		return stdout.trim() === 'clicked';
+	} catch (error) {
+		return false;
+	}
 }
 
 /**
  * Get all buttons in the current window
  */
 export async function getButtons(appName?: string): Promise<string[]> {
-    try {
-        const targetApp = appName || await getFocusedApp();
+	try {
+		const targetApp = appName || (await getFocusedApp());
 
-        const script = `
+		const script = `
             set buttonNames to {}
             tell application "System Events"
                 tell process "${targetApp}"
@@ -246,21 +251,24 @@ export async function getButtons(appName?: string): Promise<string[]> {
             return buttonNames as text
         `;
 
-        const { stdout } = await shell.execute(`osascript -e '${script}'`);
-        return stdout.trim().split(', ').filter(b => b);
-    } catch (error) {
-        return [];
-    }
+		const { stdout } = await shell.execute(`osascript -e '${script}'`);
+		return stdout
+			.trim()
+			.split(', ')
+			.filter((b) => b);
+	} catch (error) {
+		return [];
+	}
 }
 
 /**
  * Get all text fields in the current window
  */
 export async function getTextFields(appName?: string): Promise<string[]> {
-    try {
-        const targetApp = appName || await getFocusedApp();
+	try {
+		const targetApp = appName || (await getFocusedApp());
 
-        const script = `
+		const script = `
             set fieldNames to {}
             tell application "System Events"
                 tell process "${targetApp}"
@@ -277,123 +285,133 @@ export async function getTextFields(appName?: string): Promise<string[]> {
             return fieldNames as text
         `;
 
-        const { stdout } = await shell.execute(`osascript -e '${script}'`);
-        return stdout.trim().split(', ').filter(f => f);
-    } catch (error) {
-        return [];
-    }
+		const { stdout } = await shell.execute(`osascript -e '${script}'`);
+		return stdout
+			.trim()
+			.split(', ')
+			.filter((f) => f);
+	} catch (error) {
+		return [];
+	}
 }
 
 /**
  * Activate (bring to front) an application
  */
 export async function activateApp(appName: string): Promise<boolean> {
-    try {
-        const script = `
+	try {
+		const script = `
             tell application "${appName}"
                 activate
             end tell
             return "ok"
         `;
-        const { stdout } = await shell.execute(`osascript -e '${script}'`);
-        return stdout.trim() === 'ok';
-    } catch (error) {
-        return false;
-    }
+		const { stdout } = await shell.execute(`osascript -e '${script}'`);
+		return stdout.trim() === 'ok';
+	} catch (error) {
+		return false;
+	}
 }
 
 /**
  * Type text into the focused field using System Events (more reliable than cliclick)
  */
 export async function typeTextAccessibility(text: string): Promise<boolean> {
-    try {
-        // Escape special characters for AppleScript
-        const escaped = text
-            .replace(/\\/g, '\\\\')
-            .replace(/"/g, '\\"');
+	try {
+		// Escape special characters for AppleScript
+		const escaped = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
-        const script = `
+		const script = `
             tell application "System Events"
                 keystroke "${escaped}"
             end tell
             return "ok"
         `;
-        const { stdout } = await shell.execute(`osascript -e '${script}'`);
-        return stdout.trim() === 'ok';
-    } catch (error) {
-        return false;
-    }
+		const { stdout } = await shell.execute(`osascript -e '${script}'`);
+		return stdout.trim() === 'ok';
+	} catch (error) {
+		return false;
+	}
 }
 
 /**
  * Press a key using System Events
  */
 export async function pressKeyAccessibility(key: string): Promise<boolean> {
-    try {
-        // Map common key names to key codes
-        const keyCodeMap: Record<string, number> = {
-            'return': 36, 'enter': 36,
-            'escape': 53, 'esc': 53,
-            'tab': 48,
-            'space': 49,
-            'delete': 51, 'backspace': 51,
-            'up': 126, 'down': 125, 'left': 123, 'right': 124,
-            'home': 115, 'end': 119,
-            'pageup': 116, 'pagedown': 121,
-        };
+	try {
+		// Map common key names to key codes
+		const keyCodeMap: Record<string, number> = {
+			return: 36,
+			enter: 36,
+			escape: 53,
+			esc: 53,
+			tab: 48,
+			space: 49,
+			delete: 51,
+			backspace: 51,
+			up: 126,
+			down: 125,
+			left: 123,
+			right: 124,
+			home: 115,
+			end: 119,
+			pageup: 116,
+			pagedown: 121
+		};
 
-        const keyLower = key.toLowerCase();
-        const keyCode = keyCodeMap[keyLower];
+		const keyLower = key.toLowerCase();
+		const keyCode = keyCodeMap[keyLower];
 
-        let script: string;
-        if (keyCode) {
-            script = `
+		let script: string;
+		if (keyCode) {
+			script = `
                 tell application "System Events"
                     key code ${keyCode}
                 end tell
                 return "ok"
             `;
-        } else if (key.length === 1) {
-            script = `
+		} else if (key.length === 1) {
+			script = `
                 tell application "System Events"
                     keystroke "${key}"
                 end tell
                 return "ok"
             `;
-        } else {
-            return false;
-        }
+		} else {
+			return false;
+		}
 
-        const { stdout } = await shell.execute(`osascript -e '${script}'`);
-        return stdout.trim() === 'ok';
-    } catch (error) {
-        return false;
-    }
+		const { stdout } = await shell.execute(`osascript -e '${script}'`);
+		return stdout.trim() === 'ok';
+	} catch (error) {
+		return false;
+	}
 }
 
 /**
  * Get a summary of the current UI state for the agent
  */
 export async function getUIContext(): Promise<string> {
-    const [app, windowTitle, buttons, textFields] = await Promise.all([
-        getFocusedApp(),
-        getFocusedWindowTitle(),
-        getButtons(),
-        getTextFields()
-    ]);
+	const [app, windowTitle, buttons, textFields] = await Promise.all([
+		getFocusedApp(),
+		getFocusedWindowTitle(),
+		getButtons(),
+		getTextFields()
+	]);
 
-    const lines = [
-        `Focused App: ${app}`,
-        `Window: ${windowTitle || '(none)'}`,
-    ];
+	const lines = [`Focused App: ${app}`, `Window: ${windowTitle || '(none)'}`];
 
-    if (buttons.length > 0) {
-        lines.push(`Buttons: ${buttons.slice(0, 10).join(', ')}${buttons.length > 10 ? '...' : ''}`);
-    }
+	if (buttons.length > 0) {
+		lines.push(
+			`Buttons: ${buttons.slice(0, 10).join(', ')}${buttons.length > 10 ? '...' : ''}`
+		);
+	}
 
-    if (textFields.length > 0) {
-        lines.push(`Text Fields: ${textFields.slice(0, 5).join(', ')}${textFields.length > 5 ? '...' : ''}`);
-    }
+	if (textFields.length > 0) {
+		lines.push(
+			`Text Fields: ${textFields.slice(0, 5).join(', ')}${textFields.length > 5 ? '...' : ''}`
+		);
+	}
 
-    return lines.join('\n');
+	return lines.join('\n');
 }

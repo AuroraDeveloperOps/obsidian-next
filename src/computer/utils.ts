@@ -9,6 +9,6 @@ const execAsync = promisify(exec);
  * @param duration - Duration in milliseconds
  */
 export async function wait(duration: number): Promise<void> {
-  // Use JS Promise instead of shell sleep for millisecond precision
-  await new Promise(resolve => setTimeout(resolve, duration));
+	// Use JS Promise instead of shell sleep for millisecond precision
+	await new Promise((resolve) => setTimeout(resolve, duration));
 }

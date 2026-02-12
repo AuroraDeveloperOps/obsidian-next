@@ -9,34 +9,34 @@ const DB_DIR = path.join(os.homedir(), '.obsidian-next');
 const DB_PATH = path.join(DB_DIR, 'state.db');
 
 export class DatabaseManager {
-    private db: Database.Database;
-    private static instance: DatabaseManager;
+	private db: Database.Database;
+	private static instance: DatabaseManager;
 
-    private constructor() {
-        // Ensure directory exists
-        if (!existsSync(DB_DIR)) {
-            mkdirSync(DB_DIR, { recursive: true });
-        }
+	private constructor() {
+		// Ensure directory exists
+		if (!existsSync(DB_DIR)) {
+			mkdirSync(DB_DIR, { recursive: true });
+		}
 
-        this.db = new Database(DB_PATH);
-        this.db.pragma('journal_mode = WAL'); // High concurrency
-        
-        // Load sqlite-vec extension
-        sqliteVec.load(this.db);
-        
-        this.initSchema();
-    }
+		this.db = new Database(DB_PATH);
+		this.db.pragma('journal_mode = WAL'); // High concurrency
 
-    public static getInstance(): DatabaseManager {
-        if (!DatabaseManager.instance) {
-            DatabaseManager.instance = new DatabaseManager();
-        }
-        return DatabaseManager.instance;
-    }
+		// Load sqlite-vec extension
+		sqliteVec.load(this.db);
 
-    private initSchema() {
-        // Tier 1: Core State (Hot)
-        this.db.exec(`
+		this.initSchema();
+	}
+
+	public static getInstance(): DatabaseManager {
+		if (!DatabaseManager.instance) {
+			DatabaseManager.instance = new DatabaseManager();
+		}
+		return DatabaseManager.instance;
+	}
+
+	private initSchema() {
+		// Tier 1: Core State (Hot)
+		this.db.exec(`
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
                 created_at INTEGER,
@@ -48,7 +48,7 @@ export class DatabaseManager {
             );
         `);
 
-        this.db.exec(`
+		this.db.exec(`
              CREATE TABLE IF NOT EXISTS working_set (
                 session_id TEXT,
                 file_path TEXT,
@@ -59,8 +59,8 @@ export class DatabaseManager {
             );
         `);
 
-        // Tier 2: Task Management
-        this.db.exec(`
+		// Tier 2: Task Management
+		this.db.exec(`
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
                 session_id TEXT,
@@ -72,7 +72,7 @@ export class DatabaseManager {
             );
         `);
 
-        this.db.exec(`
+		this.db.exec(`
             CREATE TABLE IF NOT EXISTS subtasks (
                 id TEXT PRIMARY KEY,
                 task_id TEXT,
@@ -82,8 +82,8 @@ export class DatabaseManager {
             );
         `);
 
-        // Tier 3: Distillation & Autonomy
-        this.db.exec(`
+		// Tier 3: Distillation & Autonomy
+		this.db.exec(`
             CREATE TABLE IF NOT EXISTS memos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT,
@@ -95,22 +95,22 @@ export class DatabaseManager {
             );
         `);
 
-        // Vector Table for Semantic Search
-        this.db.exec('DROP TABLE IF EXISTS vec_memos');
-        this.db.exec(`
+		// Vector Table for Semantic Search
+		this.db.exec('DROP TABLE IF EXISTS vec_memos');
+		this.db.exec(`
             CREATE VIRTUAL TABLE vec_memos USING vec0(
                 embedding FLOAT[384]
             );
         `);
 
-        // Migration logic
-        import('./migrations.js').then(({ migrationManager }) => {
-            migrationManager.run(this.db).catch(err => {
-                console.error('Failed to run database migrations:', err);
-            });
-        });
+		// Migration logic
+		import('./migrations.js').then(({ migrationManager }) => {
+			migrationManager.run(this.db).catch((err) => {
+				console.error('Failed to run database migrations:', err);
+			});
+		});
 
-        this.db.exec(`
+		this.db.exec(`
             CREATE TABLE IF NOT EXISTS scheduled_tasks ( -- OpenClaw "Heartbeat" Support
                 id TEXT PRIMARY KEY,
                 session_id TEXT,
@@ -122,8 +122,8 @@ export class DatabaseManager {
             );
         `);
 
-        // Tier 4: Device State (Future Proofing)
-        this.db.exec(`
+		// Tier 4: Device State (Future Proofing)
+		this.db.exec(`
             CREATE TABLE IF NOT EXISTS device_state ( -- Prep for PC Control
                 session_id TEXT,
                 meta_key TEXT, -- 'screen_size', 'active_window'
@@ -132,8 +132,8 @@ export class DatabaseManager {
             );
         `);
 
-        // Usage Stats (formerly usage.json)
-        this.db.exec(`
+		// Usage Stats (formerly usage.json)
+		this.db.exec(`
             CREATE TABLE IF NOT EXISTS usage_stats (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT,
@@ -145,8 +145,8 @@ export class DatabaseManager {
             );
         `);
 
-        // Event History (formerly history.json)
-        this.db.exec(`
+		// Event History (formerly history.json)
+		this.db.exec(`
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT,
@@ -156,8 +156,8 @@ export class DatabaseManager {
             );
         `);
 
-        // Audit Log Table (for security tracking)
-        this.db.exec(`
+		// Audit Log Table (for security tracking)
+		this.db.exec(`
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT,
@@ -167,80 +167,82 @@ export class DatabaseManager {
             );
         `);
 
-        // Performance Indexes
-        this.db.exec(`
+		// Performance Indexes
+		this.db.exec(`
             CREATE INDEX IF NOT EXISTS idx_events_session_timestamp
                 ON events(session_id, timestamp);
         `);
 
-        this.db.exec(`
+		this.db.exec(`
             CREATE INDEX IF NOT EXISTS idx_working_set_session_rank
                 ON working_set(session_id, rank_score DESC);
         `);
 
-        this.db.exec(`
+		this.db.exec(`
             CREATE INDEX IF NOT EXISTS idx_tasks_session_status
                 ON tasks(session_id, status);
         `);
 
-        this.db.exec(`
+		this.db.exec(`
             CREATE INDEX IF NOT EXISTS idx_usage_stats_session
                 ON usage_stats(session_id, timestamp);
         `);
 
-        this.db.exec(`
+		this.db.exec(`
             CREATE INDEX IF NOT EXISTS idx_audit_log_session
                 ON audit_log(session_id, timestamp);
         `);
 
-        // Migration: Add params column to scheduled_tasks if it doesn't exist
-        try {
-            const columns = this.db.pragma('table_info(scheduled_tasks)') as any[];
-            if (!columns.find(c => c.name === 'params')) {
-                this.db.exec('ALTER TABLE scheduled_tasks ADD COLUMN params TEXT');
-            }
-        } catch (e) {
-            console.error('Failed to run manual migration for scheduled_tasks:', e);
-        }
+		// Migration: Add params column to scheduled_tasks if it doesn't exist
+		try {
+			const columns = this.db.pragma('table_info(scheduled_tasks)') as any[];
+			if (!columns.find((c) => c.name === 'params')) {
+				this.db.exec('ALTER TABLE scheduled_tasks ADD COLUMN params TEXT');
+			}
+		} catch (e) {
+			console.error('Failed to run manual migration for scheduled_tasks:', e);
+		}
 
-        // Migration: Add workspace column to sessions if it doesn't exist
-        try {
-            const columns = this.db.pragma('table_info(sessions)') as any[];
-            if (!columns.find(c => c.name === 'workspace')) {
-                this.db.exec('ALTER TABLE sessions ADD COLUMN workspace TEXT');
-            }
-        } catch (e) {
-            console.error('Failed to run manual migration for sessions:', e);
-        }
-    }
+		// Migration: Add workspace column to sessions if it doesn't exist
+		try {
+			const columns = this.db.pragma('table_info(sessions)') as any[];
+			if (!columns.find((c) => c.name === 'workspace')) {
+				this.db.exec('ALTER TABLE sessions ADD COLUMN workspace TEXT');
+			}
+		} catch (e) {
+			console.error('Failed to run manual migration for sessions:', e);
+		}
+	}
 
-    public getDb(): Database.Database {
-        return this.db;
-    }
+	public getDb(): Database.Database {
+		return this.db;
+	}
 
-    public close() {
-        this.db.close();
-    }
+	public close() {
+		this.db.close();
+	}
 
-    /**
-     * Re-initialize the database connection (Useful for tests)
-     */
-    public reconnect(customPath?: string) {
-        if (this.db) {
-            try { this.db.close(); } catch { }
-        }
+	/**
+	 * Re-initialize the database connection (Useful for tests)
+	 */
+	public reconnect(customPath?: string) {
+		if (this.db) {
+			try {
+				this.db.close();
+			} catch {}
+		}
 
-        const targetPath = customPath || DB_PATH;
-        const targetDir = path.dirname(targetPath);
+		const targetPath = customPath || DB_PATH;
+		const targetDir = path.dirname(targetPath);
 
-        if (!existsSync(targetDir)) {
-            mkdirSync(targetDir, { recursive: true });
-        }
+		if (!existsSync(targetDir)) {
+			mkdirSync(targetDir, { recursive: true });
+		}
 
-        this.db = new Database(targetPath);
-        this.db.pragma('journal_mode = WAL');
-        this.initSchema();
-    }
+		this.db = new Database(targetPath);
+		this.db.pragma('journal_mode = WAL');
+		this.initSchema();
+	}
 }
 
 export const db = DatabaseManager.getInstance();

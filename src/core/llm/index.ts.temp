@@ -1,0 +1,41 @@
+/**
+ * LLM Client - Refactored to use modular utilities
+ */
+
+import Anthropic from '@anthropic-ai/sdk';
+import { config } from '../config.js';
+import { bus } from '../bus.js';
+import { usage } from '../usage.js';
+import { tools } from '../../tools/index.js';
+import { redactor } from '../redactor.js';
+import { mcp } from '../mcp.js';
+import { listRegistry } from '../mcp-registry.js';
+import { router } from '../router.js';
+import { getToolConfig } from '../../computer/client.js';
+
+// Import modular utilities
+import {
+	MAX_TOOL_ITERATIONS,
+	CONTEXT,
+	ComputerUseState,
+	ToolUsePartial,
+	ContentBlock,
+	MODEL_MAP
+} from './shared.js';
+import { countTokens } from './tokens.js';
+import {
+	enableComputerUse as doEnableComputerUse,
+	disableComputerUse as doDisableComputerUse,
+	updateComputerScale as doUpdateComputerScale,
+	pruneImagesFromHistory as doPruneImagesFromHistory
+} from './computer-use.js';
+import {
+	persistHistory as doPersistHistory,
+	validateAndFixHistory,
+	verifyHistoryIntegrity
+} from './history.js';
+import {
+	compressHistory as doCompressHistory
+} from './context.js';
+import { initializeClient, refreshClient } from './client.js';
+

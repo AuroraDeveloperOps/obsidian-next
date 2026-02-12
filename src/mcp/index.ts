@@ -9,6 +9,6 @@
 import { startMcpServer } from './server.js';
 
 startMcpServer().catch((error) => {
-    console.error('Failed to start MCP server:', error);
-    process.exit(1);
+	console.error('Failed to start MCP server:', error);
+	process.exit(1);
 });
