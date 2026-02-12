@@ -15,14 +15,15 @@ const isProcessingMessage = (content: string): boolean => {
 	if (content.length > 100) return false;
 	// Must end with ... or be a known short status
 	return (
-		lower.endsWith('...') ||
-		lower.startsWith('[safe]') ||
-		lower.startsWith('[plan]') ||
-		lower.startsWith('[auto]') ||
-		lower.startsWith('[sandbox]') ||
-		lower.includes('thinking') ||
-		lower === 'generating plan...' ||
-		lower === 'executing plan...'
+		(lower.endsWith('...') ||
+			lower.startsWith('[safe]') ||
+			lower.startsWith('[plan]') ||
+			lower.startsWith('[auto]') ||
+			lower.startsWith('[sandbox]') ||
+			lower.includes('thinking') ||
+			lower === 'generating plan...' ||
+			lower === 'executing plan...') &&
+		!lower.includes('simple task')
 	);
 };
 

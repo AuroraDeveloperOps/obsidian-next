@@ -234,8 +234,8 @@ export class OllamaProvider implements MultiModelProvider {
 		}
 
 		try {
-			// Combine user signal with a 60-second safety timeout
-			const timeoutSignal = AbortSignal.timeout(60000);
+			// Combine user signal with a 5-minute safety timeout
+			const timeoutSignal = AbortSignal.timeout(300000);
 			const combinedSignal = signal ? 
 				(AbortSignal as any).any([signal, timeoutSignal]) : 
 				timeoutSignal;

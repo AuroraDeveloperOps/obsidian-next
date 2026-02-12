@@ -229,7 +229,11 @@ class Agent {
 				: complexity === 'moderate'
 					? 'moderate task'
 					: 'simple task';
-		bus.emitAgent({ type: 'thought', content: `[${mode}] ${complexityLabel}` });
+		bus.emitAgent({ 
+			type: 'thought', 
+			content: `[${mode}] ${complexityLabel}`,
+			hidden: complexity === 'simple' // Hide for simple tasks to reduce flicker
+		});
 
 		// Suggest plan mode for complex tasks (embedded in the prompt enhancement)
 		if (suggestPlanMode && mode !== 'plan') {

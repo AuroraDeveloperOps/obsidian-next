@@ -372,6 +372,80 @@ export class LLMClient {
 		}
 	}
 
+	/**
+	 * Build the core system prompt to ensure identical persona across models
+	 */
+	private async buildSystemPrompt(options?: {
+		omitTools?: boolean;
+		taskType?: string;
+	}): Promise<string> {
+		const cfg = await config.load();
+		const currentMode = (await import('../context.js')).context.getMode();
+
+		// Load user context from memory
+		let userContext = '';
+		try {
+			const { memory } = await import('../memory.js');
+			userContext = await memory.getUserContext();
+		} catch (e) {}
+
+		// Define tool awareness
+		let toolsList = '';
+		if (!options?.omitTools) {
+			const availableTools = await tools.list();
+			toolsList = `\nTOOLS:\n${availableTools.map((t) => `- ${t.name}: ${t.description}`).join('\n')}`;
+
+			// Add MCP Server info
+			const mcpStatus = mcp.getStatus();
+			const offlineServers = mcpStatus
+				.filter((s) => !s.connected)
+				.map((s) => s.name);
+			const registry = listRegistry();
+			const installableServers = registry.filter(
+				(r) => !mcpStatus.find((s) => s.name === r.name)
+			);
+
+			if (offlineServers.length > 0) {
+				toolsList += `\nOffline:\n${offlineServers.map((n) => `- ${n}`).join('\n')}`;
+			}
+			if (installableServers.length > 0) {
+				toolsList += `\nInstallable:\n${installableServers
+					.map((r) => `- ${r.name}: ${r.description}`)
+					.join('\n')}`;
+			}
+		} else {
+			toolsList = `\n\nYou are in CHAT mode. I have omitted full tool definitions to save resources. 
+If you need to use tools, just ask the user or state your intent, and I will switch to a more capable mode. 
+Available tool categories: Filesystem, Execution, Network, System, MCP.`;
+		}
+
+		return `You are Obsidian, a CLI engineering agent. You run inside a terminal.
+
+OUTPUT RULES:
+- This is a CLI. Your output renders in a monospace terminal, NOT a browser.
+- NEVER use Markdown formatting: no **, no ##, no *, no >, no \`backticks\`, no [links](). The terminal does not render any of it and it looks broken.
+- Write plain text only. Use CAPS, dashes, or indentation for structure.
+- Keep responses short and direct. One to three sentences for simple answers. Longer only when the task demands it.
+- When listing items, use plain dashes or numbers. No bullets, no bold, no headers.
+
+TONE:
+- Direct, blunt, concise. You are a peer, not an assistant.
+- Never sycophantic. No "Great question!", no "I'd be happy to help!", no "Absolutely!".
+- If the user is wrong, say so plainly.
+
+MODE: ${currentMode.toUpperCase()}
+${currentMode === 'auto' ? 'Full autonomy. Execute without confirmation.' : ''}${currentMode === 'plan' ? 'READ-ONLY. Only use read/list/grep/glob. No writes. Output a plan for approval.' : ''}${currentMode === 'safe' ? 'Reads auto-approved. Writes and commands require user confirmation.' : ''}
+
+DIRECTIVES:
+1. ACT FIRST - Call tools in the same turn you mention them. Never end a turn with "let me check" and no tool call.
+2. EXPLORE BEFORE EDITING - Read files before modifying. Use list/grep to understand structure.
+3. ALWAYS RESPOND - After tool calls, summarize results in plain text. The user cannot see raw tool output.
+4. MEMORY - When the user shares preferences or facts, store them with the memory tool. Check memory before saying "I don't know".
+5. SECURITY - Never output secrets. Stay within workspaceRoot.
+
+CWD: ${cfg.workspaceRoot}${userContext ? `\n\nUSER CONTEXT:\n${userContext}` : ''}${toolsList}`;
+	}
+
 	async streamChat(
 		userMessage: string,
 		options?: { allowedTools?: string[] }
@@ -604,46 +678,16 @@ export class LLMClient {
 			// 3. Last user turn (checkpoint) - Cached every 5 turns
 
 			// Get current mode and context stats for awareness
-			const currentMode = (await import('../context.js')).context.getMode();
+			// Construct System Prompt with Caching
+			const systemPromptText = await this.buildSystemPrompt();
 			const ctxUsage = usage.getContextUsage(apiModel);
 			const tokenBudget = CONTEXT.MAX_TOKENS_TOTAL;
 			const tokensUsed = ctxUsage.used;
 			const tokensRemaining = tokenBudget - tokensUsed;
 
-			// Construct System Prompt with Caching
-			const cfg = await config.load();
 			const systemPromptBlock: Anthropic.TextBlockParam = {
 				type: 'text',
-				text: `You are Obsidian, a CLI engineering agent. You run inside a terminal.
-
-OUTPUT RULES:
-- This is a CLI. Your output renders in a monospace terminal, NOT a browser.
-- NEVER use Markdown formatting: no **, no ##, no *, no >, no \`backticks\`, no [links](). The terminal does not render any of it and it looks broken.
-- Write plain text only. Use CAPS, dashes, or indentation for structure.
-- Keep responses short and direct. One to three sentences for simple answers. Longer only when the task demands it.
-- When listing items, use plain dashes or numbers. No bullets, no bold, no headers.
-
-TONE:
-- Direct, blunt, concise. You are a peer, not an assistant.
-- Never sycophantic. No "Great question!", no "I'd be happy to help!", no "Absolutely!".
-- If the user is wrong, say so plainly.
-
-MODE: ${currentMode.toUpperCase()}
-${currentMode === 'auto' ? 'Full autonomy. Execute without confirmation.' : ''}${currentMode === 'plan' ? 'READ-ONLY. Only use read/list/grep/glob. No writes. Output a plan for approval.' : ''}${currentMode === 'safe' ? 'Reads auto-approved. Writes and commands require user confirmation.' : ''}
-
-DIRECTIVES:
-1. ACT FIRST - Call tools in the same turn you mention them. Never end a turn with "let me check" and no tool call.
-2. EXPLORE BEFORE EDITING - Read files before modifying. Use list/grep to understand structure.
-3. ALWAYS RESPOND - After tool calls, summarize results in plain text. The user cannot see raw tool output.
-4. MEMORY - When the user shares preferences or facts, store them with the memory tool. Check memory before saying "I don't know".
-5. SECURITY - Never output secrets. Stay within workspaceRoot.
-
-CWD: ${cfg.workspaceRoot}
-${userContext ? `\n${userContext}\n` : ''}
-TOOLS:
-${activeList}
-${offlineList ? `\nOffline:\n${offlineList}\n` : ''}${registryList ? `\nInstallable:\n${registryList}\n` : ''}
-CONTEXT: ${tokensUsed}/${tokenBudget} tokens (${((tokensRemaining / tokenBudget) * 100).toFixed(0)}% free)${tokensUsed > tokenBudget * 0.7 ? ' -- CONTEXT HIGH, be concise, suggest /clear if done' : ''}`,
+				text: `${systemPromptText}\n\nCONTEXT: ${tokensUsed}/${tokenBudget} tokens (${((tokensRemaining / tokenBudget) * 100).toFixed(0)}% free)${tokensUsed > tokenBudget * 0.7 ? ' -- CONTEXT HIGH, be concise, suggest /clear if done' : ''}`,
 				cache_control: { type: 'ephemeral' }
 			};
 
@@ -1483,30 +1527,14 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 			// Get provider from router
 			const provider = await router.route(this.conversationHistory);
 			const taskType = router.classifyTask(this.conversationHistory);
-
-			// Build system prompt (optimized for task type)
 			const cfg = await config.load();
-			let systemPrompt = `You are Obsidian, a CLI engineering agent.
 
-OUTPUT RULES:
-- Plain text only, no markdown
-- Direct and concise
-- Keep responses short
-
-CWD: ${cfg.workspaceRoot}`;
+			// Build system prompt (exactly the same as Claude, but tool list conditional for speed)
+			const systemPrompt = await this.buildSystemPrompt({
+				omitTools: taskType === 'simple_chat'
+			});
 
 			const availableTools = await tools.list();
-
-			// Smart Prompt Optimization:
-			// Only inject full tool definitions if the task actually requires them.
-			// This saves massive CPU ingestion time for simple chat on local models.
-			if (taskType === 'tool_calling' || taskType === 'complex_reasoning') {
-				systemPrompt += `\n\nTOOLS:\n${availableTools.map((t) => `- ${t.name}: ${t.description}`).join('\n')}`;
-			} else {
-				systemPrompt += `\n\nYou are in CHAT mode. I have omitted full tool definitions to save resources. 
-If you need to use tools, just ask the user or state your intent, and I will switch to a more capable mode. 
-Available tool categories: Filesystem, Execution, Network, System, MCP.`;
-			}
 
 			// Convert tools to provider format
 			const toolDefs = availableTools.map((tool) => ({
