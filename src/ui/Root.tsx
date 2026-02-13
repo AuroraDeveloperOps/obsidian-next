@@ -41,6 +41,7 @@ import { agent } from '../core/agent.js';
 import { tasks } from '../core/tasks.js';
 import { session } from '../core/session.js';
 import { mcp } from '../core/mcp.js';
+import { getGitBranch } from '../utils/ui.js';
 
 // Pending prompt types
 interface PendingApproval {
@@ -118,7 +119,8 @@ export const Root = () => {
 		model: 'Loading...',
 		mode: 'safe' as 'auto' | 'plan' | 'safe',
 		version: 'v...',
-		sandbox: 'local' as 'local' | 'sandbox'
+		sandbox: 'local' as 'local' | 'sandbox',
+		branch: ''
 	});
 
 	// Active view state machine
@@ -132,6 +134,7 @@ export const Root = () => {
 	const [showPalette, setShowPalette] = useState(false);
 	const [busyStartTime, setBusyStartTime] = useState(Date.now());
 	const [contextPct, setContextPct] = useState(100);
+	const [lastExitAttempt, setLastExitAttempt] = useState(0);
 
 	// Throttle thought event updates (max 10 updates/sec)
 	const lastThoughtUpdate = useRef<number>(0);
@@ -144,6 +147,7 @@ export const Root = () => {
 			const conf = cfg as any; // Cast to access optional/dynamic props
 			const ver = await config.getVersion();
 			const version = ver.startsWith('v') ? ver : `v${ver}`;
+			const branch = getGitBranch();
 			
 			let displayModel = cfg.model;
 			if (conf.provider === 'ollama') {
@@ -157,7 +161,8 @@ export const Root = () => {
 				model: displayModel,
 				mode: context.getMode(),
 				version,
-				sandbox: cfg.executionMode || 'local'
+				sandbox: cfg.executionMode || 'local',
+				branch
 			});
 			setTaskProgress(tasks.getProgress());
 
@@ -371,21 +376,29 @@ export const Root = () => {
 
 	// Shutdown
 	const handleExit = useCallback(async () => {
-		bus.emitAgent({ type: 'thought', content: 'Saving session and shutting down...' });
+		bus.emitAgent({ type: 'thought', content: 'SHUTDOWN: Saving state...' });
 
 		try {
+			const summary = await session.getSummary();
 			const { sessionId } = await session.save();
-			bus.emitAgent({ type: 'thought', content: `Session saved: ${sessionId}` });
+			
+			const summaryText = [
+				`SESSION SUMMARY [${sessionId}]`,
+				`Duration: ${session.formatDuration(summary.duration)}`,
+				`Activity: ${summary.filesRead} read · ${summary.filesModified} modified`,
+				`Tasks: ${summary.tasksCompleted} done · ${summary.tasksPending} open`,
+				`Total Cost: $${summary.totalCost.toFixed(4)}`
+			].join('\n');
+
+			bus.emitAgent({ type: 'thought', content: summaryText });
 		} catch (err) {
 			bus.emitAgent({ type: 'error', message: `Failed to save session: ${err}` });
 		}
 
-		bus.emitAgent({ type: 'clear_history' });
-		
 		// Gracefully disconnect MCP servers to prevent EPIPE errors
 		await mcp.disconnectAll();
 		
-		setTimeout(() => { exit(); }, 800);
+		setTimeout(() => { exit(); }, 2000);
 	}, [exit]);
 
 	// Prompt resolution
@@ -396,10 +409,16 @@ export const Root = () => {
 	// Input handling
 	useInput((inputChar, key) => {
 		if (inputChar === '\x03' || (key.ctrl && inputChar === 'c')) {
-			if (activeView === 'chat' && pendingPrompt === null) {
-				handleExit();
+			const now = Date.now();
+			if (now - lastExitAttempt < 2000) {
+				if (activeView === 'chat' && pendingPrompt === null) {
+					handleExit();
+				} else {
+					exit();
+				}
 			} else {
-				exit();
+				setLastExitAttempt(now);
+				bus.emitAgent({ type: 'thought', content: 'Press Ctrl+C again to exit' });
 			}
 			return;
 		}
@@ -648,6 +667,7 @@ export const Root = () => {
 						version={stats.version}
 						scrollOffset={scrollOffset}
 						sandbox={stats.sandbox}
+						branch={stats.branch}
 					/>
 				) : (
 					renderView()
@@ -746,7 +766,9 @@ export const Root = () => {
 									</Text>
 									<Text dimColor> (shift+tab to cycle)</Text>
 									<Text color="gray"> · </Text>
-									<Text color={stats.sandbox === 'sandbox' ? 'green' : 'yellow'}>{stats.sandbox}</Text>
+									<Text color={stats.sandbox === 'sandbox' ? 'green' : 'yellow'}>
+										{stats.sandbox === 'sandbox' ? 'sandbox' : 'no sandbox'}
+									</Text>
 								</Box>
 								<Box>
 									<Text dimColor>Context left until auto-compact: </Text>

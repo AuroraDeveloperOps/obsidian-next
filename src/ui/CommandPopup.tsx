@@ -7,6 +7,7 @@ export const COMMANDS = [
 	{ name: '/settings', desc: 'View/edit settings', isView: true },
 	{ name: '/models', desc: 'Select AI model', isView: true },
 	{ name: '/mode', desc: 'Set mode (auto/plan/safe)', isView: true },
+	{ name: '/sandbox', desc: 'Sandbox configuration', isView: true },
 	{ name: '/status', desc: 'Show system status', isView: true },
 	{ name: '/context', desc: 'Show context & token usage', isView: true },
 	{ name: '/memory', desc: 'Manage agent memory', isView: true },

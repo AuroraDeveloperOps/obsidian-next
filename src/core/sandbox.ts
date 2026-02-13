@@ -75,10 +75,9 @@ export class SandboxExecutor {
 	async initialize(): Promise<boolean> {
 		try {
 			const cfg = await config.load();
-			const s = await settings.load();
 
-			// Check if sandbox mode is requested via Config OR Settings
-			if (cfg.executionMode === 'sandbox' || s.security.sandbox) {
+			// Check if sandbox mode is requested via Config
+			if (cfg.executionMode === 'sandbox') {
 				this.mode = 'sandbox';
 			} else {
 				this.mode = 'local';

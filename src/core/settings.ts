@@ -48,9 +48,7 @@ export const SettingsSchema = z.object({
 			// Key storage backend preference
 			keyBackend: z
 				.enum(['auto', 'keychain', 'secret-tool', 'encrypted-file', 'env'])
-				.default('auto'),
-			// Restrict filesystem access to sandbox directories
-			sandbox: z.boolean().default(false)
+				.default('auto')
 		})
 		.default({}),
 
@@ -100,8 +98,7 @@ const DEFAULT_SETTINGS: Settings = {
 	security: {
 		piiRedaction: true, // Enabled by default - protects user privacy
 		auditLogging: true, // Enabled by default - for accountability
-		keyBackend: 'auto', // Auto-detect best available backend
-		sandbox: false // Disabled by default
+		keyBackend: 'auto' // Auto-detect best available backend
 	},
 	ui: {
 		syntaxHighlight: true,

@@ -42,8 +42,17 @@ const FooterComponent: React.FC<FooterProps> = ({
 					<Text dimColor>
 						{formatK(tokens.input)} in · {formatK(tokens.output)} out
 					</Text>
+					{(tokens.addedLines > 0 || tokens.deletedLines > 0) && (
+						<>
+							<Text color="gray"> · </Text>
+							<Text color="green">+{tokens.addedLines}</Text>
+							<Text color="red">-{tokens.deletedLines}</Text>
+						</>
+					)}
 					<Text color="gray"> · </Text>
-					<Text color={sandbox === 'sandbox' ? 'green' : 'yellow'}>{sandbox}</Text>
+					<Text color={sandbox === 'sandbox' ? 'green' : 'yellow'}>
+						{sandbox === 'sandbox' ? 'sandbox' : 'no sandbox'}
+					</Text>
 				</Box>
 			</Box>
 

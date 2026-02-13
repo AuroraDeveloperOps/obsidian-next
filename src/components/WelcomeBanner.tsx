@@ -23,6 +23,7 @@ interface WelcomeBannerProps {
 	mode: string;
 	version?: string;
 	sandbox?: 'local' | 'sandbox';
+	branch?: string;
 }
 
 const formatModel = (m: string) => {
@@ -34,7 +35,7 @@ const formatModel = (m: string) => {
 	return m;
 };
 
-const WelcomeBannerComponent: React.FC<WelcomeBannerProps> = ({ model, mode, version = 'v1.0', sandbox = 'local' }) => {
+const WelcomeBannerComponent: React.FC<WelcomeBannerProps> = ({ model, mode, version = 'v1.0', sandbox = 'local', branch = '' }) => {
 	const art = renderBannerArt();
 	const cwd = process.cwd();
 	const home = process.env.HOME || process.env.USERPROFILE || '';
@@ -50,8 +51,11 @@ const WelcomeBannerComponent: React.FC<WelcomeBannerProps> = ({ model, mode, ver
 			</Box>
 			<Box flexDirection="column" justifyContent="center">
 				<Text bold color="white">obsidian <Text dimColor>{version}</Text></Text>
-				<Text>{formatModel(model)} <Text dimColor>·</Text> <Text color={mode === 'auto' ? 'green' : mode === 'plan' ? 'yellow' : 'red'}>{mode} mode</Text> <Text dimColor>·</Text> <Text color="gray">{sandbox}</Text></Text>
-				<Text dimColor>{shortCwd}</Text>
+				<Text>{formatModel(model)} <Text dimColor>·</Text> <Text color={mode === 'auto' ? 'green' : mode === 'plan' ? 'yellow' : 'red'}>{mode} mode</Text> <Text dimColor>·</Text> <Text color={sandbox === 'sandbox' ? 'green' : 'yellow'}>{sandbox === 'sandbox' ? 'sandbox' : 'no sandbox'}</Text></Text>
+				<Box>
+					<Text dimColor>{shortCwd}</Text>
+					{branch && <Text color="gray"> ({branch})</Text>}
+				</Box>
 			</Box>
 		</Box>
 	);

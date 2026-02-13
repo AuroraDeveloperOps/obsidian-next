@@ -57,7 +57,7 @@ export const SandboxView: React.FC<SandboxViewProps> = ({ onClose }) => {
 				<Text bold color="white">[ Sandbox Configuration ]</Text>
 				<Text dimColor>  Status: </Text>
 				<Text color={executionMode === 'sandbox' ? 'green' : 'yellow'} bold>
-					{executionMode.toUpperCase()}
+					{executionMode === 'sandbox' ? 'SANDBOX' : 'NO SANDBOX'}
 				</Text>
 				{saving && <Text color="gray"> (Saving...)</Text>}
 			</Box>

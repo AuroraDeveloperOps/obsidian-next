@@ -7,6 +7,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { bus } from './bus.js';
 import { config } from './config.js';
+import { usage } from './usage.js';
 
 export interface Change {
 	id: string;
@@ -45,6 +46,31 @@ class UndoManager {
 			timestamp: new Date(),
 			undone: false
 		};
+
+		// Track diff stats
+		let added = 0;
+		let deleted = 0;
+
+		if (operation === 'create' && afterContent) {
+			added = afterContent.split('\n').length;
+		} else if (operation === 'delete' && beforeContent) {
+			deleted = beforeContent.split('\n').length;
+		} else if (operation === 'edit' && beforeContent !== null && afterContent !== null) {
+			const beforeLines = beforeContent.split('\n');
+			const afterLines = afterContent.split('\n');
+			
+			// Simple heuristic for line diffs
+			// (Real diffing is complex, this gives a good enough "work done" indicator)
+			added = Math.max(0, afterLines.length - beforeLines.length);
+			deleted = Math.max(0, beforeLines.length - afterLines.length);
+			
+			// If length is same but content changed, count at least 1 line
+			if (added === 0 && deleted === 0 && beforeContent !== afterContent) {
+				added = 1;
+				deleted = 1;
+			}
+		}
+		usage.trackDiff(added, deleted);
 
 		// Add to in-memory stack
 		this.changes.unshift(change);

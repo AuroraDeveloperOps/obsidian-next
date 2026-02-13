@@ -78,6 +78,8 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
 			const updated = await config.reload();
 			setCurrentConfig(updated);
 			setSaving(false);
+			// Signal UI to refresh stats (model, sandbox, etc.)
+			bus.emitAgent({ type: 'done', summary: 'Settings updated' });
 		},
 		[currentConfig]
 	);
@@ -193,37 +195,50 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
 					activeModel = 'moe';
 				}
 
-				return [
+				const knownModels = [
 					{
 						key: 'claude-opus-4-6-20260207',
 						label: 'Claude Opus 4.6',
-						type: 'select',
-						value: activeModel === 'claude-opus-4-6-20260207',
+						type: 'select' as const,
 						description: 'Intelligence King'
 					},
 					{
 						key: 'claude-opus-4-5-20251101',
 						label: 'Claude Opus 4.5',
-						type: 'select',
-						value: activeModel === 'claude-opus-4-5-20251101',
+						type: 'select' as const,
 						description: 'Deep reasoning'
 					},
 					{
 						key: 'claude-sonnet-4-5-20250929',
 						label: 'Claude Sonnet 4.5',
-						type: 'select',
-						value: activeModel === 'claude-sonnet-4-5-20250929',
+						type: 'select' as const,
 						description: 'Balanced'
 					},
 					{
 						key: 'claude-haiku-4-5-20251001',
 						label: 'Claude Haiku 4.5',
-						type: 'select',
-						value: activeModel === 'claude-haiku-4-5-20251001',
+						type: 'select' as const,
 						description: 'Fastest'
-					},
-					{ key: 'back', label: 'Back', type: 'action' }
+					}
 				];
+
+				const modelItems: MenuItem[] = knownModels.map(m => ({
+					...m,
+					value: activeModel === m.key
+				}));
+
+				// Add "Other" if active model is not in the list and not moe/ollama
+				if (!knownModels.find(m => m.key === activeModel) && conf.provider === 'anthropic') {
+					modelItems.push({
+						key: activeModel,
+						label: `Active: ${activeModel.split('-').slice(0, 3).join(' ')}`,
+						type: 'select',
+						value: true,
+						description: 'Current custom model'
+					});
+				}
+
+				return [...modelItems, { key: 'back', label: 'Back', type: 'action' }];
 			case 'security':
 				return [
 					{
@@ -242,10 +257,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
 					},
 					{
 						key: 'sandbox',
-						label: 'Sandbox Filesystem',
+						label: 'Sandbox Mode',
 						type: 'toggle',
-						value: currentSettings.security.sandbox,
-						description: 'Restrict file access'
+						value: currentConfig.executionMode === 'sandbox',
+						description: 'Enable OS-level isolation'
 					},
 					{
 						key: 'keyBackend',
@@ -541,9 +556,13 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
 			}
 		} else if (item.type === 'toggle') {
 			if (view === 'security') {
-				await saveAndUpdate({
-					security: { ...currentSettings.security, [item.key]: !item.value }
-				});
+				if (item.key === 'sandbox') {
+					await saveConfigUpdate({ executionMode: item.value ? 'local' : 'sandbox' });
+				} else {
+					await saveAndUpdate({
+						security: { ...currentSettings.security, [item.key]: !item.value }
+					});
+				}
 			} else if (view === 'ui') {
 				await saveAndUpdate({
 					ui: { ...currentSettings.ui, [item.key]: !item.value }

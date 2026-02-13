@@ -97,6 +97,8 @@ export class UsageTracker {
 	private sessionCacheReadTokens: number = 0;
 	private sessionCacheCreationTokens: number = 0;
 	private sessionDuration: number = 0;
+	private sessionAddedLines: number = 0;
+	private sessionDeletedLines: number = 0;
 	private lastContextSize: number = 0;
 	private lastCacheRead: number = 0;
 	private lastCacheCreation: number = 0;
@@ -177,12 +179,19 @@ export class UsageTracker {
 			output: this.sessionOutputTokens,
 			cacheRead: this.sessionCacheReadTokens,
 			cacheCreation: this.sessionCacheCreationTokens,
+			addedLines: this.sessionAddedLines,
+			deletedLines: this.sessionDeletedLines,
 			total:
 				this.sessionInputTokens +
 				this.sessionOutputTokens +
 				this.sessionCacheReadTokens +
 				this.sessionCacheCreationTokens
 		};
+	}
+
+	trackDiff(added: number, deleted: number) {
+		this.sessionAddedLines += added;
+		this.sessionDeletedLines += deleted;
 	}
 
 	addSessionDuration(ms: number) {
@@ -298,6 +307,8 @@ export class UsageTracker {
 		this.sessionCacheReadTokens = stats.cacheReadTokens;
 		this.sessionCacheCreationTokens = stats.cacheCreationTokens;
 		this.sessionDuration = stats.duration;
+		this.sessionAddedLines = 0;
+		this.sessionDeletedLines = 0;
 		this.lastContextSize =
 			stats.inputTokens + stats.cacheReadTokens + stats.cacheCreationTokens;
 		this.lastCacheRead = stats.cacheReadTokens;

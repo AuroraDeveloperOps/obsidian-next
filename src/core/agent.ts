@@ -56,7 +56,7 @@ class Agent {
 		registerAbilities(scheduler);
 		scheduler.start();
 
-		if (resumeSessionId) {
+		if (resumeSessionId && resumeSessionId !== 'PREVENT_CLEAR') {
 			const { session } = await import('./session.js');
 			const result = await session.restore(resumeSessionId);
 			if (!result.success) {
@@ -73,6 +73,9 @@ class Agent {
 					content: `Resumed session: ${resumeSessionId}`
 				});
 			}
+		} else if (resumeSessionId === 'PREVENT_CLEAR') {
+			// Don't clear, just initialize core components
+			// This happens when user is navigating to the resume menu
 		} else {
 			// Start a fresh session (archives old one)
 			// This prevents the agent from "remembering" stale tasks from previous runs
@@ -207,7 +210,8 @@ class Agent {
 	}
 
 	async run(input: string): Promise<void> {
-		await this.init();
+		const isResume = input.trim().startsWith('/resume');
+		await this.init(isResume ? 'PREVENT_CLEAR' : undefined);
 
 		if (await this.handleCommand(input)) {
 			return;
