@@ -1,10 +1,10 @@
 {
     "name": "@aurora-foundation/obsidian-next",
-    "version": "0.4.7",
+    "version": "0.4.8",
     "description": "Next-gen AI Agent CLI",
     "main": "dist/index.js",
     "type": "module",
-    "license": "Apache-2.0",
+    "license": "AGPL-3.0-only",
     "repository": {
         "type": "git",
         "url": "https://github.com/auroradeveloperops/obsidian-next.git"
