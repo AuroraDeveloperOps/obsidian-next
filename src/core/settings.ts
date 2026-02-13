@@ -8,6 +8,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { z } from 'zod';
+import { invalidateSettingsCache } from './settings-cache.js';
 
 const SETTINGS_DIR = '.obsidian-next';
 const SETTINGS_FILE = 'settings.json';
@@ -241,6 +242,9 @@ class SettingsManager {
 		await fs.writeFile(this.settingsPath, JSON.stringify(validated, null, 2));
 
 		this.cache = validated;
+
+		// Invalidate global settings cache after save
+		invalidateSettingsCache();
 	}
 
 	async get<K extends keyof Settings>(key: K): Promise<Settings[K]> {

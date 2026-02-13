@@ -8,6 +8,7 @@ import { auditor } from '../../core/auditor.js';
 import { sandbox } from '../../core/sandbox.js';
 import { config } from '../../core/config.js';
 import { settings } from '../../core/settings.js';
+import { cachedSettings } from '../../core/settings-cache.js';
 import { auditLog } from '../../core/auditLog.js';
 import {
 	Tool,
@@ -91,9 +92,19 @@ export const BashTool: Tool = {
 			}
 		}
 
-		// Check if this command should bypass sandbox
-		const bypassSandbox = await settings.isUnsandboxed('bash', command);
-		const cfg = await config.load();
+		// Check if this command should bypass sandbox (cached)
+		const bypassSandbox = await cachedSettings(
+			`settings:unsandboxed:bash:${command}`,
+			() => settings.isUnsandboxed('bash', command),
+			5000 // 5 second TTL
+		);
+
+		// Load config (cached separately)
+		const cfg = await cachedSettings(
+			'config:workspace',
+			() => config.load(),
+			10000 // 10 second TTL for config
+		);
 
 		try {
 			// Wrap command with sandbox if enabled
