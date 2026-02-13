@@ -284,6 +284,16 @@ class MCPManager {
 	}
 
 	/**
+	 * Disconnect from all servers
+	 */
+	async disconnectAll() {
+		const disconnectPromises = Array.from(this.connections.keys()).map((name) =>
+			this.disconnect(name)
+		);
+		await Promise.all(disconnectPromises);
+	}
+
+	/**
 	 * List all tools from all connected servers
 	 */
 	async listTools() {

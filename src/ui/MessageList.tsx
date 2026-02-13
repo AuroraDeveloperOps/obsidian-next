@@ -10,6 +10,7 @@ interface MessageListProps {
 	maxEvents?: number;
 	model?: string;
 	mode?: string;
+	version?: string;
 }
 
 /**
@@ -43,14 +44,15 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 	events,
 	maxEvents = 50,
 	model = '',
-	mode = 'safe'
+	mode = 'safe',
+	version = 'v1.0'
 }) => {
 	const visibleEvents = events.slice(-maxEvents);
 
 	return (
 		<Box flexDirection="column">
 			{/* Welcome banner scrolls with the conversation */}
-			<WelcomeBanner model={model} mode={mode} />
+			<WelcomeBanner model={model} mode={mode} version={version} />
 
 			{visibleEvents.map((event: any, i) => {
 				const prevEvent = visibleEvents[i - 1];

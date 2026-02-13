@@ -39,6 +39,7 @@ import { context } from '../core/context.js';
 import { agent } from '../core/agent.js';
 import { tasks } from '../core/tasks.js';
 import { session } from '../core/session.js';
+import { mcp } from '../core/mcp.js';
 
 // Pending prompt types
 interface PendingApproval {
@@ -101,7 +102,8 @@ export const Root = () => {
 	const [stats, setStats] = useState({
 		cost: 0,
 		model: 'Loading...',
-		mode: 'safe' as 'auto' | 'plan' | 'safe'
+		mode: 'safe' as 'auto' | 'plan' | 'safe',
+		version: 'v...'
 	});
 
 	// Active view state machine
@@ -125,6 +127,8 @@ export const Root = () => {
 		const updateStats = async () => {
 			const cfg = await config.load();
 			const conf = cfg as any; // Cast to access optional/dynamic props
+			const ver = await config.getVersion();
+			const version = ver.startsWith('v') ? ver : `v${ver}`;
 			
 			let displayModel = cfg.model;
 			if (conf.provider === 'ollama') {
@@ -136,7 +140,8 @@ export const Root = () => {
 			setStats({
 				cost: usage.getSessionCost(),
 				model: displayModel,
-				mode: context.getMode()
+				mode: context.getMode(),
+				version
 			});
 			setTaskProgress(tasks.getProgress());
 
@@ -357,6 +362,10 @@ export const Root = () => {
 		}
 
 		bus.emitAgent({ type: 'clear_history' });
+		
+		// Gracefully disconnect MCP servers to prevent EPIPE errors
+		await mcp.disconnectAll();
+		
 		setTimeout(() => { exit(); }, 800);
 	}, [exit]);
 
@@ -600,7 +609,7 @@ export const Root = () => {
 				justifyContent={activeView !== 'chat' ? 'flex-start' : 'flex-end'}
 			>
 				{activeView === 'chat' ? (
-					<MessageList events={events} maxEvents={MAX_EVENTS} model={stats.model} mode={stats.mode} />
+					<MessageList events={events} maxEvents={MAX_EVENTS} model={stats.model} mode={stats.mode} version={stats.version} />
 				) : (
 					renderView()
 				)}

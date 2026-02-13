@@ -9,10 +9,10 @@ import { AgentEvent } from '../events/types.js';
 
 // Character sprite for header (Terminal/Active)
 const SPRITE = [
-	'▐▛█████████▜▌',
-	'▐██▄     ▄██▌',
-	'▐██   ▄   ██▌',
-	'▐▙▄▄▄▄▄▄▄▄▄▟▌'
+	' ,▞▀▀▀▀▀▚,',
+	'▗▌  ███  ▐▖',
+	'▝▌  ███  ▐▘',
+	" '▚▄▄▄▄▄▞'"
 ];
 
 // Sleeping/Flying Owl sprite frames

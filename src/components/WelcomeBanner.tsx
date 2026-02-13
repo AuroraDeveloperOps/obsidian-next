@@ -11,15 +11,17 @@ import { context } from '../core/context.js';
  */
 export function renderBannerArt(): string[] {
 	return [
-		' \u2590\u259B\u2588\u2588\u2588\u259C\u258C',
-		'\u259D\u259C\u2588\u2588\u2588\u2588\u2588\u259B\u2598',
-		'  \u2598\u2598 \u259D\u259D',
+		' ,▞▀▀▀▀▀▚,',
+		'▗▌  ███  ▐▖',
+		'▝▌  ███  ▐▘',
+		" '▚▄▄▄▄▄▞'",
 	];
 }
 
 interface WelcomeBannerProps {
 	model: string;
 	mode: string;
+	version?: string;
 }
 
 const formatModel = (m: string) => {
@@ -31,7 +33,7 @@ const formatModel = (m: string) => {
 	return m;
 };
 
-const WelcomeBannerComponent: React.FC<WelcomeBannerProps> = ({ model, mode }) => {
+const WelcomeBannerComponent: React.FC<WelcomeBannerProps> = ({ model, mode, version = 'v1.0' }) => {
 	const art = renderBannerArt();
 	const cwd = process.cwd();
 	const home = process.env.HOME || process.env.USERPROFILE || '';
@@ -42,10 +44,11 @@ const WelcomeBannerComponent: React.FC<WelcomeBannerProps> = ({ model, mode }) =
 			<Box flexDirection="column" marginRight={1}>
 				<Text color="red" bold>{art[0]}</Text>
 				<Text color="red">{art[1]}</Text>
-				<Text color="red" dimColor>{art[2]}</Text>
+				<Text color="red">{art[2]}</Text>
+				<Text color="red" dimColor>{art[3]}</Text>
 			</Box>
 			<Box flexDirection="column" justifyContent="center">
-				<Text bold color="white">obsidian <Text dimColor>v1.0</Text></Text>
+				<Text bold color="white">obsidian <Text dimColor>{version}</Text></Text>
 				<Text>{formatModel(model)} <Text dimColor>·</Text> <Text color={mode === 'auto' ? 'green' : mode === 'plan' ? 'yellow' : 'red'}>{mode} mode</Text></Text>
 				<Text dimColor>{shortCwd}</Text>
 			</Box>
