@@ -23,7 +23,7 @@ export const ListTool: Tool = {
 		const dirPath = (args.path as string) || '.';
 
 		// Path validation
-		const pathCheck = auditor.checkPath(dirPath);
+		const pathCheck = await auditor.checkPathAsync(dirPath);
 		if (!pathCheck.approved) {
 			return {
 				success: false,

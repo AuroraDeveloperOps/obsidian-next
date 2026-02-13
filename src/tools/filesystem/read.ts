@@ -34,8 +34,8 @@ export const ReadTool: Tool = {
 			return { success: false, error: 'No file path provided' };
 		}
 
-		// Path validation
-		const pathCheck = auditor.checkPath(filePath);
+		// Path validation (async - resolves symlinks)
+		const pathCheck = await auditor.checkPathAsync(filePath);
 		if (!pathCheck.approved) {
 			return {
 				success: false,

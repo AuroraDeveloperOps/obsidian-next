@@ -40,7 +40,7 @@ export const WriteTool: Tool = {
 		}
 
 		// Path validation
-		const pathCheck = auditor.checkPath(filePath);
+		const pathCheck = await auditor.checkPathAsync(filePath);
 		if (!pathCheck.approved) {
 			return {
 				success: false,

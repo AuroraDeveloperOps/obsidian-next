@@ -120,7 +120,7 @@ export const GrepTool: Tool = {
 		}
 
 		// Path validation
-		const pathCheck = auditor.checkPath(searchPath);
+		const pathCheck = await auditor.checkPathAsync(searchPath);
 		if (!pathCheck.approved) {
 			return {
 				success: false,

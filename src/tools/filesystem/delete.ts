@@ -32,7 +32,7 @@ export const DeleteTool: Tool = {
 		}
 
 		// Path validation
-		const pathCheck = auditor.checkPath(filePath);
+		const pathCheck = await auditor.checkPathAsync(filePath);
 		if (!pathCheck.approved) {
 			return { success: false, error: pathCheck.reason };
 		}

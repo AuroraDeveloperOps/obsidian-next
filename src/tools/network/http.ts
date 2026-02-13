@@ -126,7 +126,7 @@ export const HttpRequestTool: Tool = {
 			clearTimeout(timeoutId);
 
 			const contentType = response.headers.get('content-type') || '';
-			let content = await response.text();
+			const content = await response.text();
 
 			// Build response summary
 			const statusLine = `${response.status} ${response.statusText}`;

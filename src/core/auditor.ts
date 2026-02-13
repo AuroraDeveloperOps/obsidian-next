@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { settings } from './settings.js';
+import { commandValidator } from './command-validator.js';
 
 export interface AuditResult {
 	approved: boolean;
@@ -58,7 +59,17 @@ export class Auditor {
 		const s = await settings.load();
 		const lowerCommand = command.toLowerCase();
 
-		// Check for blocked string patterns (always denied - hardcoded safety)
+		// LAYER 1: Use new whitelist-based validator (defense-in-depth)
+		const validationResult = await commandValidator.validateCommand(command);
+		if (!validationResult.approved && validationResult.isCritical) {
+			return {
+				approved: false,
+				reason: validationResult.reason,
+				isCritical: true
+			};
+		}
+
+		// LAYER 2: Check for blocked string patterns (legacy, kept for defense-in-depth)
 		if (BLOCKED_PATTERNS.some((p) => command.includes(p))) {
 			return {
 				approved: false,
@@ -67,7 +78,7 @@ export class Auditor {
 			};
 		}
 
-		// Check for blocked regex patterns (e.g., curl URL | sh)
+		// LAYER 3: Check for blocked regex patterns (e.g., curl URL | sh)
 		if (BLOCKED_REGEX_PATTERNS.some((p) => p.test(command))) {
 			return {
 				approved: false,
@@ -76,7 +87,7 @@ export class Auditor {
 			};
 		}
 
-		// Check settings deny list
+		// LAYER 4: Check settings deny list
 		if (await settings.isDenied('bash', command)) {
 			return {
 				approved: false,
@@ -85,7 +96,7 @@ export class Auditor {
 			};
 		}
 
-		// Check mode - in safe mode, everything needs approval UNLESS already session-authorized
+		// LAYER 5: Check mode - in safe mode, everything needs approval UNLESS already session-authorized
 		if (s.mode === 'safe') {
 			if (await settings.isSessionAuthorized('bash', command)) {
 				return {
@@ -103,7 +114,7 @@ export class Auditor {
 			}
 		}
 
-		// Check for patterns that require approval
+		// LAYER 6: Check for patterns that require approval
 		for (const { pattern, reason } of APPROVAL_PATTERNS) {
 			if (lowerCommand.includes(pattern.toLowerCase())) {
 				// Return approved: false to signal that approval is REQUIRED
@@ -116,9 +127,62 @@ export class Auditor {
 			}
 		}
 
+		// LAYER 7: If command validator says requires approval (not in whitelist)
+		if (!validationResult.approved) {
+			return {
+				approved: false,
+				requiresApproval: true,
+				reason: validationResult.reason || 'Command not in approved whitelist'
+			};
+		}
+
 		return { approved: true };
 	}
 
+	/**
+	 * Check file path with symlink resolution (prevents path traversal via symlinks)
+	 */
+	async checkPathAsync(filePath: string): Promise<AuditResult> {
+		try {
+			// Use command validator's symlink-aware path validation
+			const validation = await commandValidator.validatePath(filePath, this.workspaceRoot);
+			if (!validation.approved) {
+				return validation;
+			}
+
+			// Additional checks for hidden files (optional policy)
+			const resolved = path.resolve(this.workspaceRoot, filePath);
+			const relative = path.relative(this.workspaceRoot, resolved);
+			const parts = relative.split(path.sep);
+
+			if (
+				parts.some(
+					(p) =>
+						p.startsWith('.') &&
+						p !== '.obsidian' &&
+						p !== '.agent' &&
+						p !== '.claude' &&
+						p !== '.git'
+				)
+			) {
+				// We allow specific dotfiles for internal use
+				// Could add stricter policy here if needed
+			}
+
+			return { approved: true };
+		} catch (error) {
+			return {
+				approved: false,
+				reason: `Invalid path: ${filePath}`,
+				isCritical: false
+			};
+		}
+	}
+
+	/**
+	 * Synchronous path check (legacy - prefer checkPathAsync)
+	 * WARNING: Does not resolve symlinks - use checkPathAsync for security
+	 */
 	checkPath(filePath: string): AuditResult {
 		try {
 			const resolved = path.resolve(this.workspaceRoot, filePath);

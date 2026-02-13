@@ -9,7 +9,7 @@ import os from 'os';
 import { bus } from '../core/bus.js';
 import { mcp } from '../core/mcp.js';
 import { redactor } from '../core/redactor.js';
-import { toolLane } from '../core/lane.js';
+import { READ_LANE, WRITE_LANE, EXEC_LANE, NETWORK_LANE } from '../core/lane.js';
 import {
 	Tool,
 	ToolResult,
@@ -114,6 +114,34 @@ export class ToolRegistry {
 		return this.tools.get(name);
 	}
 
+	/**
+	 * Select appropriate lane based on tool type for optimal concurrency
+	 */
+	private selectLane(toolName: string) {
+		// Read operations - high concurrency (5x parallel)
+		if (['read', 'list', 'grep', 'glob'].includes(toolName)) {
+			return READ_LANE;
+		}
+
+		// Write operations - serialized (prevent race conditions)
+		if (['write', 'edit', 'delete'].includes(toolName)) {
+			return WRITE_LANE;
+		}
+
+		// Shell commands - serialized (prevent stdin/stdout collision)
+		if (['bash', 'computer'].includes(toolName)) {
+			return EXEC_LANE;
+		}
+
+		// Network operations - moderate concurrency (3x parallel)
+		if (['web_fetch', 'http', 'http_request'].includes(toolName)) {
+			return NETWORK_LANE;
+		}
+
+		// Default: use write lane for safety (serialized)
+		return WRITE_LANE;
+	}
+
 	async list(): Promise<Tool[]> {
 		const staticTools = Array.from(this.tools.values());
 
@@ -201,8 +229,9 @@ export class ToolRegistry {
 			args: JSON.stringify(args, null, 2)
 		});
 
-		// Execute tool through Lane Queue to prevent concurrent execution
-		const result = await toolLane.enqueue(() => tool!.execute(args));
+		// Execute tool through appropriate Lane Queue based on operation type
+		const lane = this.selectLane(name);
+		const result = await lane.enqueue(() => tool!.execute(args));
 
 		// Emit tool_result event
 		// Redact PII from output before emitting to event bus (visible to UI/History)

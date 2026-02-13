@@ -34,13 +34,16 @@
     "scripts": {
         "dev": "tsup src/index.ts --format esm --watch",
         "build": "tsup src/index.ts src/mcp/index.ts --format esm",
+        "build:check": "npm run lint && npm run format:check && tsup src/index.ts src/mcp/index.ts --format esm",
         "start": "node dist/index.js",
         "mcp": "node dist/mcp/index.js",
         "test": "vitest",
+        "test:ci": "vitest run --reporter=verbose",
         "format": "prettier --write \"src/**/*.{ts,tsx}\"",
         "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
-        "lint": "eslint src --ext .ts,.tsx",
-        "lint:fix": "eslint src --ext .ts,.tsx --fix"
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "precommit": "npm run lint:fix && npm run format && npm test"
     },
     "dependencies": {
         "@anthropic-ai/sandbox-runtime": "^0.0.32",

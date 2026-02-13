@@ -392,7 +392,7 @@ export class LLMClient {
 		} catch (e) {}
 
 		// Define tool awareness
-		let toolsList = '';
+		const toolsList = '';
 		if (options?.omitTools) {
 			const shortPrompt = `You are Obsidian, a blunt CLI tool.
 Rules:
@@ -492,7 +492,7 @@ CWD: ${cfg.workspaceRoot}${userContext ? `\n\nUSER CONTEXT:\n${userContext}` : '
 			// Use mapped ID or raw config string. Default to Opus 4.6.
 			const requestedModel =
 				this.lastConfig?.model || 'claude-opus-4-6-20260207';
-			let apiModel = modelMap[requestedModel] || requestedModel;
+			const apiModel = modelMap[requestedModel] || requestedModel;
 
 			// 200k Token Safety Strategy (Two-phase validation)
 			// Phase 1: Fast heuristic check (before building full request)
@@ -560,7 +560,7 @@ CWD: ${cfg.workspaceRoot}${userContext ? `\n\nUSER CONTEXT:\n${userContext}` : '
 
 			// Build tool definitions - handle computer use specially when enabled
 			let toolDefinitionsForApi: any[] = [];
-			let computerUseToolsForApi: any[] = [];
+			const computerUseToolsForApi: any[] = [];
 			let usesBetaApi = false;
 
 			if (this.computerUseState.enabled) {
@@ -924,7 +924,7 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
 			let fullThinking = '';
 			let buffer = '';
 			let thinkingBuffer = '';
-			let toolUses: ToolUsePartial[] = [];
+			const toolUses: ToolUsePartial[] = [];
 			let currentToolUse: ToolUsePartial | null = null;
 			let currentThinking: any = null;
 
