@@ -39,7 +39,7 @@ Let's configure your environment:
    - anthropic: API-only (default)
    - ollama: Local-only
    - moe: Intelligent routing
-   - Change with: /models switch <mode>
+   - Change with: /models
 
 Ready to start? Run /init to configure your API key.`
 	});
@@ -141,7 +141,7 @@ Recommended models for MoE:
   ollama pull qwen3:14b-q4_K_M
 
 After installing, switch mode:
-  /models switch moe
+  /models moe
 
 Advanced users can use custom models:
   /config edit ollama.models.tool

@@ -17,33 +17,42 @@ Your system is configured for offline AI operation with Mixture of Experts routi
 ### Check System Status
 ```bash
 npm start
-/models status
+/models
 ```
 
 **Output:**
 ```
-Mode: ANTHROPIC
+[CLAUDE MODELS]
+   1. Opus 4.6 (Intelligence King) [Current]
+   2. Sonnet 4.5 (Balanced)
+   ...
 
-Anthropic: No API key
-- Model: claude-opus-4-6-20260207
+[OLLAMA MODELS]
+   5. llama3.1:8b-instruct-q4_K_M
+   6. qwen2.5:3b-instruct-q4_K_M
 
-Ollama: Running
-- URL: http://localhost:11434
-- Tool Model: llama3.1:8b-instruct-q4_K_M
-- Chat Model: qwen2.5:3b-instruct-q4_K_M
-- Reasoning Model: llama3.1:8b-instruct-q4_K_M
+[SPECIAL MODES]
+   7. MoE (Intelligent Routing)
+
+[PROVIDER MODE: ANTHROPIC]
+   ⎿  /models <1-7|name>      Select model or mode
+   ⎿  /models pull <model>    Download Ollama model
 ```
 
 ### Switch to Offline Mode
 ```bash
-/models switch ollama
+/models 6
+# OR
+/models qwen2.5:3b
 ```
 
 Now ALL queries use local models (no API calls).
 
 ### Switch to MoE (Smart Routing)
 ```bash
-/models switch moe
+/models moe
+# OR select its number (e.g., 7)
+/models 7
 ```
 
 Now the router picks the best model for each task:
@@ -84,11 +93,6 @@ Obsidian: [explains command registration]
 **Note:** Only one model loads at a time (RAM constraint). Models swap on-demand.
 
 ## Advanced Usage
-
-### List Models
-```bash
-/models list
-```
 
 ### Download New Model
 ```bash
@@ -195,7 +199,7 @@ Your 8GB RAM limits you to 8B models max. Avoid:
 1. **Try it out:** `npm start` and ask questions
 2. **Test tool calling:** Ask to read files, run commands
 3. **Switch modes:** Try anthropic/ollama/moe
-4. **Monitor:** Use `/models status` to see routing
+4. **Monitor:** Use `/models` to see current routing and active model
 5. **Optimize:** Adjust models based on your usage
 
 ## Support
@@ -206,4 +210,4 @@ Your 8GB RAM limits you to 8B models max. Avoid:
 
 ---
 
-**You're all set!** Start with `/models switch moe` for the best experience.
+**You're all set!** Start with `/models moe` for the best experience.

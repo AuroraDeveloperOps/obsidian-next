@@ -1,12 +1,9 @@
 /**
  * Models Command - Model selection and provider management
  *
- * /models - Show Claude model selection menu
- * /models <1-4|name> - Select Claude model
- * /models list - List installed Ollama models
+ * /models - Show model selection menu (Claude + Ollama + MoE)
+ * /models <number|name> - Select model or mode
  * /models pull <name> - Download an Ollama model
- * /models status - Show provider status
- * /models switch <provider> - Switch provider mode
  */
 
 import { bus } from '../core/bus.js';
@@ -22,16 +19,44 @@ const CLAUDE_4_MODELS = [
 
 export const modelsCommand: CommandHandler = async (args) => {
 	const currentConfig = await config.load();
+	const debugLogs: string[] = [];
+
+	// Fetch Ollama models
+	let ollamaModels: any[] = [];
+	let ollamaError: string | null = null;
+	const baseUrl = currentConfig.ollama?.baseUrl || 'http://localhost:11434';
+
+	debugLogs.push(`[Debug] Fetching Ollama models from ${baseUrl}...`);
+
+	try {
+		const response = await fetch(`${baseUrl}/api/tags`, {
+			signal: AbortSignal.timeout(2000)
+		});
+
+		if (response.ok) {
+			const data = await response.json();
+			ollamaModels = data.models || [];
+			debugLogs.push(`[Debug] Found ${ollamaModels.length} Ollama models`);
+		} else {
+			ollamaError = `Ollama response not OK: ${response.status}`;
+			debugLogs.push(`[Debug] ${ollamaError}`);
+		}
+	} catch (e) {
+		ollamaError = e instanceof Error ? e.message : String(e);
+		debugLogs.push(`[Debug] Ollama fetch error: ${ollamaError}`);
+	}
+
+	const allModels = [
+		...CLAUDE_4_MODELS.map(m => ({ ...m, provider: 'anthropic' })),
+		...ollamaModels.map(m => ({ id: m.name, label: m.name, provider: 'ollama' })),
+		{ id: 'moe', label: 'MoE (Intelligent Routing)', provider: 'moe' }
+	];
 
 	// Handle subcommands
 	if (args.length > 0) {
 		const subcommand = args[0].toLowerCase();
 
 		switch (subcommand) {
-			case 'list':
-				await listOllamaModels(currentConfig);
-				return;
-
 			case 'pull':
 				if (args.length < 2) {
 					bus.emitAgent({
@@ -44,204 +69,118 @@ export const modelsCommand: CommandHandler = async (args) => {
 				await pullOllamaModel(args[1], currentConfig);
 				return;
 
-			case 'status':
-				await showProviderStatus(currentConfig);
-				return;
-
-			case 'switch':
-				if (args.length < 2) {
-					bus.emitAgent({
-						type: 'error',
-						message:
-							'Usage: /models switch <mode>\n\nModes: anthropic, ollama, moe'
-					});
-					return;
-				}
-				await switchProvider(args[1] as any, currentConfig);
-				return;
-
 			default:
 				// Try to handle as model selection
-				await selectClaudeModel(args[0], currentConfig);
+				await selectModel(args[0], allModels, currentConfig);
 				return;
 		}
 	}
 
-	// No args - show ALL available models (Claude + Ollama)
+	// Build Content
 	const providerMode = (currentConfig as any).provider || 'anthropic';
+	const output: string[] = [...debugLogs, ''];
 
-	// Build Claude section
-	const claudeSection = [
-		'[CLAUDE MODELS]',
-		...CLAUDE_4_MODELS.map(
-			(m, i) =>
-				`   ${i + 1}. ${m.label.padEnd(30)} ${currentConfig.model === m.id ? '[Current]' : ''}`
-		),
-		''
-	];
+	// Claude Section
+	output.push('[MODELS - CLAUDE]');
+	CLAUDE_4_MODELS.forEach((m, i) => {
+		const isCurrent = providerMode === 'anthropic' && currentConfig.model === m.id;
+		output.push(`   ${i + 1}. ${m.label.padEnd(30)} ${isCurrent ? '[Current]' : ''}`);
+	});
+	output.push('');
 
-	// Build Ollama section
-	let ollamaSection: string[] = [];
-	try {
-		const baseUrl = currentConfig.ollama?.baseUrl || 'http://localhost:11434';
-		const response = await fetch(`${baseUrl}/api/tags`, {
-			signal: AbortSignal.timeout(2000)
+	// Ollama Section
+	output.push('[MODELS - OLLAMA]');
+	if (ollamaModels.length > 0) {
+		const currentChat = currentConfig.ollama?.models?.chat || 'smollm:latest';
+		ollamaModels.forEach((m: any, i: number) => {
+			const name = m.name;
+			const isCurrent = providerMode === 'ollama' && name === currentChat;
+			output.push(`   ${CLAUDE_4_MODELS.length + i + 1}. ${name.padEnd(30)} ${isCurrent ? '[Current]' : ''}`);
 		});
-
-		if (response.ok) {
-			const data = await response.json();
-			const models = data.models || [];
-
-			if (models.length > 0) {
-				const currentTool = currentConfig.ollama?.models?.tool || 'functiongemma:latest';
-				const currentChat = currentConfig.ollama?.models?.chat || 'smollm:latest';
-				const currentReasoning = currentConfig.ollama?.models?.reasoning || 'smollm:latest';
-
-				ollamaSection = [
-					'[OLLAMA MODELS]',
-					...models.map((m: any) => {
-						const name = m.name;
-						const isTool = name === currentTool;
-						const isChat = name === currentChat;
-						const isReasoning = name === currentReasoning;
-						const marker = isTool ? ' [tool]' : isChat ? ' [chat]' : isReasoning ? ' [reasoning]' : '';
-						return `   - ${name}${marker}`;
-					}),
-					''
-				];
-			} else {
-				ollamaSection = [
-					'[OLLAMA MODELS]',
-					'   No models installed. Pull with: /models pull <name>',
-					''
-				];
-			}
-		} else {
-			ollamaSection = [
-				'[OLLAMA MODELS]',
-				'   Ollama not running. Start with: ollama serve',
-				''
-			];
-		}
-	} catch {
-		ollamaSection = [
-			'[OLLAMA MODELS]',
-			'   Ollama not available',
-			''
-		];
+	} else if (ollamaError) {
+		output.push(`   Error: ${ollamaError}`);
+	} else {
+		output.push('   No local models found. Pull with: /models pull <name>');
 	}
+	output.push('');
 
-	const content = [
-		...claudeSection,
-		...ollamaSection,
-		`[PROVIDER MODE: ${providerMode.toUpperCase()}]`,
-		'   ⎿  /models <1-4|name>      Select Claude model',
-		'   ⎿  /models status          Show provider status',
-		'   ⎿  /models switch <mode>   Change provider (anthropic/ollama/moe)',
-		'   ⎿  /models pull <model>    Download Ollama model',
-		''
-	].join('\n');
+	// Special Modes
+	output.push('[SPECIAL MODES]');
+	const moeIdx = CLAUDE_4_MODELS.length + ollamaModels.length + 1;
+	output.push(`   ${moeIdx}. MoE (Intelligent Routing)   ${providerMode === 'moe' ? '[Current]' : ''}`);
+	output.push('');
+
+	// Footer
+	output.push(`[PROVIDER MODE: ${providerMode.toUpperCase()}]`);
+	output.push(`   ⎿  /models <1-${allModels.length}|name>   Select model or mode`);
+	output.push('   ⎿  /models pull <model>    Download Ollama model');
 
 	bus.emitAgent({
 		type: 'thought',
-		content
+		content: output.join('\n')
 	});
 
 	bus.emitAgent({
 		type: 'done',
-		summary: 'Model list displayed'
+		summary: `Found ${allModels.length} available models/modes`
 	});
 };
 
-async function selectClaudeModel(
+
+async function selectModel(
 	selection: string,
+	allModels: any[],
 	currentConfig: any
 ): Promise<void> {
 	const sel = selection.toLowerCase();
-	let newModel: string | undefined;
+	let selectedModel: any;
 
-	// Strict Selection Logic
-	if (sel === '1' || sel === 'opus-4.6') {
-		newModel = 'claude-opus-4-6-20260207';
-	} else if (sel === '2' || sel === 'opus-4.5') {
-		newModel = 'claude-opus-4-5-20251101';
-	} else if (sel === '3' || sel === 'sonnet') {
-		newModel = 'claude-sonnet-4-5-20250929';
-	} else if (sel === '4' || sel === 'haiku') {
-		newModel = 'claude-haiku-4-5-20251001';
+	// Check if selection is a number
+	const index = parseInt(sel);
+	if (!isNaN(index) && index > 0 && index <= allModels.length) {
+		selectedModel = allModels[index - 1];
+	} else {
+		// Try to match by name/id
+		selectedModel = allModels.find(m => 
+			m.id.toLowerCase().includes(sel) || 
+			m.label.toLowerCase().includes(sel)
+		);
 	}
 
-	if (!newModel) {
+	if (!selectedModel) {
 		bus.emitAgent({
 			type: 'error',
-			message: `Invalid selection: ${selection}. Choose from the Claude 4 family (1-4).`
+			message: `Invalid selection: ${selection}. Choose a number (1-${allModels.length}) or model name.`
 		});
 		return;
 	}
 
-	await config.save({
-		...currentConfig,
-		model: newModel
-	});
+	const newConfig = { ...currentConfig };
+	
+	if (selectedModel.provider === 'anthropic') {
+		newConfig.provider = 'anthropic';
+		newConfig.model = selectedModel.id;
+	} else if (selectedModel.provider === 'ollama') {
+		newConfig.provider = 'ollama';
+		newConfig.ollama = {
+			...currentConfig.ollama,
+			models: {
+				...(currentConfig.ollama?.models || {}),
+				chat: selectedModel.id,
+				// Also set tool model if it's likely to support it or if none set
+				tool: currentConfig.ollama?.models?.tool || selectedModel.id
+			}
+		};
+	} else if (selectedModel.provider === 'moe') {
+		newConfig.provider = 'moe';
+	}
+
+	await config.save(newConfig);
 
 	bus.emitAgent({
 		type: 'done',
-		summary: `Model switched to ${newModel}`
+		summary: `Switched to ${selectedModel.provider} mode${selectedModel.provider !== 'moe' ? ` with model ${selectedModel.id}` : ''}`
 	});
-}
-
-async function listOllamaModels(currentConfig: any): Promise<void> {
-	try {
-		const baseUrl = currentConfig.ollama?.baseUrl || 'http://localhost:11434';
-		const response = await fetch(`${baseUrl}/api/tags`, {
-			signal: AbortSignal.timeout(2000)
-		});
-
-		if (!response.ok) {
-			throw new Error('Ollama not running');
-		}
-
-		const data = await response.json();
-		const models = data.models || [];
-
-		if (models.length === 0) {
-			bus.emitAgent({
-				type: 'thought',
-				content:
-					'[Models] No Ollama models installed.\n\nInstall with:\n  ollama pull functiongemma\n  ollama pull smollm'
-			});
-			return;
-		}
-
-		const currentTool =
-			currentConfig.ollama?.models?.tool || 'functiongemma:latest';
-		const currentChat = currentConfig.ollama?.models?.chat || 'smollm:latest';
-
-		const modelList = models
-			.map((m: any) => {
-				const name = m.name;
-				const isTool = name === currentTool;
-				const isChat = name === currentChat;
-				const marker = isTool ? ' (tool)' : isChat ? ' (chat)' : '';
-				return `  - ${name}${marker}`;
-			})
-			.join('\n');
-
-		bus.emitAgent({
-			type: 'thought',
-			content: `[Models] Installed Ollama models:\n${modelList}\n\nTotal: ${models.length}`
-		});
-
-		bus.emitAgent({
-			type: 'done',
-			summary: `Found ${models.length} Ollama models`
-		});
-	} catch (error) {
-		bus.emitAgent({
-			type: 'error',
-			message: `Failed to list Ollama models: ${error instanceof Error ? error.message : String(error)}`
-		});
-	}
 }
 
 async function pullOllamaModel(
@@ -277,119 +216,3 @@ async function pullOllamaModel(
 	}
 }
 
-async function showProviderStatus(currentConfig: any): Promise<void> {
-	try {
-		const mode = currentConfig.provider || 'anthropic';
-
-		// Check Anthropic availability (has API key)
-		const anthropicAvailable =
-			!!process.env.ANTHROPIC_API_KEY ||
-			!!(await import('../core/keyManager.js')).keyManager.loadKey();
-
-		// Check Ollama availability
-		let ollamaAvailable = false;
-		try {
-			const baseUrl = currentConfig.ollama?.baseUrl || 'http://localhost:11434';
-			const response = await fetch(`${baseUrl}/api/tags`, {
-				signal: AbortSignal.timeout(2000)
-			});
-			ollamaAvailable = response.ok;
-		} catch {
-			ollamaAvailable = false;
-		}
-
-		const anthropicStatus = anthropicAvailable ? 'Available' : 'No API key';
-		const ollamaStatus = ollamaAvailable ? 'Running' : 'Stopped';
-
-		let status = `[Models] Provider Status:
-  Mode: ${mode.toUpperCase()}
-
-  Anthropic: ${anthropicStatus}
-  - Model: ${currentConfig.model}
-
-  Ollama: ${ollamaStatus}`;
-
-		if (ollamaAvailable) {
-			const ollamaConfig = currentConfig.ollama || {
-				baseUrl: 'http://localhost:11434',
-				models: {
-					tool: 'functiongemma:latest',
-					chat: 'smollm:latest',
-					reasoning: 'smollm:latest'
-				}
-			};
-
-			status += `
-  - URL: ${ollamaConfig.baseUrl}
-  - Tool Model: ${ollamaConfig.models.tool}
-  - Chat Model: ${ollamaConfig.models.chat}
-  - Reasoning Model: ${ollamaConfig.models.reasoning}`;
-		}
-
-		if (mode === 'moe') {
-			status +=
-				'\n\n[MoE Routing]:\n  tool_calling -> ' +
-				(ollamaAvailable
-					? currentConfig.ollama.models.tool
-					: 'Anthropic (fallback)') +
-				'\n  simple_chat -> ' +
-				(ollamaAvailable
-					? currentConfig.ollama.models.chat
-					: 'Anthropic (fallback)') +
-				'\n  complex_reasoning -> Anthropic (preferred)';
-		}
-
-		bus.emitAgent({
-			type: 'thought',
-			content: status
-		});
-
-		bus.emitAgent({ type: 'done', summary: 'Provider status displayed' });
-	} catch (error) {
-		bus.emitAgent({
-			type: 'error',
-			message: `Failed to get status: ${error instanceof Error ? error.message : String(error)}`
-		});
-	}
-}
-
-async function switchProvider(mode: string, currentConfig: any): Promise<void> {
-	const validModes = ['anthropic', 'ollama', 'moe'];
-	if (!validModes.includes(mode)) {
-		bus.emitAgent({
-			type: 'error',
-			message: `Invalid mode: ${mode}. Must be one of: anthropic, ollama, moe`
-		});
-		return;
-	}
-
-	// Verify provider availability
-	if (mode === 'ollama' || mode === 'moe') {
-		try {
-			const baseUrl = currentConfig.ollama?.baseUrl || 'http://localhost:11434';
-			const response = await fetch(`${baseUrl}/api/tags`, {
-				signal: AbortSignal.timeout(2000)
-			});
-			if (!response.ok) {
-				throw new Error('Ollama not running');
-			}
-		} catch {
-			bus.emitAgent({
-				type: 'error',
-				message:
-					'Cannot use Ollama - service not running. Start with: ollama serve'
-			});
-			return;
-		}
-	}
-
-	await config.save({
-		...currentConfig,
-		provider: mode
-	});
-
-	bus.emitAgent({
-		type: 'done',
-		summary: `Switched to ${mode.toUpperCase()} mode`
-	});
-}

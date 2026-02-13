@@ -82,17 +82,30 @@ export class OllamaProvider implements MultiModelProvider {
 	}
 
 	getCapabilities(): ProviderCapabilities {
-		// FuncGemma supports function calling natively
-		const supportsTools =
-			this.model.includes('functiongemma') || this.model.includes('funcgemma');
+		// List of model families known to support the Ollama tools API
+		const toolCapableFamilies = [
+			'llama3.1',
+			'llama3.2',
+			'qwen2.5',
+			'mistral',
+			'mixtral',
+			'command-r',
+			'firefunction',
+			'functiongemma',
+			'funcgemma'
+		];
+
+		const supportsTools = toolCapableFamilies.some(family => 
+			this.model.toLowerCase().includes(family)
+		);
 
 		return {
 			streaming: true,
 			toolCalling: supportsTools,
-			thinking: false, // Ollama models don't have explicit thinking mode
-			caching: false, // No prompt caching
-			computerUse: false, // No computer use support
-			vision: false // Most Ollama models don't support vision
+			thinking: false,
+			caching: false,
+			computerUse: false,
+			vision: this.model.includes('llava') || this.model.includes('moondream')
 		};
 	}
 

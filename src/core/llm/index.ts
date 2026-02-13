@@ -378,6 +378,8 @@ export class LLMClient {
 	private async buildSystemPrompt(options?: {
 		omitTools?: boolean;
 		taskType?: string;
+		tokensUsed?: number;
+		tokenBudget?: number;
 	}): Promise<string> {
 		const cfg = await config.load();
 		const currentMode = (await import('../context.js')).context.getMode();
@@ -391,35 +393,22 @@ export class LLMClient {
 
 		// Define tool awareness
 		let toolsList = '';
-		if (!options?.omitTools) {
-			const availableTools = await tools.list();
-			toolsList = `\nTOOLS:\n${availableTools.map((t) => `- ${t.name}: ${t.description}`).join('\n')}`;
-
-			// Add MCP Server info
-			const mcpStatus = mcp.getStatus();
-			const offlineServers = mcpStatus
-				.filter((s) => !s.connected)
-				.map((s) => s.name);
-			const registry = listRegistry();
-			const installableServers = registry.filter(
-				(r) => !mcpStatus.find((s) => s.name === r.name)
-			);
-
-			if (offlineServers.length > 0) {
-				toolsList += `\nOffline:\n${offlineServers.map((n) => `- ${n}`).join('\n')}`;
+		if (options?.omitTools) {
+			const shortPrompt = `You are Obsidian, a blunt CLI tool.
+Rules:
+- NO Markdown. Plain text only.
+- NO chatter. NO "I am an AI".
+- Be direct, short, and blunt.
+- CWD: ${cfg.workspaceRoot}
+Mode: ${currentMode.toUpperCase()}`;
+			
+			if (options?.tokensUsed !== undefined && options?.tokenBudget !== undefined) {
+				return `${shortPrompt}\nContext: ${options.tokensUsed}/${options.tokenBudget}`;
 			}
-			if (installableServers.length > 0) {
-				toolsList += `\nInstallable:\n${installableServers
-					.map((r) => `- ${r.name}: ${r.description}`)
-					.join('\n')}`;
-			}
-		} else {
-			toolsList = `\n\nYou are in CHAT mode. I have omitted full tool definitions to save resources. 
-If you need to use tools, just ask the user or state your intent, and I will switch to a more capable mode. 
-Available tool categories: Filesystem, Execution, Network, System, MCP.`;
+			return shortPrompt;
 		}
 
-		return `You are Obsidian, a CLI engineering agent. You run inside a terminal.
+		const basePrompt = `You are Obsidian, a CLI engineering agent. You run inside a terminal.
 
 OUTPUT RULES:
 - This is a CLI. Your output renders in a monospace terminal, NOT a browser.
@@ -444,7 +433,16 @@ DIRECTIVES:
 5. SECURITY - Never output secrets. Stay within workspaceRoot.
 
 CWD: ${cfg.workspaceRoot}${userContext ? `\n\nUSER CONTEXT:\n${userContext}` : ''}${toolsList}`;
+
+		// Add context awareness footer if stats are provided
+		if (options?.tokensUsed !== undefined && options?.tokenBudget !== undefined) {
+			const tokensRemaining = options.tokenBudget - options.tokensUsed;
+			return `${basePrompt}\n\nCONTEXT: ${options.tokensUsed}/${options.tokenBudget} tokens (${((tokensRemaining / options.tokenBudget) * 100).toFixed(0)}% free)${options.tokensUsed > options.tokenBudget * 0.7 ? ' -- CONTEXT HIGH, be concise, suggest /clear if done' : ''}`;
+		}
+
+		return basePrompt;
 	}
+
 
 	async streamChat(
 		userMessage: string,
@@ -1529,9 +1527,13 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 			const taskType = router.classifyTask(this.conversationHistory);
 			const cfg = await config.load();
 
-			// Build system prompt (exactly the same as Claude, but tool list conditional for speed)
+			// Build system prompt (exactly the same as Claude, including context stats)
+			const ctxUsage = usage.getContextUsage(provider.getModel());
+			const capabilities = provider.getCapabilities();
 			const systemPrompt = await this.buildSystemPrompt({
-				omitTools: taskType === 'simple_chat'
+				omitTools: !capabilities.toolCalling && taskType === 'simple_chat',
+				tokensUsed: ctxUsage.used,
+				tokenBudget: CONTEXT.MAX_TOKENS_TOTAL
 			});
 
 			const availableTools = await tools.list();
@@ -1558,7 +1560,7 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 
 			for await (const chunk of provider.chat(this.conversationHistory, {
 				systemPrompt,
-				tools: toolDefs,
+				tools: capabilities.toolCalling ? toolDefs : undefined,
 				maxTokens: cfg.maxTokens
 			})) {
 				// Handle usage
