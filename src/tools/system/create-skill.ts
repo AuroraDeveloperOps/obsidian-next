@@ -11,7 +11,7 @@ import { Tool, ToolResult } from '../shared.js';
 export const CreateSkillTool: Tool = {
 	name: 'create_skill',
 	description:
-		'Create a new autonomous skill (tool) for the agent. This tool writes the implementation, runs tests, and registers it dynamically. The code MUST be a valid Node.js module that exports default a Tool object.',
+		'Create a new autonomous skill (tool) for the agent. This tool writes the implementation and registers it dynamically. The code MUST be a valid Node.js ESM module that exports default a Tool object. DO NOT USE Python, Classes, or pseudo-code. TEMPLATE: export default { name: "...", description: "...", inputSchema: { param: { type: "string", description: "..." } }, requiredParams: ["param"], async execute(args) { return { success: true, output: "..." }; } };',
 	inputSchema: {
 		name: {
 			type: 'string',
@@ -24,16 +24,31 @@ export const CreateSkillTool: Tool = {
 		code: {
 			type: 'string',
 			description:
-				'Node.js code for the tool. Must export default a Tool object.'
+				'Node.js ESM code for the tool. Must start with "export default {" and follow the Tool interface.'
 		}
 	},
 	requiredParams: ['name', 'description', 'code'],
 
 	async execute(args: Record<string, unknown>): Promise<ToolResult> {
 		const name = args.name as string;
-		const code = args.code as string;
+		const code = (args.code as string).trim();
 		const skillsDir = path.join(os.homedir(), '.obsidian-next', 'skills');
-		const skillPath = path.join(skillsDir, `${name}.js`);
+		const skillPath = path.join(skillsDir, `${name}.mjs`);
+
+		// Basic validation
+		if (code.includes('def ') || code.includes('import ') && !code.includes('from')) {
+			return {
+				success: false,
+				error: 'Failed to create skill: Detected non-JS syntax (likely Python or invalid imports). Code must be valid Node.js ESM.'
+			};
+		}
+
+		if (!code.startsWith('export default')) {
+			return {
+				success: false,
+				error: 'Failed to create skill: Code must start with "export default {". Classes and bare blocks are not allowed.'
+			};
+		}
 
 		try {
 			if (!fsSync.existsSync(skillsDir)) {
@@ -43,11 +58,8 @@ export const CreateSkillTool: Tool = {
 			await fs.writeFile(skillPath, code, 'utf-8');
 
 			// Dynamically import and register
-			// Note: Registration will be handled by the registry loading mechanism
-			const module = await import(`file://${skillPath}?t=${Date.now()}`); // Use cache buster
+			const module = await import(`file://${skillPath}?t=${Date.now()}`); 
 			if (module.default && module.default.name) {
-				// Registration will happen through the global tools registry
-				// This is a placeholder for validation
 				return {
 					success: true,
 					output: `Skill '${name}' created successfully at ${skillPath}. Restart the agent to load it.`
@@ -56,12 +68,15 @@ export const CreateSkillTool: Tool = {
 
 			return {
 				success: false,
-				error: 'Skill code must export default a Tool object.'
+				error: 'Skill code must export default a Tool object with a name property.'
 			};
 		} catch (error: unknown) {
+			// Clean up failed file
+			try { await fs.unlink(skillPath); } catch {}
+			
 			return {
 				success: false,
-				error: `Failed to create skill: ${error instanceof Error ? error.message : String(error)}`
+				error: `Failed to create skill (Syntax Error): ${error instanceof Error ? error.message : String(error)}`
 			};
 		}
 	}

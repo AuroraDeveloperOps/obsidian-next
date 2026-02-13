@@ -85,7 +85,7 @@ export class ToolRegistry {
 		try {
 			const files = await fs.readdir(this.skillsDir);
 			for (const file of files) {
-				if (file.endsWith('.js')) {
+				if (file.endsWith('.js') || file.endsWith('.mjs')) {
 					try {
 						const skillPath = path.join(this.skillsDir, file);
 						const module = await import(`file://${skillPath}`);
