@@ -82,6 +82,19 @@ Obsidian can autonomously expand its own toolbox. If it hits a capability gap, i
 
 ---
 
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|-------------|
+| `Shift+Tab`| Cycle between Direct, Plan, and Safe modes |
+| `PageUp`   | Scroll up through chat history |
+| `PageDown` | Scroll down through chat history |
+| `Ctrl+T`   | Open/close Task View |
+| `Ctrl+K`   | Open Command Palette |
+| `Escape`   | Interrupt active agent execution |
+
+---
+
 ## Architecture (The Gateway Pattern)
 
 Obsidian Next operates via a central backend service connected to multiple frontends:

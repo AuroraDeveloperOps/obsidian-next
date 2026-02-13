@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
+import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import { bus } from '../core/bus.js';
 import { AgentEvent, Option } from '../events/types.js';
 
@@ -97,6 +97,18 @@ export const Root = () => {
 	const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
 	const [taskProgress, setTaskProgress] = useState(tasks.getProgress());
 	const { exit } = useApp();
+	const { stdout } = useStdout();
+	const [columns, setColumns] = useState(stdout?.columns || 80);
+	const [scrollOffset, setScrollOffset] = useState(0);
+
+	useEffect(() => {
+		if (!stdout) return;
+		const onResize = () => setColumns(stdout.columns);
+		stdout.on('resize', onResize);
+		return () => {
+			stdout.off('resize', onResize);
+		};
+	}, [stdout]);
 
 	// Footer stats
 	const [stats, setStats] = useState({
@@ -404,6 +416,16 @@ export const Root = () => {
 			return;
 		}
 
+		// History Scrolling
+		if (key.pageUp) {
+			setScrollOffset((prev) => Math.min(Math.max(0, events.length - 10), prev + 5));
+			return;
+		}
+		if (key.pageDown) {
+			setScrollOffset((prev) => Math.max(0, prev - 5));
+			return;
+		}
+
 		// Task View - Ctrl+T
 		if (key.ctrl && inputChar === 't') {
 			setActiveView('task');
@@ -609,7 +631,14 @@ export const Root = () => {
 				justifyContent={activeView !== 'chat' ? 'flex-start' : 'flex-end'}
 			>
 				{activeView === 'chat' ? (
-					<MessageList events={events} maxEvents={MAX_EVENTS} model={stats.model} mode={stats.mode} version={stats.version} />
+					<MessageList
+						events={events}
+						maxEvents={MAX_EVENTS}
+						model={stats.model}
+						mode={stats.mode}
+						version={stats.version}
+						scrollOffset={scrollOffset}
+					/>
 				) : (
 					renderView()
 				)}
@@ -667,7 +696,7 @@ export const Root = () => {
 					{/* Input Area */}
 					<Box flexDirection="column">
 						<Box paddingX={0}>
-							<Text dimColor>{'─'.repeat(process.stdout.columns || 80)}</Text>
+							<Text dimColor>{'─'.repeat(columns)}</Text>
 						</Box>
 						<Box paddingX={1}>
 							<Text color="red" bold>{'> '}</Text>
@@ -694,7 +723,7 @@ export const Root = () => {
 					{matches.length === 0 && !showPalette && (
 						<Box flexDirection="column">
 							<Box paddingX={0}>
-								<Text dimColor>{'\u2500'.repeat(process.stdout.columns || 80)}</Text>
+								<Text dimColor>{'\u2500'.repeat(columns)}</Text>
 							</Box>
 							<Box paddingX={1} flexDirection="row" justifyContent="space-between">
 								<Box>

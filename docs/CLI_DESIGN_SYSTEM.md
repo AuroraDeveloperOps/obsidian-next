@@ -71,7 +71,20 @@ Enter Bot Token:
 Whitelisting User ID: 987654321 [Verified]
 ```
 
-### 3.4. Daily Log Preview
+## 4. Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|-------------|
+| `Shift+Tab`| Cycle through modes (Direct, Plan, Safe) |
+| `PageUp`   | Scroll up in chat history |
+| `PageDown` | Scroll down in chat history |
+| `Ctrl+T`   | Open Task View |
+| `Ctrl+K`   | Open Command Palette |
+| `Escape`   | Stop agent execution |
+
+---
+
+## 5. Daily Log Preview
 Shown on `/status` to summarize background heartbeat activity.
 ```
 Today's Log: 2026-02-07.md

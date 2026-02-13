@@ -200,15 +200,9 @@ obsidian
 3. Port already in use
 
 **Solution:**
+Update to Obsidian Next v0.4.8, which includes improved process management and graceful shutdown to prevent resource leakage. Check config:
 ```bash
-# Check MCP config
 cat .obsidian/mcp.json
-
-# Verify server binary exists
-which npx  # or the configured command
-
-# Check for port conflicts
-lsof -i :3000  # or configured port
 ```
 
 ### "MCP connection timeout"

@@ -2,7 +2,7 @@
 
 Welcome to the comprehensive documentation for **Obsidian Next**.
 
-> Version: 0.4.6 | Updated: 2026-02-07
+> Version: 0.4.8 | Updated: 2026-02-13
 
 ---
 
@@ -41,8 +41,8 @@ Global state is stored in `~/.obsidian-next/` and preserves context, history, ta
 
 ## Planning & Development
 
-- **[Master Plan](MASTER_PLAN.md)**: The "Final" architectural blueprint for the autonomous restructure.
-- **[Product Requirements (PRD)](PRD.md)**: Approved specification for core functionality.
+- **[Master Plan](MASTER_PLAN.md)**: The architectural blueprint for the autonomous restructure.
+- **[Product Requirements (PRD)](PRD.md)**: specification for core functionality.
 - **[Roadmap](ROADMAP.md)**: Development roadmap and planned features.
 - **[Git Workflow](GIT_WORKFLOW.md)**: Contribution guidelines and branch conventions.
 

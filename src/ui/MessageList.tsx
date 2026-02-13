@@ -11,6 +11,7 @@ interface MessageListProps {
 	model?: string;
 	mode?: string;
 	version?: string;
+	scrollOffset?: number;
 }
 
 /**
@@ -45,9 +46,12 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 	maxEvents = 50,
 	model = '',
 	mode = 'safe',
-	version = 'v1.0'
+	version = 'v1.0',
+	scrollOffset = 0
 }) => {
-	const visibleEvents = events.slice(-maxEvents);
+	const end = events.length - scrollOffset;
+	const start = Math.max(0, end - maxEvents);
+	const visibleEvents = events.slice(start, end);
 
 	return (
 		<Box flexDirection="column">

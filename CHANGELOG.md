@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.8] - 2026-02-13
 
 ### Added
+- **UI Improvements**:
+  - **Scrollable History**: Support for scrolling through chat history using PageUp and PageDown keys.
+  - **Responsive Layout**: Separator lines and input area now dynamically adjust to terminal window resizing.
 - **Ollama Reliability**:
   - **Auto-Recovery**: Agent now detects empty responses and proactively prompts the model to try again.
   - **Promise Detection**: Detects intention phrases (e.g. "I will run") where the model forgets to call a tool, and forces execution.
@@ -17,9 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Ollama 400 Errors**: Fixed invalid tool call history format. Now correctly sends tool results with correct role and object arguments, compliant with newer Ollama versions.
 - **UI Model Display**: Dashboard and Header now correctly show the active Ollama or MoE model name instead of defaulting to Anthropic config.
 - **Model Initialization**: Fixed crash when configured Ollama model is missing; now falls back to available models.
+- **MCP Shutdown**: Added graceful disconnect for all MCP servers to prevent EPIPE errors on process exit.
 
 ### Technical
 - **Tool Arguments**: Updated Ollama provider to handle pre-parsed object arguments from the API.
+- **Dynamic Versioning**: Header and Welcome Banner now fetch version information from package.json dynamically.
 
 ---
 
