@@ -2,13 +2,12 @@
 
 ![Obsidian Next](assets/obsidianboxes.png)
 
-> This README was written by Obsidian (v0.4.6) - a global, always-on autonomous engineering daemon with adaptive reasoning and system-wide persistent memory.
+> This README was written by Obsidian (v0.4.8) - a global, always-on autonomous engineering daemon with adaptive reasoning and system-wide persistent memory.
 
 [![License](https://img.shields.io/badge/License-AGPL_3.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-0.4.8-blue)](package.json)
-[![Providers](https://img.shields.io/badge/Providers-Anthropic_\|_Ollama_\|_MoE-orange)](#core-capabilities)
+[![Providers](https://img.shields.io/badge/Providers-Anthropic_\|_Ollama-orange)](#core-capabilities)
 [![Status](https://img.shields.io/badge/Status-Autonomous-green)](CHANGELOG.md)
-[![Claude 4.6](https://img.shields.io/badge/Model-Claude_4.6-purple)](docs/PRD.md)
 
 **Obsidian Next** is a global, always-on autonomous engineering partner. It runs as a system-wide background service, managing multiple codebases and performing proactive engineering tasks while you're away.
 
@@ -21,6 +20,7 @@ Built for engineers who need an agent that lives in their system - not just in a
 | Feature | Obsidian Next | Other Assistants |
 |---------|---------------|------------------|
 | **Lifecycle** | Always-on Daemon (Service) | Script / Process-bound |
+| **Intelligence** | Adaptive Multi-Provider Engine | Single Model / Provider |
 | **Reasoning** | Claude 4.6 Adaptive Thinking | Standard Chat |
 | **Context** | 1 Million Token Mastery | 128k - 200k fixed |
 | **Memory** | Semantic Vector Store (Hybrid) | Simple Chat History |
@@ -49,11 +49,11 @@ obsidian status
 ### Always-On Autonomy
 Obsidian runs as a background service (`launchd` or `systemd`). It doesn't die when you close your terminal. It keeps reasoning, indexing, and auditing in the background.
 
-### Claude 4.6 Adaptive Reasoning
-Utilizing the latest **Thinking Blocks**, Obsidian modulates its reasoning effort based on task complexity. You can see its "Thinking Trace" in real-time before it acts.
+### Adaptive Multi-Provider Engine
+Seamlessly switch between Anthropic Claude 4.6 and local Ollama models. Obsidian intelligently routes tasks based on complexity, cost, and availability.
 
 ### 1M Token Context window
-Hold entire repositories in active memory. Obsidian uses **Prompt Caching** and **Context Distillation** to keep massive windows cheap, fast, and coherent.
+Hold entire repositories in active memory. Obsidian uses Prompt Caching and Context Distillation to keep massive windows cheap, fast, and coherent.
 
 ### Proactive Heartbeat (The Scheduler)
 Schedule background tasks to keep your systems healthy:
@@ -112,7 +112,7 @@ graph TD
     subgraph "Always-On Daemon (Backend)"
         Socket[Unix Domain Socket] <--> LaneQueue[Lane Queue]
         LaneQueue <--> Agent[Agent Core]
-        Agent <--> Claude[Claude 4.6]
+        Agent <--> MultiProvider[Multi-Provider Engine]
         Agent <--> Tools[Self-Improving Tools]
     end
 

@@ -1,5 +1,7 @@
 # Obsidian-Next: The Autonomous Engineering Intelligence (Master Plan)
 
+> Version: 0.4.8 | Updated: 2026-02-13
+
 This master plan synthesizes the advanced capabilities of **Claude 4.6**, the architectural robustness of **OpenClaw**, and industry best practices for **autonomous daemonized agents**.
 
 ---
@@ -12,15 +14,16 @@ Transform the CLI from a script into a robust background service.
     *   *Atomic Transactions:* Use SQLite's WAL mode to ensure the daemon's internal state is always consistent even if the process is killed.
 *   **Lifecycle Management:** Native service generators for `launchd` (macOS) and `systemd` (Linux) to ensure Obsidian-Next starts on boot and restarts on failure.
 
-## 2. Intelligence: Claude 4.6 "Adaptive Reasoning"
-Fully integrate the newest Claude features for peak engineering capability.
+## 2. Intelligence: Adaptive Multi-Provider Engine
+Fully integrate the newest model features for peak engineering capability.
+*   **Provider Agnostic Core:** Support for both Anthropic Claude 4.6 and local Ollama models (e.g. qwen2.5, llama3.1) with intelligent routing.
 *   **Adaptive Thinking Effort:** Implement a dynamic `effort` toggle.
     *   `max`: Use for refactoring, complex planning, and bug root-cause analysis.
     *   `low`: Use for repetitive file reads, listing directories, and health checks.
 *   **The Thinking Trace:** A dedicated UI component to stream "Thinking Blocks" in real-time, allowing the user to see the "why" before the "what."
 *   **1M Context Optimization:**
     *   **Prompt Caching:** Move the static codebase schema and "rules of engagement" to the top of the system prompt to hit 90%+ cache rates.
-    *   **Background Distillation:** Every 100k tokens, spawn a background `claude-haiku-4-5` process to compress old conversation segments into high-fidelity "Episodic Memos" stored in SQLite.
+    *   **Background Distillation:** Every 100k tokens, spawn a background process to compress old conversation segments into high-fidelity "Episodic Memos" stored in SQLite.
 
 ## 3. Hybrid Memory: The Semantic Knowledge Bank
 Merge human-readable Markdown with high-speed vector search.
@@ -54,25 +57,25 @@ Break the terminal boundary.
 
 # Implementation Roadmap
 
-### Phase 1: The Brain Upgrade (Immediate)
-- [ ] Update `src/core/config.ts` with Claude 4.6 model IDs.
-- [ ] Implement `ThinkingBlock` parsing in `src/core/llm.ts`.
-- [ ] Add `effort` parameter to LLM calls.
+### Phase 1: The Brain Upgrade (Completed)
+- [x] Update `src/core/config.ts` with Claude 4.6 model IDs.
+- [x] Implement `ThinkingBlock` parsing in `src/core/llm.ts`.
+- [x] Integrate Ollama and Multi-Provider routing.
 
-### Phase 2: The Service Layer
-- [ ] Refactor `src/index.ts` to support `--daemon` mode.
-- [ ] Implement the Unix Domain Socket listener.
-- [ ] Create `/init --service` to generate system startup files.
+### Phase 2: The Service Layer (Completed)
+- [x] Support `--daemon` mode.
+- [x] Implement the Unix Domain Socket listener.
+- [x] Create `/init --service` to generate system startup files.
 
-### Phase 3: Semantic Memory
-- [ ] Integrate `sqlite-vec` for local embeddings.
-- [ ] Implement the background "Distiller" to compress history.
-- [ ] Set up the bidirectional `MEMORY.md` watcher.
+### Phase 3: Semantic Memory (Completed)
+- [x] Integrate `sqlite-vec` for local embeddings.
+- [x] Implement history distillation and compression.
+- [x] Set up bidirectional sync for `MEMORY.md`.
 
-### Phase 4: Self-Improving Skills
-- [ ] Implement the `DynamicToolRegistry`.
-- [ ] Create the `create_skill` tool with its sandboxed verification loop.
+### Phase 4: Self-Improving Skills (Completed)
+- [x] Implement the `DynamicToolRegistry`.
+- [x] Create the `create_skill` tool with its sandboxed verification loop.
 
-### Phase 5: The Remote Gateway
-- [ ] Implement the Telegram Bot API bridge.
-- [ ] Add "Proactive" scheduling logic for nightly audits.
+### Phase 5: The Remote Gateway (Completed)
+- [x] Implement the Telegram Bot API bridge.
+- [x] Add "Proactive" scheduling logic for audits.
