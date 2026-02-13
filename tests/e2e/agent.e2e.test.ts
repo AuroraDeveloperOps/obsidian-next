@@ -156,6 +156,35 @@ describe('Agent E2E', () => {
         testWorkspace = path.join(PROJECT_ROOT, `.test-e2e-${Date.now()}`);
         await fs.mkdir(testWorkspace, { recursive: true });
 
+        // Configure auditor for test workspace
+        const { auditor } = await import('../../src/core/auditor.js');
+        auditor.setWorkspaceRoot(testWorkspace);
+
+        // Mock settings to auto-approve all operations
+        const { settings } = await import('../../src/core/settings.js');
+        vi.spyOn(settings, 'load').mockResolvedValue({
+            mode: 'auto',
+            animations: { enabled: false, frameDuration: 100 },
+            permissions: {
+                allowed: [],
+                denied: [],
+                session: [],
+                unsandboxed: []
+            }
+        } as any);
+        vi.spyOn(settings, 'isAllowed').mockResolvedValue(true);
+        vi.spyOn(settings, 'isDenied').mockResolvedValue(false);
+        vi.spyOn(settings, 'isSessionAuthorized').mockResolvedValue(true);
+        vi.spyOn(settings, 'isUnsandboxed').mockResolvedValue(false);
+
+        // Mock config to use test workspace
+        const { config } = await import('../../src/core/config.js');
+        vi.spyOn(config, 'load').mockResolvedValue({
+            workspaceRoot: testWorkspace,
+            anthropicApiKey: 'test-key',
+            model: 'claude-sonnet-4-20250514'
+        } as any);
+
         // Clear captured events
         capturedEvents.length = 0;
 

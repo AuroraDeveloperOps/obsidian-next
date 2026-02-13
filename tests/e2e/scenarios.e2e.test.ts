@@ -11,31 +11,28 @@
  * path validation issues with the security auditor.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
+import { setupTestWorkspace, createProjectStructure, createTestFile } from '../setup-helpers.js';
 
-// Use a subdirectory within the actual project workspace
-const PROJECT_ROOT = process.cwd();
 let testWorkspace: string;
+let cleanup: () => Promise<void>;
 
 describe('Real-World Scenarios', () => {
     beforeEach(async () => {
-        // Create test workspace INSIDE the project to pass auditor path checks
-        testWorkspace = path.join(PROJECT_ROOT, `.test-workspace-${Date.now()}`);
-        await fs.mkdir(testWorkspace, { recursive: true });
+        const setup = await setupTestWorkspace('scenarios');
+        testWorkspace = setup.workspace;
+        cleanup = setup.cleanup;
 
-        // Create a realistic project structure
-        await fs.mkdir(path.join(testWorkspace, 'src'), { recursive: true });
-        await fs.mkdir(path.join(testWorkspace, 'tests'), { recursive: true });
+        // Create realistic project structure
+        await createProjectStructure(testWorkspace);
 
-        // Create source files
-        await fs.writeFile(
-            path.join(testWorkspace, 'src/index.ts'),
-            `/**
- * Main entry point
- */
-export function main() {
+        // Add multiply function to index.ts
+        await createTestFile(
+            testWorkspace,
+            'src/index.ts',
+            `export function main() {
     console.log('Hello, World!');
 }
 
@@ -45,47 +42,27 @@ export function add(a: number, b: number): number {
 
 export function multiply(a: number, b: number): number {
     return a * b;
-}
-`
+}`
         );
 
-        await fs.writeFile(
-            path.join(testWorkspace, 'src/utils.ts'),
-            `/**
- * Utility functions
- */
+        // Add TODO to utils
+        await createTestFile(
+            testWorkspace,
+            'src/utils.ts',
+            `export function capitalize(str: string): string {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 export function formatDate(date: Date): string {
     return date.toISOString();
 }
 
-export function capitalize(str: string): string {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-// TODO: Add more utilities
-`
-        );
-
-        await fs.writeFile(
-            path.join(testWorkspace, 'package.json'),
-            JSON.stringify({
-                name: 'test-project',
-                version: '1.0.0',
-                main: 'dist/index.js',
-                scripts: {
-                    build: 'tsc',
-                    test: 'vitest',
-                },
-            }, null, 2)
+// TODO: Add more utilities`
         );
     });
 
     afterEach(async () => {
-        try {
-            await fs.rm(testWorkspace, { recursive: true, force: true });
-        } catch {
-            // Ignore cleanup errors
-        }
+        await cleanup();
     });
 
     describe('Scenario: Code Exploration', () => {
