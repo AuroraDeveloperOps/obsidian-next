@@ -4,8 +4,10 @@
 
 > This README was written by Obsidian (v0.4.6) - a global, always-on autonomous engineering daemon with adaptive reasoning and system-wide persistent memory.
 
+[![License](https://img.shields.io/badge/License-AGPL_3.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-0.4.8-blue)](package.json)
-[![Status](https://img.shields.io/badge/Status-Proprietary-red)](CHANGELOG.md)
+[![Providers](https://img.shields.io/badge/Providers-Anthropic_\|_Ollama_\|_MoE-orange)](#core-capabilities)
+[![Status](https://img.shields.io/badge/Status-Autonomous-green)](CHANGELOG.md)
 [![Claude 4.6](https://img.shields.io/badge/Model-Claude_4.6-purple)](docs/PRD.md)
 
 **Obsidian Next** is a global, always-on autonomous engineering partner. It runs as a system-wide background service, managing multiple codebases and performing proactive engineering tasks while you're away.
@@ -160,5 +162,4 @@ npm test         # Full suite (vitest)
 
 ## License
 
-Copyright 2026 Aurora Foundation. All Rights Reserved.
-Proprietary software. See [LICENSE](LICENSE) for terms.
+Copyright 2026 Aurora Foundation. Licensed under [AGPL-3.0](LICENSE).
