@@ -35,7 +35,7 @@ export type AgentEventUnion =
 
 	// 4. System/Status
 	| { type: 'error'; message: string; code?: string }
-	| { type: 'done'; summary: string }
+	| { type: 'done'; summary: string; durationMs?: number }
 	| { type: 'clear_history' }
 	| { type: 'restore_history'; events: AgentEvent[] }
 	| { type: 'view_request'; viewId: string; command?: string; params?: any }

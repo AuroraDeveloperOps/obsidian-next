@@ -86,18 +86,10 @@ const DashboardComponent: React.FC<DashboardProps> = ({
 				idleTimeout: 60000,
 				sleepTimeout: 300000
 			};
-			
-			const conf = cfg as any;
-			let displayModel = cfg.model;
-			if (conf.provider === 'ollama') {
-				displayModel = conf.ollama?.models?.chat || 'Unknown Ollama Model';
-			} else if (conf.provider === 'moe') {
-				displayModel = 'MoE (Auto)';
-			}
 
 			setState((prev) => ({
 				...prev,
-				model: formatModelName(displayModel),
+				model: formatModelName(cfg.model),
 				mode: s.mode,
 				keyStatus: hasKey ? 'valid' : 'missing',
 				sessionCost: usage.getSessionCost(),
@@ -126,18 +118,9 @@ const DashboardComponent: React.FC<DashboardProps> = ({
 					idleTimeout: 60000,
 					sleepTimeout: 300000
 				};
-				
-				const conf = cfg as any;
-				let displayModel = cfg.model;
-				if (conf.provider === 'ollama') {
-					displayModel = conf.ollama?.models?.chat || 'Unknown Ollama Model';
-				} else if (conf.provider === 'moe') {
-					displayModel = 'MoE (Auto)';
-				}
-				
 				setState((prev) => ({
 					...prev,
-					model: formatModelName(displayModel),
+					model: formatModelName(cfg.model),
 					mode: s.mode,
 					sessionCost: usage.getSessionCost(),
 					workspace: cfg.workspaceRoot.split('/').slice(-2).join('/'),

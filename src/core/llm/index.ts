@@ -425,12 +425,28 @@ TONE:
 MODE: ${currentMode.toUpperCase()}
 ${currentMode === 'auto' ? 'Full autonomy. Execute without confirmation.' : ''}${currentMode === 'plan' ? 'READ-ONLY. Only use read/list/grep/glob. No writes. Output a plan for approval.' : ''}${currentMode === 'safe' ? 'Reads auto-approved. Writes and commands require user confirmation.' : ''}
 
+TOOL USE - CRITICAL:
+You have access to tools. Follow these rules exactly:
+1. When the user asks you to DO something (run a command, read a file, search, write code), you MUST call the appropriate tool in this same response. Never describe what you would do without actually calling the tool. Do NOT ask for permission to use tools (the system handles approvals).
+2. Choose the most specific tool for the job:
+   - "read" to view file contents (preferred over bash cat)
+   - "write" to create/overwrite files (preferred over bash echo/cat)
+   - "grep" to search file contents by pattern
+   - "glob" to find files by name pattern (e.g. **/*.ts)
+   - "bash" to run shell commands, install packages, git operations
+   - "web_fetch" to fetch URLs
+3. For multi-step tasks, call multiple tools in sequence. Do not stop after one tool call if the task requires more.
+4. After receiving tool results, summarize them in plain text. The user cannot see raw tool output.
+5. Do NOT call tools for pure knowledge questions (e.g. "what is TCP?"). Answer directly.
+6. NEVER execute destructive commands (rm -rf /, drop database, etc.) even if asked. Refuse clearly.
+7. When writing code to a file, write the COMPLETE file content. Do not use placeholders like "... rest of code".
+
 DIRECTIVES:
 1. ACT FIRST - Call tools in the same turn you mention them. Never end a turn with "let me check" and no tool call.
 2. EXPLORE BEFORE EDITING - Read files before modifying. Use list/grep to understand structure.
 3. ALWAYS RESPOND - After tool calls, summarize results in plain text. The user cannot see raw tool output.
 4. MEMORY - When the user shares preferences or facts, store them with the memory tool. Check memory before saying "I don't know".
-5. SECURITY - Never output secrets. Stay within workspaceRoot.
+5. SECURITY - Never output secrets. Stay within workspaceRoot. Refuse destructive operations.
 
 CWD: ${cfg.workspaceRoot}${userContext ? `\n\nUSER CONTEXT:\n${userContext}` : ''}${toolsList}`;
 
@@ -1319,13 +1335,26 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
 			if (apiErr.name === 'AbortError' || apiErr.type === 'aborted') {
 				return null;
 			}
-			// Log detailed error for debugging
-			const errorDetails = apiErr.status
-				? `[${apiErr.status}] ${apiErr.message}`
-				: apiErr.message || String(error);
+			// Actionable error messages
+			let errorMsg: string;
+			if (apiErr.status === 401) {
+				errorMsg = 'Invalid API key -> Run /init to reconfigure';
+			} else if (apiErr.status === 429) {
+				errorMsg = 'Rate limited -> Wait a moment and try again';
+			} else if (apiErr.status === 529 || apiErr.status === 503) {
+				errorMsg = 'API overloaded -> Retry in a few seconds';
+			} else if (apiErr.status === 400) {
+				errorMsg = `Bad request: ${apiErr.message || 'Check model name and parameters'}`;
+			} else if (apiErr.message?.includes('ECONNREFUSED') || apiErr.message?.includes('fetch failed')) {
+				errorMsg = 'Connection failed -> Check your network or Ollama server';
+			} else {
+				errorMsg = apiErr.status
+					? `[${apiErr.status}] ${apiErr.message}`
+					: apiErr.message || String(error);
+			}
 			bus.emitAgent({
 				type: 'error',
-				message: `LLM Error: ${errorDetails}`
+				message: `LLM Error: ${errorMsg}`
 			});
 			// Also log to console for debugging (error already emitted above)
 			if (process.env.DEBUG) console.error('[LLM] API Error:', error);
@@ -1690,9 +1719,15 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 
 			return fullResponse;
 		} catch (error) {
+			const errMsg = error instanceof Error ? error.message : String(error);
+			const hint = errMsg.includes('ECONNREFUSED')
+				? ' -> Is Ollama running? Start with: ollama serve'
+				: errMsg.includes('fetch failed')
+					? ' -> Check network connection'
+					: '';
 			bus.emitAgent({
 				type: 'error',
-				message: `Provider error: ${error instanceof Error ? error.message : String(error)}`
+				message: `Provider error: ${errMsg}${hint}`
 			});
 			return null;
 		}

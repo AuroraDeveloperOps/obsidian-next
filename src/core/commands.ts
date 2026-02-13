@@ -1,6 +1,5 @@
 import { bus } from './bus.js';
 import { initCommand } from '../commands/init.js';
-import { setupCommand } from '../commands/setup.js';
 import { clearCommand } from '../commands/clear.js';
 import { contextCommand } from '../commands/context.js';
 import { modelsCommand } from '../commands/models.js';
@@ -20,6 +19,7 @@ import { pilotCommand } from '../commands/pilot.js';
 import { scheduledTasksCommand } from '../commands/scheduled_tasks.js';
 import { scheduleCommand } from '../commands/schedule.js';
 import { memoryCommand } from '../commands/memory.js';
+import { ollamaCommand } from '../commands/ollama.js';
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -41,25 +41,15 @@ export class CommandRegistry {
 			'help',
 			'Show available commands',
 			async () => {
-				const validCommands = Array.from(this.commands.values())
-					.map((c) => `  /${c.name.padEnd(10)} - ${c.description}`)
-					.join('\n');
-
-				bus.emitAgent({
-					type: 'thought',
-					content: `Available Commands:\n${validCommands}`
-				});
+				bus.emitAgent({ type: 'view_request', viewId: 'help', command: 'help' });
 			},
 			{ isView: true, viewId: 'help' }
 		);
 
-		this.register('init', 'Initialize configuration', initCommand);
-		this.register(
-			'setup',
-			'Run setup wizard or configure Ollama',
-			setupCommand,
-			{ aliases: ['onboard'] }
-		);
+		this.register('init', 'Initialize configuration', initCommand, {
+			isView: true,
+			viewId: 'init'
+		});
 		this.register('clear', 'Clear conversation history', clearCommand);
 		this.register('context', 'Show session context & usage', contextCommand, {
 			isView: true,
@@ -68,30 +58,40 @@ export class CommandRegistry {
 		});
 		this.register('models', 'Select AI model', modelsCommand, {
 			isView: true,
-			viewId: 'settings'
+			viewId: 'models'
 		});
-		this.register('tool', 'Execute tools manually', toolCommand);
+		this.register('tool', 'View/execute tools', toolCommand, {
+			isView: true,
+			viewId: 'tool_list'
+		});
 		this.register('status', 'Show system status', statusCommand, {
 			isView: true,
-			viewId: 'doctor',
+			viewId: 'status',
 			aliases: ['doctor']
 		});
 		this.register('sandbox', 'Toggle sandbox mode', sandboxCommand, {
 			isView: true,
 			viewId: 'settings'
-		}); // Root.tsx handles the specific tab
+		});
 		this.register('mode', 'Set execution mode (auto/plan/safe)', modeCommand, {
 			isView: true,
-			viewId: 'settings'
+			viewId: 'mode_select'
 		});
 		this.register('task', 'View/manage current task', taskCommand, {
 			isView: true,
 			viewId: 'task'
 		});
-		this.register('undo', 'Undo recent file changes', undoCommand);
+		this.register('undo', 'Undo recent file changes', undoCommand, {
+			isView: true,
+			viewId: 'undo'
+		});
 		this.register('config', 'View/edit configuration', configCommand, {
 			isView: true,
 			viewId: 'settings'
+		});
+		this.register('doctor', 'Run diagnostics', doctorCommand, {
+			isView: true,
+			viewId: 'doctor'
 		});
 		this.register(
 			'settings',
@@ -105,40 +105,40 @@ export class CommandRegistry {
 			viewId: 'sessions',
 			aliases: ['sessions']
 		});
-		this.register('diff', 'View recent file changes', diffCommand);
+		this.register('diff', 'View recent file changes', diffCommand, {
+			isView: true,
+			viewId: 'diff_list'
+		});
 		this.register(
 			'mcp',
 			'Manage Model Context Protocol',
-			async (args) => {
-				// Placeholder if needed, but UI usually handles it
+			async (_args) => {
+				bus.emitAgent({ type: 'view_request', viewId: 'mcp', command: 'mcp' });
 			},
 			{ isView: true, viewId: 'mcp', aliases: ['plugin'] }
 		);
 		this.register('pilot', 'Enable/disable Computer Use mode', pilotCommand, {
+			isView: true,
+			viewId: 'pilot',
 			aliases: ['computer', 'desktop']
 		});
-		this.register('schedule', 'Schedule a background task', scheduleCommand);
+		this.register('schedule', 'Schedule a background task', scheduleCommand, {
+			isView: true,
+			viewId: 'scheduler'
+		});
 		this.register(
 			'scheduled_tasks',
 			'List all scheduled background tasks',
 			scheduledTasksCommand,
-			{ aliases: ['tasks'] }
+			{ isView: true, viewId: 'scheduled_tasks', aliases: ['tasks'] }
 		);
-		this.register('memory', 'Manage agent memory', memoryCommand);
-
-		this.register('schedule_test', 'Schedule a test task', async () => {
-			const { scheduler } = await import('./scheduler.js');
-			const now = new Date();
-			now.setSeconds(now.getSeconds() + 5);
-			const cronExpression = `${now.getSeconds()} ${now.getMinutes()} ${now.getHours()} ${now.getDate()} ${now.getMonth() + 1} *`;
-
-			await scheduler.scheduleTask(cronExpression, 'system:echo', {
-				message: 'Hello from scheduled task'
-			});
-			bus.emitAgent({
-				type: 'thought',
-				content: `Scheduled a test task to run at ${now.toLocaleTimeString()}`
-			});
+		this.register('memory', 'Manage agent memory', memoryCommand, {
+			isView: true,
+			viewId: 'memory'
+		});
+		this.register('ollama', 'Ollama model registry', ollamaCommand, {
+			isView: true,
+			viewId: 'ollama'
 		});
 	}
 
@@ -174,20 +174,10 @@ export class CommandRegistry {
 		}
 
 		try {
-			// Signal UI if this is a view command WITHOUT arguments
-			// If args are provided, we're executing an action, not just viewing
-			if (cmd.isView && cmd.viewId && args.length === 0) {
-				bus.emitAgent({
-					type: 'view_request',
-					viewId: cmd.viewId,
-					command: actualName,
-					params: args
-				});
-			}
-
+			// For view commands without args, the handler itself emits view_request
+			// Just call the handler and let it decide
 			await cmd.handler(args);
 
-			// Emit command executed event for UI/logging
 			bus.emitAgent({
 				type: 'command_executed',
 				command: actualName,

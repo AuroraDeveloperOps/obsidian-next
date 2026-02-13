@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.8] - 2026-02-13
+
+### Added
+- **Ollama Reliability**:
+  - **Auto-Recovery**: Agent now detects empty responses and proactively prompts the model to try again.
+  - **Promise Detection**: Detects intention phrases (e.g. "I will run") where the model forgets to call a tool, and forces execution.
+  - **Parallel MCP**: Tool listing from multiple MCP servers is now parallelized, reducing latency significantly.
+
+### Fixed
+- **Ollama 400 Errors**: Fixed invalid tool call history format. Now correctly sends tool results with correct role and object arguments, compliant with newer Ollama versions.
+- **UI Model Display**: Dashboard and Header now correctly show the active Ollama or MoE model name instead of defaulting to Anthropic config.
+- **Model Initialization**: Fixed crash when configured Ollama model is missing; now falls back to available models.
+
+### Technical
+- **Tool Arguments**: Updated Ollama provider to handle pre-parsed object arguments from the API.
+
+---
+
 ## [0.4.7] - 2026-02-07
 
 ### Added

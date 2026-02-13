@@ -471,6 +471,12 @@ APPROVAL: <yes if destructive, no otherwise>`;
 					lower.includes('let me list') ||
 					lower.includes("i'll search") ||
 					lower.includes('let me search') ||
+					lower.includes("i'll run") ||
+					lower.includes('let me run') ||
+					lower.includes("i'll execute") ||
+					lower.includes('let me execute') ||
+					lower.includes("i will use") ||
+					lower.includes('let me use') ||
 					lower.includes('checking') ||
 					lower.includes('looking into');
 				if (isPromiseToAct) {
@@ -490,6 +496,19 @@ APPROVAL: <yes if destructive, no otherwise>`;
 			} else if (toolOutput) {
 				// LLM generated no text but tools ran — surface tool output
 				bus.emitAgent({ type: 'thought', content: toolOutput });
+			} else {
+				// LLM generated nothing and no tools ran — force a follow-up
+				const followUp = await llm.streamChat(
+					'[System] You returned an empty response. Please execute the requested task or answer the question.'
+				);
+				if (followUp && followUp.trim()) {
+					bus.emitAgent({ type: 'thought', content: followUp });
+				} else {
+					bus.emitAgent({
+						type: 'error',
+						message: 'Model returned empty response (multiple attempts).'
+					});
+				}
 			}
 
 			await context.setLastAction(input.slice(0, 50));
@@ -497,7 +516,8 @@ APPROVAL: <yes if destructive, no otherwise>`;
 			usage.addSessionDuration(durationMs);
 			bus.emitAgent({
 				type: 'done',
-				summary: `Completed in ${(durationMs / 1000).toFixed(1)}s`
+				summary: `Completed in ${(durationMs / 1000).toFixed(1)}s`,
+				durationMs
 			});
 		} else {
 			bus.emitAgent({
@@ -594,7 +614,8 @@ OTHER RULES:
 				usage.addSessionDuration(durationMs);
 				bus.emitAgent({
 					type: 'done',
-					summary: `Plan executed in ${(durationMs / 1000).toFixed(1)}s`
+					summary: `Plan executed in ${(durationMs / 1000).toFixed(1)}s`,
+					durationMs
 				});
 			} else {
 				bus.emitAgent({ type: 'error', message: 'Failed to execute plan' });

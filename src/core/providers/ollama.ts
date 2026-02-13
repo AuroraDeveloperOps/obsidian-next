@@ -15,14 +15,15 @@ import type {
 } from './provider.js';
 
 interface OllamaMessage {
-	role: 'user' | 'assistant' | 'system';
+	role: 'user' | 'assistant' | 'system' | 'tool';
 	content: string;
+	tool_call_id?: string;
 	tool_calls?: Array<{
 		id: string;
 		type: 'function';
 		function: {
 			name: string;
-			arguments: string;
+			arguments: string | Record<string, unknown>;
 		};
 	}>;
 }
@@ -82,22 +83,35 @@ export class OllamaProvider implements MultiModelProvider {
 	}
 
 	getCapabilities(): ProviderCapabilities {
-		// List of model families known to support the Ollama tools API
+		const lower = this.model.toLowerCase();
+
+		// Cloud models (:cloud suffix) always support tools via Ollama Cloud
+		const isCloud = lower.includes(':cloud') || lower.endsWith('-cloud');
+
+		// Local model families known to support the Ollama tools API
 		const toolCapableFamilies = [
-			'llama3.1',
-			'llama3.2',
-			'qwen2.5',
-			'mistral',
-			'mixtral',
-			'command-r',
-			'firefunction',
-			'functiongemma',
-			'funcgemma'
+			'llama3.1', 'llama3.2', 'llama3.3',
+			'qwen2.5', 'qwen3',
+			'gemma3',
+			'mistral', 'mixtral', 'ministral',
+			'command-r', 'command-a',
+			'phi4',
+			'glm4', 'glm-4', 'glm-5', 'glm5',
+			'deepseek-v3', 'devstral',
+			'nemotron',
+			'firefunction', 'functiongemma', 'funcgemma'
 		];
 
-		const supportsTools = toolCapableFamilies.some(family => 
-			this.model.toLowerCase().includes(family)
+		const supportsTools = isCloud || toolCapableFamilies.some(family =>
+			lower.includes(family)
 		);
+
+		// Vision-capable model families
+		const visionFamilies = [
+			'llava', 'moondream', 'gemma3', 'qwen3-vl',
+			'llama3.2-vision', 'ministral'
+		];
+		const supportsVision = visionFamilies.some(family => lower.includes(family));
 
 		return {
 			streaming: true,
@@ -105,7 +119,7 @@ export class OllamaProvider implements MultiModelProvider {
 			thinking: false,
 			caching: false,
 			computerUse: false,
-			vision: this.model.includes('llava') || this.model.includes('moondream')
+			vision: supportsVision
 		};
 	}
 
@@ -123,7 +137,7 @@ export class OllamaProvider implements MultiModelProvider {
 	 * Convert Anthropic message format to Ollama format
 	 */
 	private convertMessages(messages: Anthropic.MessageParam[]): OllamaMessage[] {
-		return messages.map((msg) => {
+		return messages.flatMap((msg) => {
 			// Handle string content
 			if (typeof msg.content === 'string') {
 				return {
@@ -152,37 +166,37 @@ export class OllamaProvider implements MultiModelProvider {
 							type: 'function' as const,
 							function: {
 								name: block.name,
-								arguments: JSON.stringify(block.input)
+								arguments: block.input
 							}
 						}))
 					};
 				}
 
-				// Tool results - convert to text format for Ollama
+				// Tool results - convert to tool role messages for Ollama
 				const toolResultBlocks = msg.content.filter(
 					(block: any) => block.type === 'tool_result'
 				);
 				if (toolResultBlocks.length > 0) {
-					const resultText = toolResultBlocks
-						.map((block: any) => {
-							let content =
-								typeof block.content === 'string'
-									? block.content
-									: JSON.stringify(block.content);
-							
-							// Truncate massive tool results for Ollama (max 5k chars)
-							if (content.length > 5000) {
-								content = content.slice(0, 2500) + "\n... [TRUNCATED] ...\n" + content.slice(-2500);
-							}
-							
-							return `[Tool Result]: ${content}`;
-						})
-						.join('\n\n');
+					return toolResultBlocks.map((block: any) => {
+						let content =
+							typeof block.content === 'string'
+								? block.content
+								: JSON.stringify(block.content);
 
-					return {
-						role: 'user',
-						content: resultText
-					};
+						// Truncate massive tool results for Ollama (max 5k chars)
+						if (content.length > 5000) {
+							content =
+								content.slice(0, 2500) +
+								'\n... [TRUNCATED] ...\n' +
+								content.slice(-2500);
+						}
+
+						return {
+							role: 'tool',
+							tool_call_id: block.tool_use_id,
+							content: content
+						};
+					});
 				}
 
 				return {
@@ -317,7 +331,12 @@ export class OllamaProvider implements MultiModelProvider {
 						if (chunk.message?.tool_calls) {
 							for (const toolCall of chunk.message.tool_calls) {
 								try {
-									const input = JSON.parse(toolCall.function.arguments);
+									const rawArgs = toolCall.function.arguments;
+									const input =
+										typeof rawArgs === 'string'
+											? JSON.parse(rawArgs)
+											: rawArgs;
+
 									yield {
 										type: 'tool_use',
 										toolUse: {

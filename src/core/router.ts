@@ -91,8 +91,14 @@ export class ModelRouter {
 			}
 
 			// Use chat model by default
-			this.ollamaProvider.setModel(this.config!.ollama.models.chat);
-			return this.ollamaProvider;
+			const model = await this.selectBestOllamaModel(this.config!.ollama.models.chat);
+			if (model) {
+				this.ollamaProvider.setModel(model);
+				return this.ollamaProvider;
+			}
+			
+			// Fallback if no models available
+			return this.anthropicProvider;
 		}
 
 		// Mode 3: MoE - Intelligent routing
@@ -103,13 +109,16 @@ export class ModelRouter {
 				// Prefer FuncGemma for tool calling
 				const available = await this.ollamaProvider.isAvailable();
 				if (available) {
-					this.ollamaProvider.setModel(this.config!.ollama.models.tool);
-					bus.emitAgent({
-						type: 'thought',
-						content: `[MoE] Routing to ${this.config!.ollama.models.tool} for tool execution`,
-						hidden: true
-					});
-					return this.ollamaProvider;
+					const model = await this.selectBestOllamaModel(this.config!.ollama.models.tool);
+					if (model) {
+						this.ollamaProvider.setModel(model);
+						bus.emitAgent({
+							type: 'thought',
+							content: `[MoE] Routing to ${model} for tool execution`,
+							hidden: true
+						});
+						return this.ollamaProvider;
+					}
 				}
 
 				// Fallback to Anthropic
@@ -125,13 +134,16 @@ export class ModelRouter {
 				// Use SmolLM for simple chat
 				const available = await this.ollamaProvider.isAvailable();
 				if (available) {
-					this.ollamaProvider.setModel(this.config!.ollama.models.chat);
-					bus.emitAgent({
-						type: 'thought',
-						content: `[MoE] Routing to ${this.config!.ollama.models.chat} for chat`,
-						hidden: true
-					});
-					return this.ollamaProvider;
+					const model = await this.selectBestOllamaModel(this.config!.ollama.models.chat);
+					if (model) {
+						this.ollamaProvider.setModel(model);
+						bus.emitAgent({
+							type: 'thought',
+							content: `[MoE] Routing to ${model} for chat`,
+							hidden: true
+						});
+						return this.ollamaProvider;
+					}
 				}
 
 				// Fallback to Anthropic
@@ -153,13 +165,16 @@ export class ModelRouter {
 				// Fallback to Ollama reasoning model
 				const ollamaAvailable = await this.ollamaProvider.isAvailable();
 				if (ollamaAvailable) {
-					this.ollamaProvider.setModel(this.config!.ollama.models.reasoning);
-					bus.emitAgent({
-						type: 'thought',
-						content: `[MoE] Claude unavailable, using ${this.config!.ollama.models.reasoning}`,
-						hidden: true
-					});
-					return this.ollamaProvider;
+					const model = await this.selectBestOllamaModel(this.config!.ollama.models.reasoning);
+					if (model) {
+						this.ollamaProvider.setModel(model);
+						bus.emitAgent({
+							type: 'thought',
+							content: `[MoE] Claude unavailable, using ${model}`,
+							hidden: true
+						});
+						return this.ollamaProvider;
+					}
 				}
 
 				throw new Error('No providers available');
@@ -167,6 +182,54 @@ export class ModelRouter {
 
 			default:
 				return this.anthropicProvider;
+		}
+	}
+
+	/**
+	 * Select best available Ollama model based on preference
+	 */
+	private async selectBestOllamaModel(preferred: string): Promise<string | null> {
+		try {
+			const models = await this.ollamaProvider.listModels();
+			if (models.length === 0) return null;
+
+			// 1. Exact match
+			if (models.includes(preferred)) {
+				return preferred;
+			}
+
+			// 2. Match without tag (e.g., 'smollm:latest' -> match 'smollm:135m')
+			const preferredBase = preferred.split(':')[0];
+			const familyMatch = models.find(m => m.startsWith(preferredBase));
+			if (familyMatch) {
+				bus.emitAgent({
+					type: 'thought',
+					content: `[Router] Model ${preferred} not found, using ${familyMatch}`,
+					hidden: true
+				});
+				return familyMatch;
+			}
+
+			// 3. Fallback to any model if configured one is missing
+			// This is safer than failing, but might yield unexpected results.
+			// Ideally we shouldn't do this for tool calling unless we know the model supports it.
+			// For now, let's just pick the first one and hope for the best, or return null to trigger fallback?
+			// The router logic has fallbacks to Anthropic, so returning null is better if we can't match intent.
+			
+			// However, in 'ollama' mode (forced), we might want *any* model rather than falling back to Anthropic (which might not be configured/paid).
+			if (this.config?.mode === 'ollama') {
+				const fallback = models[0];
+				bus.emitAgent({
+					type: 'thought',
+					content: `[Router] Model ${preferred} not found, falling back to ${fallback}`,
+					hidden: true
+				});
+				return fallback;
+			}
+
+			return null;
+		} catch {
+			return null;
 		}
 	}
 

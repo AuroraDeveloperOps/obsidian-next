@@ -287,9 +287,7 @@ class MCPManager {
 	 * List all tools from all connected servers
 	 */
 	async listTools() {
-		const allTools: any[] = [];
-
-		for (const [serverName, conn] of this.connections) {
+		const promises = Array.from(this.connections.entries()).map(async ([serverName, conn]) => {
 			try {
 				// Create a timeout promise
 				const timeoutMs = 5000;
@@ -312,19 +310,21 @@ class MCPManager {
 				if (result && result.tools) {
 					// Namespace tools to avoid collisions? e.g. "filesystem_list"
 					// Or keep original names. Let's keep original for now but add meta.
-					const serverTools = result.tools.map((t: any) => ({
+					return result.tools.map((t: any) => ({
 						...t,
 						server: serverName // Attach server name for routing
 						// If we wanted to rename: name: `${serverName}__${t.name}`
 					}));
-					allTools.push(...serverTools);
 				}
+				return [];
 			} catch (error) {
-				console.error(`Failed to list tools from ${serverName}:`, error);
+				// console.error(`Failed to list tools from ${serverName}:`, error);
+				return [];
 			}
-		}
+		});
 
-		return allTools;
+		const results = await Promise.all(promises);
+		return results.flat();
 	}
 
 	/**

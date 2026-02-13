@@ -3,133 +3,70 @@ import { Box, Text } from 'ink';
 import { AgentEvent } from '../events/types.js';
 import { AgentLine } from '../components/AgentLine.js';
 import { ToolOutput } from '../components/ToolOutput.js';
+import { WelcomeBanner } from '../components/WelcomeBanner.js';
 
 interface MessageListProps {
 	events: AgentEvent[];
 	maxEvents?: number;
-}
-
-// Tree connector characters
-const TREE = {
-	first: '┌─',
-	middle: '├─',
-	last: '└─',
-	single: '──',
-	pipe: '│ '
-} as const;
-
-interface ToolGroup {
-	tools: Array<{ start: any; result?: any }>;
-	startIndex: number;
+	model?: string;
+	mode?: string;
 }
 
 /**
- * Group consecutive tool calls into batches for tree display
+ * Format tool name to PascalCase display (bash -> Bash, web_fetch -> WebFetch)
  */
-function groupToolCalls(
-	events: any[]
-): Map<
-	number,
-	{ position: 'first' | 'middle' | 'last' | 'single'; groupSize: number }
-> {
-	const toolPositions = new Map<
-		number,
-		{ position: 'first' | 'middle' | 'last' | 'single'; groupSize: number }
-	>();
-
-	let groupStart = -1;
-	let groupIndices: number[] = [];
-
-	for (let i = 0; i < events.length; i++) {
-		const event = events[i];
-		const prevEvent = events[i - 1];
-		const nextEvent = events[i + 1];
-
-		if (event.type === 'tool_start') {
-			// Check if this starts or continues a group
-			const isNewGroup =
-				!prevEvent ||
-				(prevEvent.type !== 'tool_start' && prevEvent.type !== 'tool_result');
-
-			if (isNewGroup) {
-				// Finalize previous group if any
-				if (groupIndices.length > 0) {
-					assignPositions(groupIndices, toolPositions);
-				}
-				groupIndices = [i];
-			} else {
-				groupIndices.push(i);
-			}
-		} else if (event.type !== 'tool_result' && groupIndices.length > 0) {
-			// Non-tool event ends the group
-			assignPositions(groupIndices, toolPositions);
-			groupIndices = [];
-		}
-	}
-
-	// Finalize last group
-	if (groupIndices.length > 0) {
-		assignPositions(groupIndices, toolPositions);
-	}
-
-	return toolPositions;
+function formatToolName(tool: string): string {
+	return tool
+		.split(/[_-]/)
+		.map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+		.join('');
 }
 
-function assignPositions(
-	indices: number[],
-	positions: Map<
-		number,
-		{ position: 'first' | 'middle' | 'last' | 'single'; groupSize: number }
-	>
-) {
-	const size = indices.length;
-	indices.forEach((idx, i) => {
-		let position: 'first' | 'middle' | 'last' | 'single';
-		if (size === 1) {
-			position = 'single';
-		} else if (i === 0) {
-			position = 'first';
-		} else if (i === size - 1) {
-			position = 'last';
-		} else {
-			position = 'middle';
+/**
+ * Extract a short summary from tool args for display in parens
+ */
+function summarizeArgs(tool: string, argsJson: string): string {
+	try {
+		const args = JSON.parse(argsJson);
+		const firstVal = Object.values(args)[0];
+		if (typeof firstVal === 'string') {
+			const cleaned = firstVal.trim();
+			return cleaned.length > 60 ? cleaned.slice(0, 60) + '...' : cleaned;
 		}
-		positions.set(idx, { position, groupSize: size });
-	});
+		return '';
+	} catch {
+		return '';
+	}
 }
 
 const MessageListComponent: React.FC<MessageListProps> = ({
 	events,
-	maxEvents = 50
+	maxEvents = 50,
+	model = '',
+	mode = 'safe'
 }) => {
 	const visibleEvents = events.slice(-maxEvents);
-	const toolPositions = groupToolCalls(visibleEvents);
 
 	return (
 		<Box flexDirection="column">
+			{/* Welcome banner scrolls with the conversation */}
+			<WelcomeBanner model={model} mode={mode} />
+
 			{visibleEvents.map((event: any, i) => {
 				const prevEvent = visibleEvents[i - 1];
 				const nextEvent = visibleEvents[i + 1];
 				let content = null;
 
-				// Determine spacing
-				const isToolGroup =
+				// Spacing: tool_result hugs its tool_start, everything else gets margin
+				const isToolResult =
 					event.type === 'tool_result' && prevEvent?.type === 'tool_start';
-				const isActionStart =
-					event.type === 'tool_start' && prevEvent?.type === 'thought';
-				const isContinuingToolBatch =
-					event.type === 'tool_start' &&
-					(prevEvent?.type === 'tool_start' ||
-						prevEvent?.type === 'tool_result');
-				const needsMargin =
-					!isToolGroup && !isActionStart && !isContinuingToolBatch;
+				const needsMargin = !isToolResult;
 
 				if (event.type === 'user_input') {
 					content = (
-						<Box flexDirection="column">
-							<Text color="white">
-								<Text color="cyan" bold>{`> `}</Text>
-								{event.content}
+						<Box>
+							<Text backgroundColor="#1a1a2e" color="#e0e0e0">
+								{' > '}{event.content}{' '}
 							</Text>
 						</Box>
 					);
@@ -138,55 +75,35 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 					if (event.hidden) return null;
 
 					const isLast = i === visibleEvents.length - 1;
+
+					// Check if next event is 'done' - append duration inline
+					const doneNext = nextEvent?.type === 'done' ? nextEvent : null;
+					const durationSuffix = doneNext?.durationMs
+						? ` (${(doneNext.durationMs / 1000).toFixed(1)}s)`
+						: '';
+
 					content = (
-						<Box flexDirection="column">
-							<AgentLine content={event.content} isStreaming={isLast} />
+						<Box>
+							<Text color="white">{'\u23FA'} </Text>
+							<AgentLine content={event.content + durationSuffix} isStreaming={isLast && !doneNext} />
 						</Box>
 					);
 				} else if (event.type === 'tool_start') {
-					let argsSummary = '';
-					try {
-						const args = JSON.parse(event.args);
-						const firstVal = Object.values(args)[0];
-						if (typeof firstVal === 'string') {
-							argsSummary =
-								firstVal.length > 40 ? firstVal.slice(0, 40) + '...' : firstVal;
-						}
-					} catch {}
-
-					// Get tree position
-					const posInfo = toolPositions.get(i);
-					const position = posInfo?.position || 'single';
-					const connector =
-						position === 'first'
-							? TREE.first
-							: position === 'middle'
-								? TREE.middle
-								: position === 'last'
-									? TREE.last
-									: TREE.single;
+					const argsSummary = summarizeArgs(event.tool, event.args);
+					const displayName = formatToolName(event.tool);
 
 					content = (
-						<Box paddingLeft={2}>
-							<Text color="gray">
-								<Text color="gray" dimColor>
-									{connector}
-								</Text>
-								<Text color="cyan"> ⏺</Text> {event.tool}{' '}
-								<Text dimColor>({argsSummary.trim()})</Text>
-							</Text>
+						<Box>
+							<Text color="cyan">{'\u23FA'} </Text>
+							<Text color="cyan" bold>{displayName}</Text>
+							{argsSummary ? (
+								<Text color="cyan" dimColor>({argsSummary})</Text>
+							) : null}
 						</Box>
 					);
 				} else if (event.type === 'tool_result') {
-					// Check if next event is another tool_start (continuing batch)
-					const hasMoreTools = nextEvent?.type === 'tool_start';
-					const pipePrefix = hasMoreTools ? TREE.pipe : '  ';
-
 					content = (
-						<Box paddingLeft={4}>
-							<Text color="gray" dimColor>
-								{pipePrefix}
-							</Text>
+						<Box paddingLeft={2}>
 							<ToolOutput
 								tool={event.tool}
 								output={event.output}
@@ -195,15 +112,22 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 						</Box>
 					);
 				} else if (event.type === 'done') {
+					// Don't render done as a separate line if previous was a thought
+					if (prevEvent?.type === 'thought') return null;
+
+					// Edge case: no preceding thought
+					const duration = event.durationMs
+						? ` (${(event.durationMs / 1000).toFixed(1)}s)`
+						: '';
 					content = (
 						<Box>
-							<Text color="green">✔ {event.summary}</Text>
+							<Text color="green">{'\u23FA'} Done{duration}</Text>
 						</Box>
 					);
 				} else if (event.type === 'error') {
 					content = (
 						<Box>
-							<Text color="red">[ERR] {event.message}</Text>
+							<Text color="red">{'\u23FA'} {event.message}</Text>
 						</Box>
 					);
 				}
@@ -220,5 +144,4 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 	);
 };
 
-// Memoize MessageList - only re-render when events array reference changes
 export const MessageList = React.memo(MessageListComponent);

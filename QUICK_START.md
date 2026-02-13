@@ -1,213 +1,106 @@
-# Obsidian Next - Offline MoE Quick Start
+# Obsidian Next - Quick Start
 
-## 🚀 Everything is Ready!
+## Getting Started
 
-Your system is configured for offline AI operation with Mixture of Experts routing.
-
-### Current Setup
-- ✅ Ollama running on localhost:11434
-- ✅ Models downloaded and ready:
-  - `llama3.1:8b-instruct-q4_K_M` (4.9GB) - Function calling
-  - `qwen2.5:3b-instruct-q4_K_M` (1.9GB) - Fast chat
-- ✅ Build successful
-- ✅ Commands registered
-
-## Quick Commands
-
-### Check System Status
 ```bash
+npm install
+npm run build
 npm start
-/models
 ```
 
-**Output:**
-```
-[CLAUDE MODELS]
-   1. Opus 4.6 (Intelligence King) [Current]
-   2. Sonnet 4.5 (Balanced)
-   ...
+On first launch, the **Setup Wizard** runs automatically. It guides you through:
 
-[OLLAMA MODELS]
-   5. llama3.1:8b-instruct-q4_K_M
-   6. qwen2.5:3b-instruct-q4_K_M
+1. **Provider Selection** - Claude (recommended) or Ollama (offline)
+2. **API Key / Endpoint** - Configure your chosen provider
+3. **Model Selection** - Pick your default model
+4. **Mode Selection** - Safe (default), Plan, or Auto
+5. **Connection Test** - Verifies everything works
 
-[SPECIAL MODES]
-   7. MoE (Intelligent Routing)
+Re-run anytime with `/init`.
 
-[PROVIDER MODE: ANTHROPIC]
-   ⎿  /models <1-7|name>      Select model or mode
-   ⎿  /models pull <model>    Download Ollama model
-```
+## Key Commands
 
-### Switch to Offline Mode
-```bash
-/models 6
-# OR
-/models qwen2.5:3b
-```
+| Command | Description |
+|---------|-------------|
+| `/help` | Show all commands |
+| `/models` | Select AI model |
+| `/mode` | Switch mode (auto/plan/safe) |
+| `/status` | System status |
+| `/settings` | Edit configuration |
+| `/ollama` | Browse and manage Ollama models |
+| `/memory` | View agent memory |
+| `/diff` | View file changes |
+| `/undo` | Undo file changes |
+| `/schedule` | Schedule background tasks |
+| `/doctor` | Run diagnostics |
+| `/clear` | Clear conversation |
+| `/exit` | Save session and exit |
 
-Now ALL queries use local models (no API calls).
+## Keyboard Shortcuts
 
-### Switch to MoE (Smart Routing)
-```bash
-/models moe
-# OR select its number (e.g., 7)
-/models 7
-```
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+K` | Open command palette |
+| `Shift+Tab` | Cycle mode (auto/plan/safe) |
+| `Ctrl+T` | Open task view |
+| `Ctrl+C` | Save and exit |
+| `Esc` | Close overlay / cancel |
 
-Now the router picks the best model for each task:
-- Simple questions → qwen2.5 (fast)
-- Tool calls → llama3.1 (accurate)
-- Complex reasoning → Claude (if API key) or llama3.1
+## Provider Modes
 
-## Example Usage
+### Claude (API)
+- Set `ANTHROPIC_API_KEY` or run `/init`
+- Models: Opus 4.6, Sonnet 4.5, Haiku 4.5
+- Full tool calling, extended thinking, 200k context
 
-### Simple Chat (uses qwen2.5:3b)
-```
-You: What is the capital of France?
-Obsidian: Paris
-```
+### Ollama (Offline)
+- Install: https://ollama.ai
+- Run `/ollama` to browse curated models
+- Recommended: Qwen 2.5 Coder 7B, Llama 3.1 8B
+- Supports remote endpoints with auth
 
-### Tool Calling (uses llama3.1:8b)
-```
-You: Read the file package.json
-Obsidian: [reads file and shows content]
-```
+### MoE (Smart Routing)
+- Routes queries to the best available model
+- Simple tasks stay local, complex tasks use Claude
+- Configure with `/models moe`
 
-### Code Questions (uses llama3.1:8b)
-```
-You: How do I add a new command?
-Obsidian: [explains command registration]
-```
+## Execution Modes
 
-## Performance Expectations
+- **Safe** (default) - Read ops auto-approve, writes require confirmation
+- **Plan** - Read-only, approval required before any execution
+- **Auto** - Execute tools without confirmation
 
-**Your Hardware:** 8GB RAM, Intel i3-8100B
+## Configuration
 
-| Task | Model Used | Speed | Quality |
-|------|------------|-------|---------|
-| Simple Q&A | qwen2.5:3b | ~25 tok/s | Good |
-| Tool execution | llama3.1:8b | ~12 tok/s | Very Good |
-| Code generation | llama3.1:8b | ~12 tok/s | Good |
+Config stored at `~/.obsidian-next/config.json`:
 
-**Note:** Only one model loads at a time (RAM constraint). Models swap on-demand.
-
-## Advanced Usage
-
-### Download New Model
-```bash
-/models pull <model-name>
-
-# Example:
-/models pull deepseek-r1:8b
-```
-
-### Configure Custom Models
-Edit `~/.obsidian-next/config.json`:
 ```json
 {
-  "provider": "moe",
+  "model": "claude-sonnet-4-5-20250929",
+  "maxTokens": 8192,
+  "provider": "anthropic",
   "ollama": {
-    "models": {
-      "tool": "your-preferred-tool-model",
-      "chat": "your-preferred-chat-model",
-      "reasoning": "your-preferred-reasoning-model"
-    }
+    "host": "localhost",
+    "port": 11434
   }
 }
 ```
 
-### Setup Wizard
-```bash
-/setup         # General setup
-/setup ollama  # Ollama-specific guide
-```
-
-## Recommended Models by Task
-
-### For Function Calling (replaces tool model)
-- `llama3.1:8b-instruct-q4_K_M` ⭐ (current)
-- `dolphin3:8b-llama3.1-q4_K_M` (better for code)
-- `qwen2.5-coder:7b-q4_K_M` (best for coding)
-
-### For Chat (replaces chat model)
-- `qwen2.5:3b-instruct-q4_K_M` ⭐ (current)
-- `llama3.2:3b-q4_K_M` (alternative)
-- `phi3:mini-q4_K_M` (Microsoft, efficient)
-
-### For Complex Reasoning (requires 16GB+ RAM)
-- `qwen3:14b-q4_K_M` (best quality, won't fit)
-- `deepseek-r1:8b-q4_K_M` (alternative)
-
 ## Troubleshooting
 
-### "Ollama not running"
+### API key issues
+```
+Run /init to reconfigure your API key
+```
+
+### Ollama not responding
 ```bash
-ollama serve
+ollama serve        # Start the server
+/ollama             # Check status in the registry view
 ```
 
-### "Model not found"
-```bash
-ollama pull <model-name>
+### Model not found
 ```
-
-### "Out of memory"
-Your 8GB RAM limits you to 8B models max. Avoid:
-- 14B+ models
-- Running multiple large models
-- Models without Q4 quantization
-
-### Models run slow
-**Normal on CPU:**
-- qwen2.5:3b → 20-30 tok/s
-- llama3.1:8b → 10-15 tok/s
-
-**If slower:**
-- Close other apps
-- Use smaller models
-- Check CPU usage (`top`)
-
-## Comparison: Offline vs API
-
-| Feature | Offline (Ollama) | API (Claude) |
-|---------|------------------|--------------|
-| **Cost** | Free | Pay per token |
-| **Privacy** | 100% local | Cloud |
-| **Speed** | 10-25 tok/s (CPU) | 40-60 tok/s |
-| **Quality** | Good | Excellent |
-| **Context** | 8k-32k tokens | 200k tokens |
-| **Thinking** | No | Yes (Opus) |
-| **Internet** | Not needed | Required |
-
-**Best of both:** Use MoE mode - simple tasks stay local, complex tasks use Claude.
-
-## Files & Directories
-
+/models pull <model-name>   # Pull via CLI
+/ollama                     # Or use the registry UI
 ```
-~/.obsidian-next/
-├── config.json          # Configuration
-├── settings.json        # User preferences
-├── sessions/           # Conversation history
-└── memory/             # Agent memory
-
-~/.ollama/
-└── models/             # Downloaded models (10-20GB)
-```
-
-## Next Steps
-
-1. **Try it out:** `npm start` and ask questions
-2. **Test tool calling:** Ask to read files, run commands
-3. **Switch modes:** Try anthropic/ollama/moe
-4. **Monitor:** Use `/models` to see current routing and active model
-5. **Optimize:** Adjust models based on your usage
-
-## Support
-
-- **Docs:** See `MoE_COMPLETE.md` for architecture details
-- **Tests:** See `TEST_RESULTS.md` for verification
-- **Status:** See `IMPLEMENTATION_STATUS.md` for features
-
----
-
-**You're all set!** Start with `/models moe` for the best experience.

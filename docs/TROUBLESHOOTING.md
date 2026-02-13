@@ -375,6 +375,33 @@ obsidian
 
 ---
 
+## Ollama Issues
+
+### "Ollama API error: 400 Bad Request"
+
+**Cause:** The model received an invalid conversation history format, often related to tool calls.
+
+**Solution:**
+Update to Obsidian Next v0.4.8 or later, which includes fixes for tool role handling and argument formatting.
+
+### "Model returned empty response"
+
+**Cause:**
+1. The model failed to generate text or call a tool.
+2. The model tried to call a tool but the arguments were malformed.
+
+**Solution:**
+Obsidian v0.4.8 includes auto-recovery for this. If it persists, check if your Ollama model supports tool calling (e.g. `qwen2.5`, `llama3.1`).
+
+### "Agent hangs for 10+ seconds"
+
+**Cause:** Multiple MCP servers connecting sequentially.
+
+**Solution:**
+Update to v0.4.8, which parallelizes MCP connections.
+
+---
+
 ## Tool Execution Issues
 
 ### "Command blocked for safety"
