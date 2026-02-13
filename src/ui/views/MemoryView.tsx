@@ -25,7 +25,7 @@ export const MemoryView: React.FC<MemoryViewProps> = ({ onClose }) => {
 			const s = await memory.getStats();
 			setStats(s);
 			try {
-				const all = await memory.search('', 20);
+				const all = await memory.search('');
 				setItems(all);
 			} catch {
 				setItems([]);

@@ -18,6 +18,13 @@ const MODEL_PRICES: Record<
 	string,
 	{ input: number; output: number; cacheRead: number; cacheWrite: number }
 > = {
+	// Claude 4.6 Family (2026)
+	'claude-opus-4-6-20260207': {
+		input: 15.0,
+		output: 75.0,
+		cacheRead: 1.5,
+		cacheWrite: 18.75
+	},
 	// Claude 4.5 Family (2025-2026)
 	'claude-sonnet-4-5-20250929': {
 		input: 3.0,
@@ -71,11 +78,15 @@ const MODEL_PRICES: Record<
 };
 
 const CONTEXT_WINDOW_SIZES: Record<string, number> = {
-	'claude-sonnet-4-5-20250929': 200_000,
-	'claude-haiku-4-5-20251001': 200_000,
-	'claude-opus-4-5-20251101': 200_000,
+	'claude-opus-4-6': 200_000,
+	'claude-sonnet-4-5': 200_000,
+	'claude-haiku-4-5': 200_000,
+	'claude-opus-4-5': 200_000,
 	'claude-3-5-sonnet': 200_000,
-	'claude-3-5-haiku': 200_000
+	'claude-3-5-haiku': 200_000,
+	'qwen2.5': 32_000,
+	'llama3.1': 128_000,
+	'llama3.2': 128_000
 };
 
 export class UsageTracker {
@@ -183,14 +194,24 @@ export class UsageTracker {
 	}
 
 	getContextUsage(model: string) {
-		let limit = 200_000;
+		const modelLower = model.toLowerCase();
+		const isOllama = modelLower.includes(':') || modelLower.includes('latest') || modelLower.includes('cloud');
+		
+		// Use higher default for Anthropic, lower for local Ollama
+		let limit = isOllama ? 8_000 : 200_000;
+
 		if (CONTEXT_WINDOW_SIZES[model]) {
 			limit = CONTEXT_WINDOW_SIZES[model];
 		} else {
+			// Check for partial match (family name)
 			const key = Object.keys(CONTEXT_WINDOW_SIZES).find((k) =>
-				model.includes(k)
+				modelLower.includes(k.toLowerCase())
 			);
-			if (key) limit = CONTEXT_WINDOW_SIZES[key];
+			if (key) {
+				limit = CONTEXT_WINDOW_SIZES[key];
+			} else if (isOllama && modelLower.includes('cloud')) {
+				limit = 128_000; // Typical cloud model limit
+			}
 		}
 
 		const used = this.lastContextSize;

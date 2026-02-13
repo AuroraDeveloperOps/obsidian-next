@@ -28,12 +28,20 @@ export const StatusView: React.FC<StatusViewProps> = ({ onClose }) => {
 			const hasKey = await keyManager.hasKey();
 			const ver = await config.getVersion();
 			const tokens = usage.getSessionTokens();
+			
+			const conf = cfg as any;
+			let displayModel = cfg.model;
+			if (conf.provider === 'ollama') {
+				displayModel = conf.ollama?.models?.chat || 'Unknown Ollama Model';
+			} else if (conf.provider === 'moe') {
+				displayModel = 'MoE (Auto)';
+			}
 
 			setData({
 				platform: `${os.type()} ${os.release()}`,
 				node: process.version,
 				workspace: path.basename(process.cwd()),
-				model: cfg.model,
+				model: displayModel,
 				maxTokens: cfg.maxTokens,
 				hasKey,
 				sessionCost,

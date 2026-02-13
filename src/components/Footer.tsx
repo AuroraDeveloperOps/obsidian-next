@@ -6,6 +6,7 @@ interface FooterProps {
 	mode: 'auto' | 'plan' | 'safe';
 	model: string;
 	taskProgress?: string;
+	sandbox?: 'local' | 'sandbox';
 }
 
 // Mode display config
@@ -18,7 +19,8 @@ const MODE_CONFIG = {
 const FooterComponent: React.FC<FooterProps> = ({
 	mode,
 	model,
-	taskProgress
+	taskProgress,
+	sandbox = 'local'
 }) => {
 	// Get real session stats
 	const tokens = usage.getSessionTokens();
@@ -40,6 +42,8 @@ const FooterComponent: React.FC<FooterProps> = ({
 					<Text dimColor>
 						{formatK(tokens.input)} in · {formatK(tokens.output)} out
 					</Text>
+					<Text color="gray"> · </Text>
+					<Text color={sandbox === 'sandbox' ? 'green' : 'yellow'}>{sandbox}</Text>
 				</Box>
 			</Box>
 

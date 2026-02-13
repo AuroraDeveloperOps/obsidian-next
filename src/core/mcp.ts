@@ -52,7 +52,12 @@ class MCPManager {
 
 			if (exists) {
 				const content = await fs.readFile(configPath, 'utf-8');
-				this.config = MCPConfigSchema.parse(JSON.parse(content));
+				try {
+					this.config = MCPConfigSchema.parse(JSON.parse(content));
+				} catch (jsonErr) {
+					console.error(`[MCP] Critical: Failed to parse ${configPath}. Check for syntax errors.`);
+					throw jsonErr;
+				}
 			} else {
 				// Initialize empty config if not exists
 				this.config = { servers: {} };

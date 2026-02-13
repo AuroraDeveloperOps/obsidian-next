@@ -21,11 +21,19 @@ export const UsageView: React.FC<UsageViewProps> = ({ onClose }) => {
 		const load = async () => {
 			await usage.init();
 			const cfg = await config.load();
-			setModel(cfg.model);
+			
+			const conf = cfg as any;
+			let displayModel = cfg.model;
+			if (conf.provider === 'ollama') {
+				displayModel = conf.ollama?.models?.chat || 'Unknown Ollama Model';
+			} else if (conf.provider === 'moe') {
+				displayModel = 'MoE (Auto)';
+			}
+			
+			const ctx = usage.getContextUsage(displayModel);
+			
+			setModel(displayModel);
 			setStats(usage.getStats());
-
-			// Get context metrics
-			const ctx = usage.getContextUsage(cfg.model);
 			setContextStats({
 				used: ctx.used,
 				cached: ctx.cached,

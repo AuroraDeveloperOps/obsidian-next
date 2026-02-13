@@ -22,6 +22,7 @@ interface WelcomeBannerProps {
 	model: string;
 	mode: string;
 	version?: string;
+	sandbox?: 'local' | 'sandbox';
 }
 
 const formatModel = (m: string) => {
@@ -33,7 +34,7 @@ const formatModel = (m: string) => {
 	return m;
 };
 
-const WelcomeBannerComponent: React.FC<WelcomeBannerProps> = ({ model, mode, version = 'v1.0' }) => {
+const WelcomeBannerComponent: React.FC<WelcomeBannerProps> = ({ model, mode, version = 'v1.0', sandbox = 'local' }) => {
 	const art = renderBannerArt();
 	const cwd = process.cwd();
 	const home = process.env.HOME || process.env.USERPROFILE || '';
@@ -49,7 +50,7 @@ const WelcomeBannerComponent: React.FC<WelcomeBannerProps> = ({ model, mode, ver
 			</Box>
 			<Box flexDirection="column" justifyContent="center">
 				<Text bold color="white">obsidian <Text dimColor>{version}</Text></Text>
-				<Text>{formatModel(model)} <Text dimColor>·</Text> <Text color={mode === 'auto' ? 'green' : mode === 'plan' ? 'yellow' : 'red'}>{mode} mode</Text></Text>
+				<Text>{formatModel(model)} <Text dimColor>·</Text> <Text color={mode === 'auto' ? 'green' : mode === 'plan' ? 'yellow' : 'red'}>{mode} mode</Text> <Text dimColor>·</Text> <Text color="gray">{sandbox}</Text></Text>
 				<Text dimColor>{shortCwd}</Text>
 			</Box>
 		</Box>

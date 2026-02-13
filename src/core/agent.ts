@@ -114,10 +114,12 @@ class Agent {
 			switch (command.name) {
 				case '/models':
 				case '/mode':
-				case '/sandbox':
 				case '/config':
 				case '/settings':
 					viewId = 'settings';
+					break;
+				case '/sandbox':
+					viewId = 'sandbox';
 					break;
 				case '/status':
 				case '/doctor':

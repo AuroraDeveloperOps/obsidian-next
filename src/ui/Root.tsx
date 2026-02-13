@@ -30,6 +30,7 @@ import { ModelsView } from './views/ModelsView.js';
 import { SchedulerView } from './views/SchedulerView.js';
 import { ScheduledTasksView } from './views/ScheduledTasksView.js';
 import { OllamaView } from './views/OllamaView.js';
+import { SandboxView } from './views/SandboxView.js';
 import { SettingsMenu, MenuView } from '../components/SettingsMenu.js';
 
 import { history } from '../core/history.js';
@@ -89,7 +90,8 @@ type ActiveView =
 	| 'models'
 	| 'scheduler'
 	| 'scheduled_tasks'
-	| 'ollama';
+	| 'ollama'
+	| 'sandbox';
 
 export const Root = () => {
 	const [events, setEvents] = useState<AgentEvent[]>([]);
@@ -115,7 +117,8 @@ export const Root = () => {
 		cost: 0,
 		model: 'Loading...',
 		mode: 'safe' as 'auto' | 'plan' | 'safe',
-		version: 'v...'
+		version: 'v...',
+		sandbox: 'local' as 'local' | 'sandbox'
 	});
 
 	// Active view state machine
@@ -153,7 +156,8 @@ export const Root = () => {
 				cost: usage.getSessionCost(),
 				model: displayModel,
 				mode: context.getMode(),
-				version
+				version,
+				sandbox: cfg.executionMode || 'local'
 			});
 			setTaskProgress(tasks.getProgress());
 
@@ -267,6 +271,9 @@ export const Root = () => {
 			// View navigation
 			if (event.type === 'view_request') {
 				setActiveView(event.viewId as any);
+				if (event.viewId === 'sandbox') {
+					return; // Handled
+				}
 				if (event.viewId === 'settings') {
 					const trigger = event.command || '';
 					if (trigger === 'sandbox') setSettingsTab('security');
@@ -616,6 +623,8 @@ export const Root = () => {
 				return <ScheduledTasksView onClose={closeView} />;
 			case 'ollama':
 				return <OllamaView onClose={closeView} />;
+			case 'sandbox':
+				return <SandboxView onClose={closeView} />;
 			default:
 				return null;
 		}
@@ -638,6 +647,7 @@ export const Root = () => {
 						mode={stats.mode}
 						version={stats.version}
 						scrollOffset={scrollOffset}
+						sandbox={stats.sandbox}
 					/>
 				) : (
 					renderView()
@@ -735,6 +745,8 @@ export const Root = () => {
 										{stats.mode} mode
 									</Text>
 									<Text dimColor> (shift+tab to cycle)</Text>
+									<Text color="gray"> · </Text>
+									<Text color={stats.sandbox === 'sandbox' ? 'green' : 'yellow'}>{stats.sandbox}</Text>
 								</Box>
 								<Box>
 									<Text dimColor>Context left until auto-compact: </Text>
