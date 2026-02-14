@@ -89,8 +89,9 @@ export class OllamaProvider implements MultiModelProvider {
 		const isCloud = lower.includes(':cloud') || lower.endsWith('-cloud');
 
 		// Local model families known to support the Ollama tools API
+		// Source: https://ollama.com/search?c=tools
 		const toolCapableFamilies = [
-			'llama3.1', 'llama3.2', 'llama3.3',
+			'llama3.1', 'llama3.2', 'llama3.3', 'llama4',
 			'qwen2.5', 'qwen3',
 			'gemma3',
 			'mistral', 'mixtral', 'ministral',
@@ -99,7 +100,11 @@ export class OllamaProvider implements MultiModelProvider {
 			'glm4', 'glm-4', 'glm-5', 'glm5',
 			'deepseek-v3', 'devstral',
 			'nemotron',
-			'firefunction', 'functiongemma', 'funcgemma'
+			'firefunction', 'functiongemma', 'funcgemma',
+			'granite4', 'granite3',
+			'gpt-oss',
+			'olmo', 'rnj',
+			'lfm',
 		];
 
 		const supportsTools = isCloud || toolCapableFamilies.some(family =>
@@ -109,7 +114,8 @@ export class OllamaProvider implements MultiModelProvider {
 		// Vision-capable model families
 		const visionFamilies = [
 			'llava', 'moondream', 'gemma3', 'qwen3-vl',
-			'llama3.2-vision', 'ministral'
+			'llama3.2-vision', 'llama4', 'ministral',
+			'glm-ocr',
 		];
 		const supportsVision = visionFamilies.some(family => lower.includes(family));
 
@@ -137,7 +143,7 @@ export class OllamaProvider implements MultiModelProvider {
 	 * Convert Anthropic message format to Ollama format
 	 */
 	private convertMessages(messages: Anthropic.MessageParam[]): OllamaMessage[] {
-		return messages.flatMap((msg) => {
+		return messages.flatMap((msg): any => {
 			// Handle string content
 			if (typeof msg.content === 'string') {
 				return {
@@ -245,18 +251,22 @@ export class OllamaProvider implements MultiModelProvider {
 			});
 		}
 
+		const hasTools = this.getCapabilities().toolCalling && options.tools;
+
 		const requestBody: any = {
 			model: this.model,
 			messages: ollamaMessages,
 			stream: true,
 			options: {
-				temperature: 0.7,
-				num_predict: options.maxTokens || 2048
+				// Lower temperature for tool calling = more deterministic tool selection
+				temperature: hasTools ? 0.1 : 0.7,
+				num_predict: options.maxTokens || 4096,
+				...(hasTools ? { top_p: 0.9, top_k: 40, repeat_penalty: 1.15 } : {})
 			}
 		};
 
 		// Add tools if supported by model
-		if (this.getCapabilities().toolCalling && options.tools) {
+		if (hasTools) {
 			requestBody.tools = this.convertTools(options.tools);
 		}
 
@@ -361,9 +371,8 @@ export class OllamaProvider implements MultiModelProvider {
 								}
 							};
 						}
-					} catch (e) {
+					} catch {
 						// Skip invalid JSON lines
-						console.error('[Ollama] Failed to parse chunk:', line);
 					}
 				}
 			}

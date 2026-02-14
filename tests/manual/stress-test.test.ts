@@ -28,7 +28,7 @@ describe('AI Stress Tests', () => {
 
         apiKeyAvailable = true;
 
-        const llmModule = await import('../../src/core/llm.js');
+        const llmModule = await import('../../src/core/llm/index.js');
         llm = llmModule.llm;
         startTime = Date.now();
     });

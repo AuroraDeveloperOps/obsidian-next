@@ -3,17 +3,11 @@ import { Box, Text } from 'ink';
 import { AgentEvent } from '../events/types.js';
 import { AgentLine } from '../components/AgentLine.js';
 import { ToolOutput } from '../components/ToolOutput.js';
-import { WelcomeBanner } from '../components/WelcomeBanner.js';
 
 interface MessageListProps {
 	events: AgentEvent[];
 	maxEvents?: number;
-	model?: string;
-	mode?: string;
-	version?: string;
 	scrollOffset?: number;
-	sandbox?: 'local' | 'sandbox';
-	branch?: string;
 }
 
 /**
@@ -46,12 +40,7 @@ function summarizeArgs(tool: string, argsJson: string): string {
 const MessageListComponent: React.FC<MessageListProps> = ({
 	events,
 	maxEvents = 50,
-	model = '',
-	mode = 'safe',
-	version = 'v1.0',
-	scrollOffset = 0,
-	sandbox = 'local',
-	branch = ''
+	scrollOffset = 0
 }) => {
 	const end = events.length - scrollOffset;
 	const start = Math.max(0, end - maxEvents);
@@ -59,8 +48,6 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 
 	return (
 		<Box flexDirection="column">
-			{/* Welcome banner scrolls with the conversation */}
-			<WelcomeBanner model={model} mode={mode} version={version} sandbox={sandbox} branch={branch} />
 
 			{visibleEvents.map((event: any, i) => {
 				const prevEvent = visibleEvents[i - 1];

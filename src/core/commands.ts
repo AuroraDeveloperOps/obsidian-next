@@ -20,6 +20,7 @@ import { scheduledTasksCommand } from '../commands/scheduled_tasks.js';
 import { scheduleCommand } from '../commands/schedule.js';
 import { memoryCommand } from '../commands/memory.js';
 import { ollamaCommand } from '../commands/ollama.js';
+import { skillsCommand } from '../commands/skills.js';
 
 export type CommandHandler = (args: string[]) => Promise<void>;
 
@@ -139,6 +140,11 @@ export class CommandRegistry {
 		this.register('ollama', 'Ollama model registry', ollamaCommand, {
 			isView: true,
 			viewId: 'ollama'
+		});
+		this.register('skills', 'Manage default and custom skills', skillsCommand, {
+			isView: true,
+			viewId: 'skills',
+			aliases: ['skill']
 		});
 	}
 

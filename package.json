@@ -33,7 +33,7 @@
     },
     "scripts": {
         "dev": "tsup src/index.ts --format esm --watch",
-        "build": "tsup src/index.ts src/mcp/index.ts --format esm",
+        "build": "tsup src/index.ts src/mcp/index.ts --format esm && cp -r src/skills dist/",
         "build:check": "npm run lint && npm run format:check && tsup src/index.ts src/mcp/index.ts --format esm",
         "start": "node dist/index.js",
         "mcp": "node dist/mcp/index.js",

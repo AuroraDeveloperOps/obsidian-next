@@ -69,16 +69,10 @@ export const AgentLine: React.FC<AgentLineProps> = ({
 		hasMarkdown && !isProcessing ? renderMarkdown(content) : content;
 
 	return (
-		<Box flexDirection="column" paddingX={0}>
-			<Box flexDirection="row">
-				<Box flexGrow={1} flexDirection="column">
-					{renderedContent.split('\n').map((line, i) => (
-						<Text key={i} color={showGlitter ? 'gray' : 'white'}>
-							{line || ' '}
-						</Text>
-					))}
-				</Box>
-			</Box>
+		<Box flexDirection="column" paddingX={0} flexGrow={1}>
+			<Text color={showGlitter ? 'gray' : 'white'}>
+				{renderedContent}
+			</Text>
 		</Box>
 	);
 };

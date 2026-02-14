@@ -11,7 +11,7 @@ export interface Option {
 
 export type AgentEventUnion =
 	// 1. Thought (Internal Monologue)
-	| { type: 'thought'; content: string; hidden?: boolean }
+	| { type: 'thought'; content: string; hidden?: boolean; streaming?: boolean }
 
 	// 2. Tool Usage
 	| { type: 'tool_start'; tool: string; args: string }

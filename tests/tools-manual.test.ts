@@ -2,7 +2,7 @@
  * Manual tool verification - tests each tool directly without LLM API calls
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { tools } from '../src/core/tools.js';
+import { tools } from '../src/tools/index.js';
 import fs from 'fs/promises';
 import path from 'path';
 

@@ -366,7 +366,7 @@ const DashboardComponent: React.FC<DashboardProps> = ({
 
 									return (
 										<Box key={i} marginTop={Math.max(0, Math.floor(yOffset))}>
-											<Text color={color} bold={isScanline}>
+											<Text color={color} bold={false}>
 												{line}
 											</Text>
 										</Box>

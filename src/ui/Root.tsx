@@ -10,6 +10,7 @@ import { ThinkingIndicator } from '../components/ThinkingIndicator.js';
 import { CommandPalette } from '../components/CommandPalette.js';
 import { CommandPopup, COMMANDS } from './CommandPopup.js';
 import { MessageList } from './MessageList.js';
+import { WelcomeBanner } from '../components/WelcomeBanner.js';
 
 import { DoctorView } from './views/DoctorView.js';
 import { HelpView } from './views/HelpView.js';
@@ -31,6 +32,7 @@ import { SchedulerView } from './views/SchedulerView.js';
 import { ScheduledTasksView } from './views/ScheduledTasksView.js';
 import { OllamaView } from './views/OllamaView.js';
 import { SandboxView } from './views/SandboxView.js';
+import { SkillsView } from './views/SkillsView.js';
 import { SettingsMenu, MenuView } from '../components/SettingsMenu.js';
 
 import { history } from '../core/history.js';
@@ -91,6 +93,7 @@ type ActiveView =
 	| 'models'
 	| 'scheduler'
 	| 'scheduled_tasks'
+	| 'skills'
 	| 'ollama'
 	| 'sandbox';
 
@@ -102,11 +105,20 @@ export const Root = () => {
 	const { exit } = useApp();
 	const { stdout } = useStdout();
 	const [columns, setColumns] = useState(stdout?.columns || 80);
+	const [rows, setRows] = useState(stdout?.rows || 24);
 	const [scrollOffset, setScrollOffset] = useState(0);
+
+	// Dynamic layout calculation
+	const BANNER_HEIGHT = 6;
+	const INPUT_AREA_HEIGHT = 6; // Prompt, separator, info bar, thinking
+	const dynamicMaxEvents = Math.max(5, rows - (BANNER_HEIGHT + INPUT_AREA_HEIGHT));
 
 	useEffect(() => {
 		if (!stdout) return;
-		const onResize = () => setColumns(stdout.columns);
+		const onResize = () => {
+			setColumns(stdout.columns);
+			setRows(stdout.rows);
+		};
 		stdout.on('resize', onResize);
 		return () => {
 			stdout.off('resize', onResize);
@@ -136,9 +148,10 @@ export const Root = () => {
 	const [contextPct, setContextPct] = useState(100);
 	const [lastExitAttempt, setLastExitAttempt] = useState(0);
 
-	// Throttle thought event updates (max 10 updates/sec)
-	const lastThoughtUpdate = useRef<number>(0);
-	const THOUGHT_THROTTLE_MS = 100;
+	// Throttle ALL event-driven re-renders (batch updates)
+	const pendingEventsRef = useRef<AgentEvent[]>([]);
+	const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const RENDER_BATCH_MS = 150; // Max 6-7 re-renders/sec instead of 10+
 
 	// Load initial footer data and subscribe to updates
 	useEffect(() => {
@@ -201,6 +214,64 @@ export const Root = () => {
 		}
 	}, [events]);
 
+	// Flush pending events into state (batched to reduce re-renders)
+	const flushEvents = useCallback(() => {
+		flushTimerRef.current = null;
+		const batch = pendingEventsRef.current;
+		if (batch.length === 0) return;
+		pendingEventsRef.current = [];
+
+		setEvents((prev) => {
+			let result = prev;
+			for (const event of batch) {
+				// Handle streaming thoughts (look backwards for the stream start)
+				if (event.type === 'thought' && event.streaming) {
+					let replaced = false;
+					for (let i = result.length - 1; i >= 0; i--) {
+						const e = result[i] as any;
+						if (e.type === 'user_input' || e.type === 'clear_history') break;
+						if (e.type === 'thought' && e.streaming) {
+							if (event.content.startsWith(e.content)) {
+								result = [...result];
+								result[i] = event;
+								replaced = true;
+							}
+							break;
+						}
+					}
+					if (replaced) continue;
+				}
+
+				// Replace consecutive thoughts
+				const last = result[result.length - 1];
+				if (event.type === 'thought' && last && last.type === 'thought') {
+					if (last.content === event.content) continue;
+					result = [...result];
+					result[result.length - 1] = event;
+				} else {
+					result = [...result, event];
+				}
+			}
+			return result;
+		});
+
+		// Auto-scroll to bottom when new events arrive
+		setScrollOffset(0);
+	}, []);
+
+	// Schedule a batched flush (coalesces rapid events into one render)
+	const scheduleFlush = useCallback((immediate?: boolean) => {
+		if (immediate) {
+			// For user-interactive events (prompts, errors), flush now
+			if (flushTimerRef.current) {
+				clearTimeout(flushTimerRef.current);
+			}
+			flushEvents();
+		} else if (!flushTimerRef.current) {
+			flushTimerRef.current = setTimeout(flushEvents, RENDER_BATCH_MS);
+		}
+	}, [flushEvents]);
+
 	// Main event handler
 	useEffect(() => {
 		const handler = (event: AgentEvent) => {
@@ -242,7 +313,7 @@ export const Root = () => {
 				setTaskProgress(tasks.getProgress());
 			}
 
-			// Interactive prompts
+			// Interactive prompts - flush immediately (user needs to see these NOW)
 			if (event.type === 'approval_request') {
 				setPendingPrompt({
 					type: 'approval',
@@ -277,7 +348,7 @@ export const Root = () => {
 			if (event.type === 'view_request') {
 				setActiveView(event.viewId as any);
 				if (event.viewId === 'sandbox') {
-					return; // Handled
+					return;
 				}
 				if (event.viewId === 'settings') {
 					const trigger = event.command || '';
@@ -310,25 +381,17 @@ export const Root = () => {
 				setCurrentActivity(null);
 			}
 
-			// Throttle thought events
-			if (event.type === 'thought') {
-				const now = Date.now();
-				if (now - lastThoughtUpdate.current < THOUGHT_THROTTLE_MS) {
-					return;
-				}
-				lastThoughtUpdate.current = now;
+			// Skip hidden thoughts entirely - no render needed
+			if (event.type === 'thought' && (event as any).hidden) {
+				return;
 			}
 
-			setEvents((prev) => {
-				const last = prev[prev.length - 1];
-				if (event.type === 'thought' && last && last.type === 'thought') {
-					if (last.content === event.content) return prev;
-					const newEvents = [...prev];
-					newEvents[newEvents.length - 1] = event;
-					return newEvents;
-				}
-				return [...prev, event];
-			});
+			// Queue event for batched render
+			pendingEventsRef.current.push(event);
+
+			// Flush immediately for completion/error events, batch everything else
+			const isImmediate = event.type === 'done' || event.type === 'error';
+			scheduleFlush(isImmediate);
 		};
 
 		const userHandler = (event: any) => {
@@ -337,10 +400,8 @@ export const Root = () => {
 					setIsInitCommand(true);
 				}
 				if (!event.silent) {
-					setEvents((prev) => [
-						...prev,
-						{ type: 'user_input', content: event.content } as any
-					]);
+					pendingEventsRef.current.push({ type: 'user_input', content: event.content } as any);
+					scheduleFlush(true); // Flush immediately - user wants to see their input
 				}
 				setIsBusy(true);
 				setBusyStartTime(Date.now());
@@ -352,8 +413,11 @@ export const Root = () => {
 		return () => {
 			bus.off('agent', handler);
 			bus.off('user', userHandler);
+			if (flushTimerRef.current) {
+				clearTimeout(flushTimerRef.current);
+			}
 		};
-	}, []);
+	}, [scheduleFlush]);
 
 	const [inputKey, setInputKey] = useState(0);
 
@@ -439,16 +503,6 @@ export const Root = () => {
 		// Mode Toggle - Shift+Tab
 		if (key.shift && key.tab && matches.length === 0) {
 			cycleMode();
-			return;
-		}
-
-		// History Scrolling
-		if (key.pageUp) {
-			setScrollOffset((prev) => Math.min(Math.max(0, events.length - 10), prev + 5));
-			return;
-		}
-		if (key.pageDown) {
-			setScrollOffset((prev) => Math.max(0, prev - 5));
 			return;
 		}
 
@@ -586,8 +640,11 @@ export const Root = () => {
 		);
 	};
 
-	// Token tracking for thinking indicator
-	const tokens = usage.getSessionTokens();
+	// Token tracking for thinking indicator (only recalc when busy state changes)
+	const tokens = React.useMemo(() => usage.getSessionTokens(), [isBusy]);
+
+	// Memoize separator line to avoid recalculating on every render
+	const separatorLine = React.useMemo(() => '─'.repeat(columns), [columns]);
 
 	// Render the active overlay view
 	const renderView = () => {
@@ -644,30 +701,43 @@ export const Root = () => {
 				return <OllamaView onClose={closeView} />;
 			case 'sandbox':
 				return <SandboxView onClose={closeView} />;
+			case 'skills':
+				return <SkillsView onExit={closeView} />;
 			default:
 				return null;
 		}
 	};
 
+	// Memoize banner to prevent re-rendering on every keystroke/event
+	const banner = React.useMemo(() => (
+		<WelcomeBanner
+			model={stats.model}
+			mode={stats.mode}
+			version={stats.version}
+			sandbox={stats.sandbox}
+			branch={stats.branch}
+		/>
+	), [stats.model, stats.mode, stats.version, stats.sandbox, stats.branch]);
+
 	return (
-		<Box flexDirection="column" height="100%">
+		<Box flexDirection="column" height={rows}>
+			{/* Fixed Banner Header */}
+			{activeView === 'chat' && (
+				<Box flexShrink={0}>{banner}</Box>
+			)}
+
 			{/* Main Content Area */}
 			<Box
 				flexDirection="column"
-				flexGrow={1}
+				flexGrow={activeView === 'chat' ? 1 : 1}
 				overflowY="hidden"
-				justifyContent={activeView !== 'chat' ? 'flex-start' : 'flex-end'}
+				justifyContent="flex-end"
 			>
 				{activeView === 'chat' ? (
 					<MessageList
 						events={events}
-						maxEvents={MAX_EVENTS}
-						model={stats.model}
-						mode={stats.mode}
-						version={stats.version}
-						scrollOffset={scrollOffset}
-						sandbox={stats.sandbox}
-						branch={stats.branch}
+						maxEvents={dynamicMaxEvents}
+						scrollOffset={0}
 					/>
 				) : (
 					renderView()
@@ -726,7 +796,7 @@ export const Root = () => {
 					{/* Input Area */}
 					<Box flexDirection="column">
 						<Box paddingX={0}>
-							<Text dimColor>{'─'.repeat(columns)}</Text>
+							<Text dimColor>{separatorLine}</Text>
 						</Box>
 						<Box paddingX={1}>
 							<Text color="red" bold>{'> '}</Text>
@@ -753,7 +823,7 @@ export const Root = () => {
 					{matches.length === 0 && !showPalette && (
 						<Box flexDirection="column">
 							<Box paddingX={0}>
-								<Text dimColor>{'\u2500'.repeat(columns)}</Text>
+								<Text dimColor>{separatorLine}</Text>
 							</Box>
 							<Box paddingX={1} flexDirection="row" justifyContent="space-between">
 								<Box>

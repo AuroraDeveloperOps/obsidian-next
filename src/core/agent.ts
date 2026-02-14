@@ -228,28 +228,18 @@ class Agent {
 			await context.setTask(tasks.getProgress());
 		}
 
-		// Log mode and complexity for transparency
+		// Log mode and complexity (hidden - internal diagnostics, not user-facing)
 		const complexityLabel =
 			complexity === 'complex'
 				? 'complex task'
 				: complexity === 'moderate'
 					? 'moderate task'
 					: 'simple task';
-		bus.emitAgent({ 
-			type: 'thought', 
+		bus.emitAgent({
+			type: 'thought',
 			content: `[${mode}] ${complexityLabel}`,
-			hidden: complexity === 'simple' // Hide for simple tasks to reduce flicker
+			hidden: true
 		});
-
-		// Suggest plan mode for complex tasks (embedded in the prompt enhancement)
-		if (suggestPlanMode && mode !== 'plan') {
-			bus.emitAgent({
-				type: 'thought',
-				content:
-					'[TIP] Complex task detected. Consider switching to plan mode (Shift+Tab) for better results.',
-				hidden: false
-			});
-		}
 
 		if (mode === 'plan') {
 			await this.runPlanMode(input);
@@ -462,12 +452,10 @@ APPROVAL: <yes if destructive, no otherwise>`;
 
 		// null means actual failure, empty string means LLM returned no text (valid for tool-only responses)
 		if (response !== null) {
-			let finalResponse = response;
-
 			// Check if the model promised to act but didn't use any tools
 			const toolOutput = llm.getLastToolOutput();
-			if (finalResponse && !toolOutput) {
-				const lower = finalResponse.toLowerCase();
+			if (response && !toolOutput) {
+				const lower = response.toLowerCase();
 				const isPromiseToAct =
 					lower.includes("i'll check") ||
 					lower.includes('let me check') ||
@@ -487,29 +475,21 @@ APPROVAL: <yes if destructive, no otherwise>`;
 					lower.includes('looking into');
 				if (isPromiseToAct) {
 					// Model said it would act but didn't call tools — force a follow-up
-					const followUp = await llm.streamChat(
+					// (streamChat will handle streaming the response to UI)
+					await llm.streamChat(
 						'[System] You said you would check but did not call any tools. Call the appropriate tool NOW and present the actual results to the user.'
 					);
-					if (followUp && followUp.trim()) {
-						finalResponse = followUp;
-					}
 				}
 			}
 
-			// Emit the final response as a thought right before 'done' to ensure visibility
-			if (finalResponse && finalResponse.trim()) {
-				bus.emitAgent({ type: 'thought', content: finalResponse });
-			} else if (toolOutput) {
-				// LLM generated no text but tools ran — surface tool output
-				bus.emitAgent({ type: 'thought', content: toolOutput });
-			} else {
-				// LLM generated nothing and no tools ran — force a follow-up
+			// Don't re-emit response as thought here - streamChat already streamed
+			// all text progressively via bus events. Re-emitting causes duplication.
+			// Only handle the edge case where LLM returned nothing AND no tools ran.
+			if (!response?.trim() && !toolOutput) {
 				const followUp = await llm.streamChat(
 					'[System] You returned an empty response. Please execute the requested task or answer the question.'
 				);
-				if (followUp && followUp.trim()) {
-					bus.emitAgent({ type: 'thought', content: followUp });
-				} else {
+				if (!followUp?.trim()) {
 					bus.emitAgent({
 						type: 'error',
 						message: 'Model returned empty response (multiple attempts).'

@@ -5,12 +5,12 @@ import { context } from './context.js';
 import { auditLog } from './auditLog.js';
 
 // Handle CJS/ESM interop
-// @ts-ignore
+const cp = cronParser as any;
 const parseExpression =
-	cronParser.parseExpression ||
-	cronParser.default?.parseExpression ||
-	cronParser.parse ||
-	cronParser.default?.parse;
+	cp.parseExpression ||
+	cp.default?.parseExpression ||
+	cp.parse ||
+	cp.default?.parse;
 
 export interface ScheduledTask {
 	id: string;
@@ -63,7 +63,8 @@ export class Scheduler {
 
 		bus.emitAgent({
 			type: 'thought',
-			content: '[Obsidian] Started background task monitor [Active Heartbeat]'
+			content: '[Scheduler] Started background task monitor',
+			hidden: true
 		});
 	}
 
@@ -148,14 +149,14 @@ export class Scheduler {
 	}
 
 	/**
-	 * List all active tasks
+	 * List all tasks (active and inactive)
 	 */
 	public listTasks(): ScheduledTask[] {
 		const tasks = db
 			.getDb()
 			.prepare(
 				`
-            SELECT * FROM scheduled_tasks WHERE active = 1
+            SELECT * FROM scheduled_tasks ORDER BY active DESC, last_run_at DESC
         `
 			)
 			.all() as ScheduledTask[];
@@ -171,6 +172,22 @@ export class Scheduler {
 		});
 	}
 
+	public async enableTask(taskId: string): Promise<boolean> {
+		const result = db
+			.getDb()
+			.prepare('UPDATE scheduled_tasks SET active = 1 WHERE id = ?')
+			.run(taskId);
+		return result.changes > 0;
+	}
+
+	public async disableTask(taskId: string): Promise<boolean> {
+		const result = db
+			.getDb()
+			.prepare('UPDATE scheduled_tasks SET active = 0 WHERE id = ?')
+			.run(taskId);
+		return result.changes > 0;
+	}
+
 	/**
 	 * Main execution loop
 	 */
@@ -182,6 +199,8 @@ export class Scheduler {
 		// console.log(`[Scheduler] Heartbeat tick at ${new Date().toLocaleTimeString()} | Active Tasks: ${tasks.length}`);
 
 		for (const task of tasks) {
+			if (!task.active) continue; // Skip inactive tasks
+
 			try {
 				// If last_run_at is 0, we use a baseline of 1 minute ago to avoid skipping
 				// but also prevent it from thinking it's due for 50 years of catchup
@@ -239,7 +258,7 @@ export class Scheduler {
 		});
 
 		try {
-			let params = {};
+			let params: any = {};
 			if (task.params) {
 				try {
 					params = JSON.parse(task.params);
@@ -311,14 +330,14 @@ export class Scheduler {
 	}
 
 	/**
-	 * Remove (deactivate) a scheduled task
+	 * Remove (delete) a scheduled task permanently
 	 */
 	public async removeTask(taskId: string): Promise<boolean> {
 		const result = db
 			.getDb()
 			.prepare(
 				`
-            UPDATE scheduled_tasks SET active = 0 WHERE id = ?
+            DELETE FROM scheduled_tasks WHERE id = ?
         `
 			)
 			.run(taskId);
@@ -326,12 +345,13 @@ export class Scheduler {
 		if (result.changes && result.changes > 0) {
 			bus.emitAgent({
 				type: 'thought',
-				content: `[Scheduler] Deactivated task: ${taskId}`
+				content: `[Scheduler] Deleted task: ${taskId}`
 			});
 			return true;
 		}
 		return false;
 	}
+
 }
 
 export const scheduler = Scheduler.getInstance();

@@ -8,6 +8,7 @@ import path from 'path';
 import os from 'os';
 import { bus } from '../core/bus.js';
 import { mcp } from '../core/mcp.js';
+import { skillsManager } from '../core/skills.js';
 import { redactor } from '../core/redactor.js';
 import { READ_LANE, WRITE_LANE, EXEC_LANE, NETWORK_LANE } from '../core/lane.js';
 import {
@@ -74,10 +75,51 @@ export class ToolRegistry {
 	}
 
 	async init() {
-		await this.loadSkills();
+		await skillsManager.init();
+		await this.loadDefaultSkills();
+		await this.loadUserSkills();
 	}
 
-	private async loadSkills() {
+	/**
+	 * Load built-in default skills from src/skills/defaults/
+	 * These are bundled with the app and always available
+	 */
+	private async loadDefaultSkills() {
+		try {
+			const defaultSkillsDir = path.join(
+				path.dirname(new URL(import.meta.url).pathname),
+				'..', 'skills', 'defaults'
+			);
+
+			if (!fsSync.existsSync(defaultSkillsDir)) return;
+
+			const files = await fs.readdir(defaultSkillsDir);
+			for (const file of files) {
+				if (file.endsWith('.js') || file.endsWith('.mjs')) {
+					try {
+						const skillPath = path.join(defaultSkillsDir, file);
+						const module = await import(`file://${skillPath}?t=${Date.now()}`);
+						if (module.default && module.default.name) {
+							// Don't override user skills; skip disabled skills
+							if (!this.tools.has(module.default.name) && !skillsManager.isDisabled(module.default.name)) {
+								this.register(module.default);
+							}
+						}
+					} catch (e) {
+						// Silent fail for default skills - non-critical
+					}
+				}
+			}
+		} catch {
+			// Default skills dir might not exist in dist - that's ok
+		}
+	}
+
+	/**
+	 * Load user-created skills from ~/.obsidian-next/skills/
+	 * These override default skills with the same name
+	 */
+	private async loadUserSkills() {
 		if (!fsSync.existsSync(this.skillsDir)) {
 			fsSync.mkdirSync(this.skillsDir, { recursive: true });
 		}
@@ -88,17 +130,53 @@ export class ToolRegistry {
 				if (file.endsWith('.js') || file.endsWith('.mjs')) {
 					try {
 						const skillPath = path.join(this.skillsDir, file);
-						const module = await import(`file://${skillPath}`);
+
+						// Safety: Read file content first and skip files with top-level
+						// side effects (await/spawn/exec outside export default).
+						// This prevents scripts from auto-executing on import.
+						const content = await fs.readFile(skillPath, 'utf-8');
+						if (!content.includes('export default')) {
+							bus.emitAgent({
+								type: 'thought',
+								content: `[Skills] Skipped ${file}: no export default (not a valid skill)`,
+								hidden: true
+							});
+							continue;
+						}
+
+						// Check for top-level await outside of function bodies
+						// (indicates side-effect script, not a skill definition)
+						const stripped = content.replace(/async\s+(execute|function)\s*\([^)]*\)\s*\{[\s\S]*?\n\}/g, '');
+						if (/^(await|spawn|exec)\s/m.test(stripped)) {
+							bus.emitAgent({
+								type: 'thought',
+								content: `[Skills] Skipped ${file}: contains top-level side effects`,
+								hidden: true
+							});
+							continue;
+						}
+
+						const module = await import(`file://${skillPath}?t=${Date.now()}`);
 						if (module.default && module.default.name) {
-							this.register(module.default);
+							if (!skillsManager.isDisabled(module.default.name)) {
+								this.register(module.default); // User skills override defaults
+							}
 						}
 					} catch (e) {
-						console.error(`Failed to load skill ${file}:`, e);
+						bus.emitAgent({
+							type: 'thought',
+							content: `[Skills] Failed to load ${file}: ${e instanceof Error ? e.message : String(e)}`,
+							hidden: true
+						});
 					}
 				}
 			}
 		} catch (e) {
-			console.error('Failed to read skills directory:', e);
+			bus.emitAgent({
+				type: 'thought',
+				content: `[Skills] Failed to read skills directory: ${e instanceof Error ? e.message : String(e)}`,
+				hidden: true
+			});
 		}
 	}
 

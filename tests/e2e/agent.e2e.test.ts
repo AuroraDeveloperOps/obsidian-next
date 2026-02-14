@@ -18,7 +18,7 @@ const PROJECT_ROOT = process.cwd();
 let testWorkspace: string;
 
 // Mock the LLM to avoid actual API calls
-vi.mock('../../src/core/llm.js', () => ({
+vi.mock('../../src/core/llm/index.js', () => ({
     llm: {
         streamChat: vi.fn(async (input: string) => {
             // Simulate LLM responses based on input
@@ -170,6 +170,9 @@ describe('Agent E2E', () => {
                 denied: [],
                 session: [],
                 unsandboxed: []
+            },
+            security: {
+                piiRedaction: false
             }
         } as any);
         vi.spyOn(settings, 'isAllowed').mockResolvedValue(true);
@@ -212,7 +215,7 @@ describe('Agent E2E', () => {
 
         it('should ignore single slash command trigger', async () => {
             const { agent } = await import('../../src/core/agent.js');
-            const { llm } = await import('../../src/core/llm.js');
+            const { llm } = await import('../../src/core/llm/index.js');
 
             await agent.run('/');
 
@@ -235,7 +238,7 @@ describe('Agent E2E', () => {
 
     describe('Tool Execution', () => {
         it('should execute list tool successfully', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             // Create test files
             await fs.writeFile(path.join(testWorkspace, 'test.txt'), 'hello');
@@ -247,7 +250,7 @@ describe('Agent E2E', () => {
         });
 
         it('should execute read tool successfully', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const testFile = path.join(testWorkspace, 'read-test.txt');
             await fs.writeFile(testFile, 'Line 1\nLine 2\nLine 3');
@@ -260,7 +263,7 @@ describe('Agent E2E', () => {
         });
 
         it('should execute write tool successfully', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const newFile = path.join(testWorkspace, 'new-file.txt');
 
@@ -277,7 +280,7 @@ describe('Agent E2E', () => {
         });
 
         it('should execute edit tool successfully', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const testFile = path.join(testWorkspace, 'edit-test.txt');
             await fs.writeFile(testFile, 'Hello World');
@@ -296,7 +299,7 @@ describe('Agent E2E', () => {
         });
 
         it('should execute grep tool successfully', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             // Create files with searchable content
             await fs.writeFile(path.join(testWorkspace, 'search.ts'), 'function testFunction() {}');
@@ -311,7 +314,7 @@ describe('Agent E2E', () => {
         });
 
         it('should execute glob tool successfully', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             // Create TypeScript files
             await fs.writeFile(path.join(testWorkspace, 'file1.ts'), '// ts file');
@@ -332,7 +335,7 @@ describe('Agent E2E', () => {
 
     describe('Security Boundaries', () => {
         it('should block path traversal attempts', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const result = await tools.execute('read', {
                 path: '../../../etc/passwd',
@@ -343,18 +346,18 @@ describe('Agent E2E', () => {
         });
 
         it('should block reading from node_modules', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const result = await tools.execute('read', {
                 path: 'node_modules/some-package/index.js',
             });
 
             expect(result.success).toBe(false);
-            expect(result.error).toContain('ignored directory');
+            expect(result.error).toContain('outside workspace');
         });
 
         it('should not allow writing to existing files', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const existingFile = path.join(testWorkspace, 'existing.txt');
             await fs.writeFile(existingFile, 'original');
@@ -375,7 +378,7 @@ describe('Agent E2E', () => {
 
     describe('Error Handling', () => {
         it('should handle missing file gracefully', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const result = await tools.execute('read', {
                 path: path.join(testWorkspace, 'nonexistent.txt'),
@@ -386,7 +389,7 @@ describe('Agent E2E', () => {
         });
 
         it('should handle invalid edit search string', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const testFile = path.join(testWorkspace, 'edit-fail.txt');
             await fs.writeFile(testFile, 'Hello World');
@@ -402,7 +405,7 @@ describe('Agent E2E', () => {
         });
 
         it('should handle unknown tool gracefully', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const result = await tools.execute('unknown_tool', {});
 
@@ -413,7 +416,7 @@ describe('Agent E2E', () => {
 
     describe('Task Management', () => {
         it('should execute task tool for creating tasks', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const result = await tools.execute('task', {
                 action: 'create',
@@ -425,7 +428,7 @@ describe('Agent E2E', () => {
         });
 
         it('should execute task tool for adding steps', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const result = await tools.execute('task', {
                 action: 'add_step',
@@ -437,7 +440,7 @@ describe('Agent E2E', () => {
         });
 
         it('should reject task actions without required params', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const result = await tools.execute('task', {
                 action: 'create',
@@ -451,7 +454,7 @@ describe('Agent E2E', () => {
 
     describe('Web Fetch Tool', () => {
         it('should reject localhost URLs', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const result = await tools.execute('web_fetch', {
                 url: 'http://localhost:3000/api',
@@ -462,7 +465,7 @@ describe('Agent E2E', () => {
         });
 
         it('should reject invalid URLs', async () => {
-            const { tools } = await import('../../src/core/tools.js');
+            const { tools } = await import('../../src/tools/index.js');
 
             const result = await tools.execute('web_fetch', {
                 url: 'not-a-valid-url',

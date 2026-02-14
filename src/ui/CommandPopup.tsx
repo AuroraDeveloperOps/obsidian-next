@@ -22,6 +22,7 @@ export const COMMANDS = [
 	{ name: '/mcp', desc: 'Model Context Protocol', isView: true },
 	{ name: '/resume', desc: 'Restore saved session', isView: true },
 	{ name: '/ollama', desc: 'Ollama model registry', isView: true },
+	{ name: '/skills', desc: 'Skills store - browse & manage', isView: true },
 	{ name: '/clear', desc: 'Clear conversation' },
 	{ name: '/exit', desc: 'Save session and exit' },
 ];

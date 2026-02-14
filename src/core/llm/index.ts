@@ -513,7 +513,8 @@ CWD: ${cfg.workspaceRoot}${userContext ? `\n\nUSER CONTEXT:\n${userContext}` : '
 			if (currentUsage > CONTEXT.MAX_TOKENS_TOTAL * CONTEXT.TOKEN_LIMIT_PRUNE) {
 				bus.emitAgent({
 					type: 'thought',
-					content: `[SAFETY] CRITICAL CONTEXT LEVEL (${(currentUsage / 1000).toFixed(1)}k). Aggressive pruning engaged.`
+					content: `[SAFETY] CRITICAL CONTEXT LEVEL (${(currentUsage / 1000).toFixed(1)}k). Aggressive pruning engaged.`,
+					hidden: true
 				});
 				await this.compressHistory(); // Trigger pruning
 			} else if (
@@ -522,7 +523,8 @@ CWD: ${cfg.workspaceRoot}${userContext ? `\n\nUSER CONTEXT:\n${userContext}` : '
 			) {
 				bus.emitAgent({
 					type: 'thought',
-					content: `[WARN] High context usage (${(currentUsage / 1000).toFixed(1)}k). Consider resetting soon.`
+					content: `[WARN] High context usage (${(currentUsage / 1000).toFixed(1)}k). Consider resetting soon.`,
+					hidden: true
 				});
 			}
 
@@ -737,7 +739,7 @@ CWD: ${cfg.workspaceRoot}${userContext ? `\n\nUSER CONTEXT:\n${userContext}` : '
 						bus.emitAgent({
 							type: 'thought',
 							content: `[Context] Pre-check: ${(accurateUsage / 1000).toFixed(1)}k tokens (${((accurateUsage / CONTEXT.MAX_TOKENS_TOTAL) * 100).toFixed(0)}%). Pruning before send.`,
-							hidden: false
+							hidden: true
 						});
 						await this.compressHistory();
 					} else if (
@@ -898,7 +900,7 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
 						type: 'thought',
 						content:
 							'[Context] Detected corrupted history - clearing and retrying...',
-						hidden: false
+						hidden: true
 					});
 					// Clear corrupted history and retry with just the current message
 					this.conversationHistory = [
@@ -976,11 +978,14 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
 					fullThinking += text;
 					thinkingBuffer += text;
 
+					// Emit accumulated thinking as a single streaming thought (hidden)
+					// Using streaming: true so UI merges into one entry instead of spamming
 					if (thinkingBuffer.length >= 100 || text.includes('\n')) {
 						bus.emitAgent({
 							type: 'thought',
-							content: `[Thinking] ${thinkingBuffer.trim()}`,
-							hidden: false
+							content: `[Thinking] ${fullThinking.trim()}`,
+							hidden: true,
+							streaming: true
 						});
 						thinkingBuffer = '';
 					}
@@ -991,8 +996,9 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
 					if (thinkingBuffer) {
 						bus.emitAgent({
 							type: 'thought',
-							content: `[Thinking] ${thinkingBuffer.trim()}`,
-							hidden: false
+							content: `[Thinking] ${fullThinking.trim()}`,
+							hidden: true,
+							streaming: true
 						});
 						thinkingBuffer = '';
 					}
@@ -1198,14 +1204,9 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
 						is_error: !result.success
 					});
 
-					// Emit informational tool results as thoughts so user sees them
-					// (don't rely on LLM to always comment on results)
+					// Track tool outputs for fallback when LLM generates no text
+					// Note: Don't emit as thought - tool_result event already displays in UI
 					if (result.success && outputContent && !result.content) {
-						bus.emitAgent({
-							type: 'thought',
-							content: outputContent
-						});
-						// Track tool outputs for fallback when LLM generates no text
 						this.lastToolOutputs.push(outputContent);
 					}
 				}
@@ -1264,8 +1265,8 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
 					return recursiveResponse;
 				}
 
-				// LLM didn't respond - extract and return tool output as the response
-				// This ensures user ALWAYS sees something, not just "Completed in X.Xs"
+				// LLM didn't respond - return tool output as the response
+				// Note: Don't emit as thought - tool_result event already displayed in UI
 				if (toolResults.length > 0) {
 					const lastToolResult = toolResults[toolResults.length - 1];
 					let content = lastToolResult.content;
@@ -1279,10 +1280,6 @@ EVALUATION: After each action, state "I see [what changed]. [Success/Retry]"`;
 					}
 
 					if (typeof content === 'string' && content.trim()) {
-						bus.emitAgent({
-							type: 'thought',
-							content: content
-						});
 						return content;
 					}
 				}
@@ -1581,6 +1578,7 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 			// Stream from provider
 			let fullResponse = '';
 			let buffer = '';
+			let lastEmittedLength = 0;
 			const toolUses: Array<{
 				id: string;
 				name: string;
@@ -1602,7 +1600,7 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 					this.accumulatedOutputTokens += chunk.usage.outputTokens || 0;
 				}
 
-				// Handle text
+				// Handle text - emit progressive updates (replaces last thought)
 				if (chunk.type === 'text' && chunk.text) {
 					fullResponse += chunk.text;
 					buffer += chunk.text;
@@ -1612,10 +1610,14 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 						buffer.match(/[.!?]\s*$/) ||
 						buffer.match(/\n/)
 					) {
+						// Emit the full accumulated response - UI replaces the last thought event
 						bus.emitAgent({
 							type: 'thought',
-							content: fullResponse
+							content: fullResponse,
+							// Tag for UI to identify streaming thoughts from the same turn
+							streaming: true
 						});
+						lastEmittedLength = fullResponse.length;
 						buffer = '';
 					}
 				}
@@ -1625,7 +1627,7 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 					bus.emitAgent({
 						type: 'thought',
 						content: `[Thinking] ${chunk.thinking}`,
-						hidden: false
+						hidden: true
 					});
 				}
 
@@ -1635,11 +1637,12 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 				}
 			}
 
-			// Flush remaining buffer
-			if (buffer.length > 0) {
+			// Flush remaining buffer - emit final complete response
+			if (fullResponse.length > lastEmittedLength) {
 				bus.emitAgent({
 					type: 'thought',
-					content: fullResponse
+					content: fullResponse,
+					streaming: true
 				});
 			}
 
@@ -1665,11 +1668,8 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 						is_error: !result.success
 					});
 
+					// Track tool outputs (don't emit as thought - tool_result handles display)
 					if (result.success && outputContent) {
-						bus.emitAgent({
-							type: 'thought',
-							content: outputContent
-						});
 						this.lastToolOutputs.push(outputContent);
 					}
 				}
@@ -1794,7 +1794,7 @@ ${JSON.stringify(simplifiedMessages, null, 2)}
 			bus.emitAgent({
 				type: 'thought',
 				content: `[Context] History validation failed - starting fresh to avoid API errors.`,
-				hidden: false
+				hidden: true
 			});
 			this.conversationHistory = [];
 			return;

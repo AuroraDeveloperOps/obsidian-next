@@ -1,7 +1,7 @@
 /**
  * Real-World Scenario E2E Tests
  *
- * Tests that simulate actual user workflows like Claude Code / OpenClaw:
+ * Tests that simulate actual user workflows:
  * - Code exploration and understanding
  * - File creation and modification
  * - Multi-step tasks
@@ -15,6 +15,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
 import { setupTestWorkspace, createProjectStructure, createTestFile } from '../setup-helpers.js';
+
+// Direct imports from tool files
+import { ReadTool } from '../../src/tools/filesystem/read.js';
+import { WriteTool } from '../../src/tools/filesystem/write.js';
+import { EditTool } from '../../src/tools/filesystem/edit.js';
+import { ListTool } from '../../src/tools/filesystem/list.js';
+import { GrepTool } from '../../src/tools/filesystem/grep.js';
+import { GlobTool } from '../../src/tools/filesystem/glob.js';
 
 let testWorkspace: string;
 let cleanup: () => Promise<void>;
@@ -67,8 +75,6 @@ export function formatDate(date: Date): string {
 
     describe('Scenario: Code Exploration', () => {
         it('should list project structure', async () => {
-            const { ListTool } = await import('../../src/core/tools.js');
-
             const result = await ListTool.execute({ path: testWorkspace });
 
             expect(result.success).toBe(true);
@@ -78,8 +84,6 @@ export function formatDate(date: Date): string {
         });
 
         it('should read and understand source files', async () => {
-            const { ReadTool } = await import('../../src/core/tools.js');
-
             const result = await ReadTool.execute({
                 path: path.join(testWorkspace, 'src/index.ts'),
             });
@@ -91,8 +95,6 @@ export function formatDate(date: Date): string {
         });
 
         it('should search for patterns across files', async () => {
-            const { GrepTool } = await import('../../src/core/tools.js');
-
             const result = await GrepTool.execute({
                 pattern: 'function',
                 path: testWorkspace,
@@ -103,8 +105,6 @@ export function formatDate(date: Date): string {
         });
 
         it('should find TypeScript files with glob', async () => {
-            const { GlobTool } = await import('../../src/core/tools.js');
-
             const result = await GlobTool.execute({
                 pattern: '**/*.ts',
                 path: testWorkspace,
@@ -117,8 +117,6 @@ export function formatDate(date: Date): string {
 
     describe('Scenario: Add New Feature', () => {
         it('should create a new file for a feature', async () => {
-            const { WriteTool } = await import('../../src/core/tools.js');
-
             const newFile = path.join(testWorkspace, 'src/calculator.ts');
 
             const result = await WriteTool.execute({
@@ -148,8 +146,6 @@ export function subtract(a: number, b: number): number {
         });
 
         it('should modify existing code to add functionality', async () => {
-            const { EditTool } = await import('../../src/core/tools.js');
-
             const result = await EditTool.execute({
                 path: path.join(testWorkspace, 'src/index.ts'),
                 search: `export function multiply(a: number, b: number): number {
@@ -178,9 +174,6 @@ export function power(base: number, exponent: number): number {
 
     describe('Scenario: Fix a Bug', () => {
         it('should locate bug by searching for keywords', async () => {
-            const { GrepTool } = await import('../../src/core/tools.js');
-
-            // Search for TODO comments (common bug markers)
             const result = await GrepTool.execute({
                 pattern: 'TODO',
                 path: testWorkspace,
@@ -191,9 +184,6 @@ export function power(base: number, exponent: number): number {
         });
 
         it('should fix identified issue with edit', async () => {
-            const { EditTool } = await import('../../src/core/tools.js');
-
-            // Fix the TODO by adding the utility
             const result = await EditTool.execute({
                 path: path.join(testWorkspace, 'src/utils.ts'),
                 search: '// TODO: Add more utilities',
@@ -217,8 +207,6 @@ export function power(base: number, exponent: number): number {
 
     describe('Scenario: Create Test File', () => {
         it('should create test file for existing module', async () => {
-            const { WriteTool } = await import('../../src/core/tools.js');
-
             const testFile = path.join(testWorkspace, 'tests/index.test.ts');
 
             const result = await WriteTool.execute({
@@ -266,8 +254,6 @@ describe('Math functions', () => {
 
     describe('Scenario: Multi-Step Refactoring', () => {
         it('should perform sequential file operations', async () => {
-            const { ReadTool, EditTool, WriteTool } = await import('../../src/core/tools.js');
-
             // Step 1: Read the current state
             const readResult = await ReadTool.execute({
                 path: path.join(testWorkspace, 'src/utils.ts'),
@@ -323,8 +309,6 @@ export { capitalize } from './string-utils';`,
 
     describe('Scenario: Error Recovery', () => {
         it('should handle file not found gracefully', async () => {
-            const { ReadTool } = await import('../../src/core/tools.js');
-
             const result = await ReadTool.execute({
                 path: path.join(testWorkspace, 'nonexistent-file.ts'),
             });
@@ -334,8 +318,6 @@ export { capitalize } from './string-utils';`,
         });
 
         it('should handle invalid edit target gracefully', async () => {
-            const { EditTool } = await import('../../src/core/tools.js');
-
             const result = await EditTool.execute({
                 path: path.join(testWorkspace, 'src/index.ts'),
                 search: 'this string does not exist in the file',
@@ -347,8 +329,6 @@ export { capitalize } from './string-utils';`,
         });
 
         it('should not corrupt files on failed operations', async () => {
-            const { EditTool, ReadTool } = await import('../../src/core/tools.js');
-
             // Read original content
             const originalResult = await ReadTool.execute({
                 path: path.join(testWorkspace, 'src/index.ts'),
@@ -374,24 +354,19 @@ export { capitalize } from './string-utils';`,
 
 describe('Tool Output Quality', () => {
     let testWorkspace: string;
+    let cleanup: () => Promise<void>;
 
     beforeEach(async () => {
-        // Use project-relative path to pass auditor checks
-        testWorkspace = path.join(PROJECT_ROOT, `.test-output-${Date.now()}`);
-        await fs.mkdir(testWorkspace, { recursive: true });
+        const setup = await setupTestWorkspace('tool-output');
+        testWorkspace = setup.workspace;
+        cleanup = setup.cleanup;
     });
 
     afterEach(async () => {
-        try {
-            await fs.rm(testWorkspace, { recursive: true, force: true });
-        } catch {
-            // Ignore
-        }
+        await cleanup();
     });
 
     it('should provide clear success messages', async () => {
-        const { WriteTool } = await import('../../src/core/tools.js');
-
         const result = await WriteTool.execute({
             path: path.join(testWorkspace, 'test.txt'),
             content: 'test content',
@@ -404,20 +379,16 @@ describe('Tool Output Quality', () => {
     });
 
     it('should provide clear error messages', async () => {
-        const { ReadTool } = await import('../../src/core/tools.js');
-
         const result = await ReadTool.execute({
             path: path.join(testWorkspace, 'missing.txt'),
         });
 
         expect(result.success).toBe(false);
         expect(result.error).toBeDefined();
-        expect(result.error!.length).toBeGreaterThan(10);  // Not just "error"
+        expect(result.error!.length).toBeGreaterThan(10);
     });
 
     it('should include line numbers in read output', async () => {
-        const { ReadTool } = await import('../../src/core/tools.js');
-
         await fs.writeFile(
             path.join(testWorkspace, 'numbered.txt'),
             'Line one\nLine two\nLine three'
@@ -428,12 +399,10 @@ describe('Tool Output Quality', () => {
         });
 
         expect(result.success).toBe(true);
-        expect(result.output).toMatch(/\d+\s*\|/);  // Line number format: "1 |"
+        expect(result.output).toMatch(/\d+\s*\|/);
     });
 
     it('should show diff preview for edits', async () => {
-        const { EditTool } = await import('../../src/core/tools.js');
-
         await fs.writeFile(
             path.join(testWorkspace, 'diff-test.txt'),
             'old content here'
@@ -446,7 +415,6 @@ describe('Tool Output Quality', () => {
         });
 
         expect(result.success).toBe(true);
-        // Should show removed/added lines
         expect(result.output).toContain('-');
         expect(result.output).toContain('+');
     });
