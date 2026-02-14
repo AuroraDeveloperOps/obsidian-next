@@ -751,7 +751,7 @@ export const Root = () => {
 				flexDirection="column"
 				flexGrow={1}
 				overflowY="hidden"
-				justifyContent="flex-end"
+				justifyContent={events.length > 0 ? "flex-end" : "flex-start"}
 			>
 				{activeView === 'chat' ? (
 					<MessageList
