@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.12] - 2026-02-14
+
+### Fixed
+- **Message Overlapping**: Fixed critical bug where messages rendered on top of each other when viewport filled up. Removed dynamic `justifyContent` switching that was causing Ink's layout engine to break. Now uses consistent `flex-end` for proper chat-style bottom-anchored layout.
+
+---
+
 ## [0.4.11] - 2026-02-14
 
 ### Fixed
