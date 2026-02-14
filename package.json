@@ -1,6 +1,6 @@
 {
     "name": "@aurora-foundation/obsidian-next",
-    "version": "0.4.9",
+    "version": "0.4.10",
     "description": "Next-gen AI Agent CLI",
     "main": "dist/index.js",
     "type": "module",
