@@ -749,7 +749,7 @@ export const Root = () => {
 			{/* Main Content Area */}
 			<Box
 				flexDirection="column"
-				flexGrow={1}
+				flexGrow={events.length > 0 || activeView !== 'chat' ? 1 : 0}
 				overflowY="hidden"
 				justifyContent={events.length > 0 ? "flex-end" : "flex-start"}
 			>
