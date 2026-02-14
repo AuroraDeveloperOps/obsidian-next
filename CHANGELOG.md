@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.11] - 2026-02-14
+
+### Fixed
+- **Chat Layout**: Messages no longer stick to the bottom of the terminal when few or no messages are present. Layout dynamically switches between top-aligned (few messages) and bottom-anchored (full viewport).
+- **Scroll Support**: Arrow keys (Up/Down) now scroll through chat history one line at a time. Shift+Arrow jumps a full page. Scroll position is preserved when new messages arrive if the user has scrolled up.
+- **Scroll Indicator**: Yellow indicator shows current scroll position and keybind hints when scrolled up.
+- **Scroll Reset**: Sending a message or running `/clear` automatically jumps back to the bottom of the conversation.
+- **MessageList Boundary Guard**: Prevents crash when events are cleared while scrolled up (negative index guard).
+
+---
+
 ## [0.4.8] - 2026-02-13
 
 ### Added

@@ -42,7 +42,7 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 	maxEvents = 50,
 	scrollOffset = 0
 }) => {
-	const end = events.length - scrollOffset;
+	const end = Math.max(0, events.length - scrollOffset);
 	const start = Math.max(0, end - maxEvents);
 	const visibleEvents = events.slice(start, end);
 

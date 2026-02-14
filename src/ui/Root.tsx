@@ -161,7 +161,7 @@ export const Root = () => {
 			const ver = await config.getVersion();
 			const version = ver.startsWith('v') ? ver : `v${ver}`;
 			const branch = getGitBranch();
-			
+
 			let displayModel = cfg.model;
 			if (conf.provider === 'ollama') {
 				displayModel = conf.ollama?.models?.chat || 'Unknown Ollama Model';
@@ -255,8 +255,11 @@ export const Root = () => {
 			return result;
 		});
 
-		// Auto-scroll to bottom when new events arrive
-		setScrollOffset(0);
+		// Auto-scroll to bottom when new events arrive (only if not manually scrolled up)
+		setScrollOffset((prev) => {
+			if (prev === 0) return 0; // Already at bottom, stay there
+			return prev; // User scrolled up, don't disturb them
+		});
 	}, []);
 
 	// Schedule a batched flush (coalesces rapid events into one render)
@@ -277,6 +280,7 @@ export const Root = () => {
 		const handler = (event: AgentEvent) => {
 			if (event.type === 'clear_history') {
 				setEvents([]);
+				setScrollOffset(0);
 				history.clear();
 				setPendingPrompt(null);
 				return;
@@ -445,7 +449,7 @@ export const Root = () => {
 		try {
 			const summary = await session.getSummary();
 			const { sessionId } = await session.save();
-			
+
 			const summaryText = [
 				`SESSION SUMMARY [${sessionId}]`,
 				`Duration: ${session.formatDuration(summary.duration)}`,
@@ -461,7 +465,7 @@ export const Root = () => {
 
 		// Gracefully disconnect MCP servers to prevent EPIPE errors
 		await mcp.disconnectAll();
-		
+
 		setTimeout(() => { exit(); }, 2000);
 	}, [exit]);
 
@@ -519,6 +523,21 @@ export const Root = () => {
 		}
 
 		if (showPalette) return;
+
+		// Scroll handling — works even when busy (user should always be able to scroll)
+		if (matches.length === 0) {
+			if (key.upArrow) {
+				const step = key.shift ? dynamicMaxEvents : 1;
+				setScrollOffset((prev) => Math.min(prev + step, Math.max(0, events.length - 1)));
+				return;
+			}
+			if (key.downArrow) {
+				const step = key.shift ? dynamicMaxEvents : 1;
+				setScrollOffset((prev) => Math.max(prev - step, 0));
+				return;
+			}
+		}
+
 		if (pendingPrompt || isBusy) return;
 
 		// Popup navigation
@@ -578,6 +597,7 @@ export const Root = () => {
 
 		bus.emitUser({ type: 'user_input', content: trimmed, silent });
 		setInput('');
+		setScrollOffset(0); // Jump to bottom when user sends a message
 	};
 
 	// UI-specific approval responses
@@ -729,15 +749,15 @@ export const Root = () => {
 			{/* Main Content Area */}
 			<Box
 				flexDirection="column"
-				flexGrow={activeView === 'chat' ? 1 : 1}
+				flexGrow={1}
 				overflowY="hidden"
-				justifyContent="flex-end"
+				justifyContent={events.length > dynamicMaxEvents ? 'flex-end' : 'flex-start'}
 			>
 				{activeView === 'chat' ? (
 					<MessageList
 						events={events}
 						maxEvents={dynamicMaxEvents}
-						scrollOffset={0}
+						scrollOffset={scrollOffset}
 					/>
 				) : (
 					renderView()
@@ -790,6 +810,14 @@ export const Root = () => {
 								placeholder={pendingPrompt.placeholder}
 								onResolve={handlePromptResolve}
 							/>
+						</Box>
+					)}
+
+					{/* Scroll indicator */}
+					{scrollOffset > 0 && (
+						<Box paddingX={1}>
+							<Text color="yellow">{'↑'} Scrolled up {scrollOffset} lines</Text>
+							<Text dimColor> · ↓ scroll down · shift+↓ page down</Text>
 						</Box>
 					)}
 
