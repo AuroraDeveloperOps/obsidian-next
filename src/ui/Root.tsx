@@ -112,6 +112,7 @@ export const Root = () => {
 	const BANNER_HEIGHT = 6;
 	const INPUT_AREA_HEIGHT = 6; // Prompt, separator, info bar, thinking
 	const dynamicMaxEvents = Math.max(5, rows - (BANNER_HEIGHT + INPUT_AREA_HEIGHT));
+	const contentHeight = rows - BANNER_HEIGHT - INPUT_AREA_HEIGHT;
 
 	useEffect(() => {
 		if (!stdout) return;
@@ -749,9 +750,10 @@ export const Root = () => {
 			{/* Main Content Area */}
 			<Box
 				flexDirection="column"
-				flexGrow={events.length > 0 || activeView !== 'chat' ? 1 : 0}
+				flexGrow={activeView !== 'chat' ? 1 : 0}
+				height={activeView === 'chat' && events.length > 0 ? contentHeight : undefined}
 				overflowY="hidden"
-				justifyContent={events.length > 0 ? "flex-end" : "flex-start"}
+				justifyContent="flex-end"
 			>
 				{activeView === 'chat' ? (
 					<MessageList
