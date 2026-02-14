@@ -751,9 +751,7 @@ export const Root = () => {
 			<Box
 				flexDirection="column"
 				flexGrow={activeView !== 'chat' ? 1 : 0}
-				height={activeView === 'chat' && events.length > 0 ? contentHeight : undefined}
 				overflowY="hidden"
-				justifyContent="flex-end"
 			>
 				{activeView === 'chat' ? (
 					<MessageList
