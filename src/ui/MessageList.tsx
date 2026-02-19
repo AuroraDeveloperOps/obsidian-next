@@ -6,8 +6,6 @@ import { ToolOutput } from '../components/ToolOutput.js';
 
 interface MessageListProps {
 	events: AgentEvent[];
-	maxEvents?: number;
-	scrollOffset?: number;
 }
 
 /**
@@ -37,21 +35,12 @@ function summarizeArgs(tool: string, argsJson: string): string {
 	}
 }
 
-const MessageListComponent: React.FC<MessageListProps> = ({
-	events,
-	maxEvents = 50,
-	scrollOffset = 0
-}) => {
-	const end = Math.max(0, events.length - scrollOffset);
-	const start = Math.max(0, end - maxEvents);
-	const visibleEvents = events.slice(start, end);
-
+const MessageListComponent: React.FC<MessageListProps> = ({ events }) => {
 	return (
 		<Box flexDirection="column">
-
-			{visibleEvents.map((event: any, i) => {
-				const prevEvent = visibleEvents[i - 1];
-				const nextEvent = visibleEvents[i + 1];
+			{events.map((event: any, i) => {
+				const prevEvent = events[i - 1];
+				const nextEvent = events[i + 1];
 				let content = null;
 
 				// Spacing: tool_result hugs its tool_start, everything else gets margin
@@ -63,7 +52,8 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 					content = (
 						<Box>
 							<Text backgroundColor="#1a1a2e" color="#e0e0e0">
-								{' > '}{event.content}{' '}
+								{' > '}
+								{event.content}{' '}
 							</Text>
 						</Box>
 					);
@@ -71,7 +61,7 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 					if (event.content.startsWith('Mode:')) return null;
 					if (event.hidden) return null;
 
-					const isLast = i === visibleEvents.length - 1;
+					const isLast = i === events.length - 1;
 
 					// Check if next event is 'done' - append duration inline
 					const doneNext = nextEvent?.type === 'done' ? nextEvent : null;
@@ -82,7 +72,10 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 					content = (
 						<Box>
 							<Text color="white">{'\u23FA'} </Text>
-							<AgentLine content={event.content + durationSuffix} isStreaming={isLast && !doneNext} />
+							<AgentLine
+								content={event.content + durationSuffix}
+								isStreaming={isLast && !doneNext}
+							/>
 						</Box>
 					);
 				} else if (event.type === 'tool_start') {
@@ -92,9 +85,13 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 					content = (
 						<Box>
 							<Text color="cyan">{'\u23FA'} </Text>
-							<Text color="cyan" bold>{displayName}</Text>
+							<Text color="cyan" bold>
+								{displayName}
+							</Text>
 							{argsSummary ? (
-								<Text color="cyan" dimColor>({argsSummary})</Text>
+								<Text color="cyan" dimColor>
+									({argsSummary})
+								</Text>
 							) : null}
 						</Box>
 					);
@@ -118,13 +115,17 @@ const MessageListComponent: React.FC<MessageListProps> = ({
 						: '';
 					content = (
 						<Box>
-							<Text color="green">{'\u23FA'} Done{duration}</Text>
+							<Text color="green">
+								{'\u23FA'} Done{duration}
+							</Text>
 						</Box>
 					);
 				} else if (event.type === 'error') {
 					content = (
 						<Box>
-							<Text color="red">{'\u23FA'} {event.message}</Text>
+							<Text color="red">
+								{'\u23FA'} {event.message}
+							</Text>
 						</Box>
 					);
 				}

@@ -100,7 +100,9 @@ type ActiveView =
 export const Root = () => {
 	const [events, setEvents] = useState<AgentEvent[]>([]);
 	const [input, setInput] = useState('');
-	const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
+	const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(
+		null
+	);
 	const [taskProgress, setTaskProgress] = useState(tasks.getProgress());
 	const { exit } = useApp();
 	const { stdout } = useStdout();
@@ -111,8 +113,7 @@ export const Root = () => {
 	// Dynamic layout calculation
 	const BANNER_HEIGHT = 6;
 	const INPUT_AREA_HEIGHT = 6; // Prompt, separator, info bar, thinking
-	const dynamicMaxEvents = Math.max(5, rows - (BANNER_HEIGHT + INPUT_AREA_HEIGHT));
-	const contentHeight = rows - BANNER_HEIGHT - INPUT_AREA_HEIGHT;
+	const contentHeight = Math.max(5, rows - BANNER_HEIGHT - INPUT_AREA_HEIGHT);
 
 	useEffect(() => {
 		if (!stdout) return;
@@ -182,9 +183,8 @@ export const Root = () => {
 
 			// Update context usage
 			const ctx = usage.getContextUsage(cfg.model);
-			const remaining = ctx.limit > 0
-				? Math.round(100 - (ctx.used / ctx.limit) * 100)
-				: 100;
+			const remaining =
+				ctx.limit > 0 ? Math.round(100 - (ctx.used / ctx.limit) * 100) : 100;
 			setContextPct(Math.max(0, remaining));
 		};
 
@@ -196,7 +196,9 @@ export const Root = () => {
 			}
 		};
 		bus.on('agent', statHandler);
-		return () => { bus.off('agent', statHandler); };
+		return () => {
+			bus.off('agent', statHandler);
+		};
 	}, []);
 
 	// Load history on mount
@@ -225,28 +227,25 @@ export const Root = () => {
 		setEvents((prev) => {
 			let result = prev;
 			for (const event of batch) {
-				// Handle streaming thoughts (look backwards for the stream start)
+				// Handle streaming thoughts - always replace the last streaming thought
 				if (event.type === 'thought' && event.streaming) {
 					let replaced = false;
 					for (let i = result.length - 1; i >= 0; i--) {
 						const e = result[i] as any;
 						if (e.type === 'user_input' || e.type === 'clear_history') break;
 						if (e.type === 'thought' && e.streaming) {
-							if (event.content.startsWith(e.content)) {
-								result = [...result];
-								result[i] = event;
-								replaced = true;
-							}
+							result = [...result];
+							result[i] = event;
+							replaced = true;
 							break;
 						}
 					}
 					if (replaced) continue;
 				}
 
-				// Replace consecutive thoughts
+				// Always replace consecutive thoughts (non-streaming updates)
 				const last = result[result.length - 1];
 				if (event.type === 'thought' && last && last.type === 'thought') {
-					if (last.content === event.content) continue;
 					result = [...result];
 					result[result.length - 1] = event;
 				} else {
@@ -256,25 +255,25 @@ export const Root = () => {
 			return result;
 		});
 
-		// Auto-scroll to bottom when new events arrive (only if not manually scrolled up)
-		setScrollOffset((prev) => {
-			if (prev === 0) return 0; // Already at bottom, stay there
-			return prev; // User scrolled up, don't disturb them
-		});
+		// Auto-scroll to bottom when new events arrive
+		setScrollOffset(0);
 	}, []);
 
 	// Schedule a batched flush (coalesces rapid events into one render)
-	const scheduleFlush = useCallback((immediate?: boolean) => {
-		if (immediate) {
-			// For user-interactive events (prompts, errors), flush now
-			if (flushTimerRef.current) {
-				clearTimeout(flushTimerRef.current);
+	const scheduleFlush = useCallback(
+		(immediate?: boolean) => {
+			if (immediate) {
+				// For user-interactive events (prompts, errors), flush now
+				if (flushTimerRef.current) {
+					clearTimeout(flushTimerRef.current);
+				}
+				flushEvents();
+			} else if (!flushTimerRef.current) {
+				flushTimerRef.current = setTimeout(flushEvents, RENDER_BATCH_MS);
 			}
-			flushEvents();
-		} else if (!flushTimerRef.current) {
-			flushTimerRef.current = setTimeout(flushEvents, RENDER_BATCH_MS);
-		}
-	}, [flushEvents]);
+		},
+		[flushEvents]
+	);
 
 	// Main event handler
 	useEffect(() => {
@@ -290,12 +289,18 @@ export const Root = () => {
 			if (event.type === 'restore_history') {
 				const restored = (event as any).events || [];
 				setEvents(restored);
+				setScrollOffset(0);
 				setPendingPrompt(null);
 				return;
 			}
 
 			// Busy state tracking
-			const completionTypes = ['done', 'error', 'command_executed', 'shutdown_complete'];
+			const completionTypes = [
+				'done',
+				'error',
+				'command_executed',
+				'shutdown_complete'
+			];
 			const startTypes = ['tool_start'];
 
 			if (completionTypes.includes(event.type)) {
@@ -308,11 +313,16 @@ export const Root = () => {
 
 			if (event.type === 'shutdown_complete') {
 				setIsBackgroundBusy(false);
-				setTimeout(() => { exit(); }, 200);
+				setTimeout(() => {
+					exit();
+				}, 200);
 				return;
 			} else if (event.type === 'scheduler_task_started') {
 				setIsBackgroundBusy(true);
-			} else if (event.type === 'scheduler_task_completed' || event.type === 'scheduler_task_failed') {
+			} else if (
+				event.type === 'scheduler_task_completed' ||
+				event.type === 'scheduler_task_failed'
+			) {
 				setIsBackgroundBusy(false);
 			} else if (event.type === 'task_update') {
 				setTaskProgress(tasks.getProgress());
@@ -361,10 +371,16 @@ export const Root = () => {
 					else if (trigger === 'mode') setSettingsTab('mode');
 					else if (trigger === 'models') setSettingsTab('models');
 					else if (trigger === 'config') setSettingsTab('categories');
-					else if (event.params?.includes('sandbox')) setSettingsTab('security');
+					else if (event.params?.includes('sandbox'))
+						setSettingsTab('security');
 					else if (event.params?.includes('mode')) setSettingsTab('mode');
-					else if (event.params?.includes('model') || event.params?.includes('models')) setSettingsTab('models');
-					else if (event.params?.includes('config')) setSettingsTab('categories');
+					else if (
+						event.params?.includes('model') ||
+						event.params?.includes('models')
+					)
+						setSettingsTab('models');
+					else if (event.params?.includes('config'))
+						setSettingsTab('categories');
 					else setSettingsTab(undefined);
 				}
 				return;
@@ -375,14 +391,21 @@ export const Root = () => {
 				try {
 					const args = JSON.parse(event.args);
 					const firstVal = Object.values(args)[0];
-					const summary = typeof firstVal === 'string'
-						? (firstVal.length > 30 ? firstVal.slice(0, 30) + '...' : firstVal)
-						: '';
+					const summary =
+						typeof firstVal === 'string'
+							? firstVal.length > 30
+								? firstVal.slice(0, 30) + '...'
+								: firstVal
+							: '';
 					setCurrentActivity(`${event.tool} ${summary}`.trim());
 				} catch {
 					setCurrentActivity(event.tool);
 				}
-			} else if (event.type === 'tool_result' || event.type === 'done' || event.type === 'error') {
+			} else if (
+				event.type === 'tool_result' ||
+				event.type === 'done' ||
+				event.type === 'error'
+			) {
 				setCurrentActivity(null);
 			}
 
@@ -405,7 +428,10 @@ export const Root = () => {
 					setIsInitCommand(true);
 				}
 				if (!event.silent) {
-					pendingEventsRef.current.push({ type: 'user_input', content: event.content } as any);
+					pendingEventsRef.current.push({
+						type: 'user_input',
+						content: event.content
+					} as any);
 					scheduleFlush(true); // Flush immediately - user wants to see their input
 				}
 				setIsBusy(true);
@@ -430,9 +456,13 @@ export const Root = () => {
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const query = input.toLowerCase();
 	const isCommand = input.startsWith('/');
-	const matches = isCommand ? COMMANDS.filter((c) => c.name.startsWith(query)) : [];
+	const matches = isCommand
+		? COMMANDS.filter((c) => c.name.startsWith(query))
+		: [];
 
-	useEffect(() => { setSelectedIndex(0); }, [input]);
+	useEffect(() => {
+		setSelectedIndex(0);
+	}, [input]);
 
 	// Mode cycling
 	const cycleMode = useCallback(async () => {
@@ -461,13 +491,18 @@ export const Root = () => {
 
 			bus.emitAgent({ type: 'thought', content: summaryText });
 		} catch (err) {
-			bus.emitAgent({ type: 'error', message: `Failed to save session: ${err}` });
+			bus.emitAgent({
+				type: 'error',
+				message: `Failed to save session: ${err}`
+			});
 		}
 
 		// Gracefully disconnect MCP servers to prevent EPIPE errors
 		await mcp.disconnectAll();
 
-		setTimeout(() => { exit(); }, 2000);
+		setTimeout(() => {
+			exit();
+		}, 2000);
 	}, [exit]);
 
 	// Prompt resolution
@@ -487,7 +522,10 @@ export const Root = () => {
 				}
 			} else {
 				setLastExitAttempt(now);
-				bus.emitAgent({ type: 'thought', content: 'Press Ctrl+C again to exit' });
+				bus.emitAgent({
+					type: 'thought',
+					content: 'Press Ctrl+C again to exit'
+				});
 			}
 			return;
 		}
@@ -524,20 +562,6 @@ export const Root = () => {
 		}
 
 		if (showPalette) return;
-
-		// Scroll handling — works even when busy (user should always be able to scroll)
-		if (matches.length === 0) {
-			if (key.upArrow) {
-				const step = key.shift ? dynamicMaxEvents : 1;
-				setScrollOffset((prev) => Math.min(prev + step, Math.max(0, events.length - 1)));
-				return;
-			}
-			if (key.downArrow) {
-				const step = key.shift ? dynamicMaxEvents : 1;
-				setScrollOffset((prev) => Math.max(prev - step, 0));
-				return;
-			}
-		}
 
 		if (pendingPrompt || isBusy) return;
 
@@ -598,7 +622,7 @@ export const Root = () => {
 
 		bus.emitUser({ type: 'user_input', content: trimmed, silent });
 		setInput('');
-		setScrollOffset(0); // Jump to bottom when user sends a message
+		setScrollOffset(0);
 	};
 
 	// UI-specific approval responses
@@ -608,6 +632,7 @@ export const Root = () => {
 				if (event.requestId === 'ui:clear') {
 					if (event.approved) {
 						setEvents([]);
+						setScrollOffset(0);
 						history.clear();
 						bus.emitAgent({ type: 'clear_history' });
 					}
@@ -622,7 +647,9 @@ export const Root = () => {
 		};
 
 		bus.on('user', uiHandler);
-		return () => { bus.off('user', uiHandler); };
+		return () => {
+			bus.off('user', uiHandler);
+		};
 	}, [handleExit]);
 
 	const renderInput = () => {
@@ -641,10 +668,14 @@ export const Root = () => {
 			const command = commandMatch[0];
 			const rest = input.slice(command.length);
 			const isExactMatch = COMMANDS.some((c) => c.name === command);
-			const isValidCommand = COMMANDS.some((c) => c.name === command || c.name.startsWith(command));
+			const isValidCommand = COMMANDS.some(
+				(c) => c.name === command || c.name.startsWith(command)
+			);
 			return (
 				<Text>
-					<Text color={isExactMatch ? 'red' : isValidCommand ? 'yellow' : undefined}>
+					<Text
+						color={isExactMatch ? 'red' : isValidCommand ? 'yellow' : undefined}
+					>
 						{command}
 					</Text>
 					{rest}
@@ -730,38 +761,33 @@ export const Root = () => {
 	};
 
 	// Memoize banner to prevent re-rendering on every keystroke/event
-	const banner = React.useMemo(() => (
-		<WelcomeBanner
-			model={stats.model}
-			mode={stats.mode}
-			version={stats.version}
-			sandbox={stats.sandbox}
-			branch={stats.branch}
-		/>
-	), [stats.model, stats.mode, stats.version, stats.sandbox, stats.branch]);
+	const banner = React.useMemo(
+		() => (
+			<WelcomeBanner
+				model={stats.model}
+				mode={stats.mode}
+				version={stats.version}
+				sandbox={stats.sandbox}
+				branch={stats.branch}
+			/>
+		),
+		[stats.model, stats.mode, stats.version, stats.sandbox, stats.branch]
+	);
 
 	return (
 		<Box flexDirection="column" height={rows}>
 			{/* Fixed Banner Header */}
-			{activeView === 'chat' && (
-				<Box flexShrink={0}>{banner}</Box>
-			)}
+			{activeView === 'chat' && <Box flexShrink={0}>{banner}</Box>}
 
 			{/* Main Content Area */}
-			<Box
-				flexDirection="column"
-				flexGrow={activeView !== 'chat' ? 1 : 0}
-				overflowY="hidden"
-			>
-				{activeView === 'chat' ? (
-					<MessageList
-						events={events}
-						maxEvents={dynamicMaxEvents}
-						scrollOffset={scrollOffset}
-					/>
-				) : (
-					renderView()
-				)}
+			<Box flexDirection="column" flexGrow={1}>
+				<Box flexGrow={1}>
+					{activeView === 'chat' ? (
+						<MessageList events={events} />
+					) : (
+						renderView()
+					)}
+				</Box>
 			</Box>
 
 			{/* Input & Footer - Chat view only */}
@@ -813,21 +839,15 @@ export const Root = () => {
 						</Box>
 					)}
 
-					{/* Scroll indicator */}
-					{scrollOffset > 0 && (
-						<Box paddingX={1}>
-							<Text color="yellow">{'↑'} Scrolled up {scrollOffset} lines</Text>
-							<Text dimColor> · ↓ scroll down · shift+↓ page down</Text>
-						</Box>
-					)}
-
 					{/* Input Area */}
 					<Box flexDirection="column">
 						<Box paddingX={0}>
 							<Text dimColor>{separatorLine}</Text>
 						</Box>
 						<Box paddingX={1}>
-							<Text color="red" bold>{'> '}</Text>
+							<Text color="red" bold>
+								{'> '}
+							</Text>
 							{renderInput()}
 						</Box>
 					</Box>
@@ -845,7 +865,9 @@ export const Root = () => {
 					)}
 
 					{/* Command Popup (/ prefix) */}
-					{!showPalette && <CommandPopup matches={matches} selectedIndex={selectedIndex} />}
+					{!showPalette && (
+						<CommandPopup matches={matches} selectedIndex={selectedIndex} />
+					)}
 
 					{/* Info Bar */}
 					{matches.length === 0 && !showPalette && (
@@ -853,7 +875,11 @@ export const Root = () => {
 							<Box paddingX={0}>
 								<Text dimColor>{separatorLine}</Text>
 							</Box>
-							<Box paddingX={1} flexDirection="row" justifyContent="space-between">
+							<Box
+								paddingX={1}
+								flexDirection="row"
+								justifyContent="space-between"
+							>
 								<Box>
 									<Text color={MODE_STYLE[stats.mode].color}>
 										{MODE_STYLE[stats.mode].icon}
@@ -864,13 +890,23 @@ export const Root = () => {
 									</Text>
 									<Text dimColor> (shift+tab to cycle)</Text>
 									<Text color="gray"> · </Text>
-									<Text color={stats.sandbox === 'sandbox' ? 'green' : 'yellow'}>
+									<Text
+										color={stats.sandbox === 'sandbox' ? 'green' : 'yellow'}
+									>
 										{stats.sandbox === 'sandbox' ? 'sandbox' : 'no sandbox'}
 									</Text>
 								</Box>
 								<Box>
 									<Text dimColor>Context left until auto-compact: </Text>
-									<Text color={contextPct > 50 ? 'green' : contextPct > 20 ? 'yellow' : 'red'}>
+									<Text
+										color={
+											contextPct > 50
+												? 'green'
+												: contextPct > 20
+													? 'yellow'
+													: 'red'
+										}
+									>
 										{contextPct}%
 									</Text>
 								</Box>
